@@ -417,6 +417,7 @@
 
     srMgUserSave: function (p, me, env) {
       var r = guardW(p, me, env); if (r.err) return r.err;
+      var rq = P.demoPeople.srReq(env, me, p); if (rq.err) return rq.err; p = rq.p;   // v1.6: requestId (Slack ID із запиту), гість Slack — лише адмін
       var st = env.storage.get(K.users, null) || { add: [], edit: {} }, u = null, errs = [], patch = {};
       if (p.id) {
         u = pick(env.ix.user, p.id);
@@ -452,7 +453,7 @@
       journal(env, me, r.loc.id, 'team', p.id ? 'edit' : 'add', x.name,
         diff([['Імʼя', was.name, x.name], ['Slack ID', was.slackId, C.maskSlackId(x.slackId)], ['Доступ', was.active, x.active !== false]]));
       P.demoPeople.srLog(env, me, r.loc, was, x, !p.id);   // і в журнал адміністратора («Люди й доступи»)
-      return { ok: true, id: id, name: x.name, active: x.active !== false, created: !p.id };
+      return Object.assign({ ok: true, id: id, name: x.name, active: x.active !== false, created: !p.id }, P.demoPeople.srDone(env, me, x, !p.id));   // + dm
     },
 
     srMgWorkers: function (p, me, env) {

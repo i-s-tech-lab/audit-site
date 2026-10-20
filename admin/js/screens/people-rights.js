@@ -8,15 +8,15 @@
   };
 
   P.cab.screen('/people/rights', { tab: 'people', title: 'Що може роль', render: function (ctx) {
-    var data = null, holders = null;   // holders — люди з правом «Додавати людей» (null — ще не завантажили чи не вдалося)
+    var data = null, holders = null;   // holders — старші й керівники з вимкненим правом «Додавати людей» (null — ще не завантажили чи не вдалося)
     function grantCard() {
       var list = holders || [];
-      return '<section class="card adm-role"><div class="adm-role__head"><h3 class="adm-role__title">Право «Додавати людей» — дається окремій людині, не ролі' + A.help('admin.people.canAdd') + '</h3>' +
-        '<span class="hint" style="white-space:nowrap">' + list.length + ' ' + A.plural(list.length, ['людина', 'людини', 'людей']) + '</span></div>' +
-        (list.length ? list.map(function (u) {
-          return '<div class="adm-right"><div class="adm-right__main"><b>' + esc(u.name) + '</b><span class="hint">' + esc(u.roleLabel + ' · ' + (u.allLocations ? 'усі локації' : u.locNames.join(', '))) + '</span></div>' +
+      return '<section class="card adm-role"><div class="adm-role__head"><h3 class="adm-role__title">Право «Додавати людей»' + A.help('admin.people.canAdd') + '</h3></div>' +
+        '<p class="hint">Право «Додавати людей» є в кожного старшого аудитора й керівника від початку.</p>' +
+        (list.length ? '<p class="hint" style="margin:10px 0 0"><b>Вимкнено в:</b></p>' + list.map(function (u) {
+          return '<div class="adm-right"><div class="adm-right__main"><b>' + esc(u.name) + '</b><span class="hint">' + esc(u.roleLabel + ' · ' + (u.allLocations ? 'усі локації' : u.locNames.join(', ')) + (u.active ? '' : ' · доступ вимкнено')) + '</span></div>' +
             A.pen('rt-person', da('id', u.id), 'Редагувати · ' + u.name) + '</div>';
-        }).join('') : '<p class="hint">Право поки нікому не дано.</p>') + '</section>';
+        }).join('') : (holders ? '<p class="hint">Право є в усіх старших і керівників.</p>' : '')) + '</section>';
     }
     function roleCard(r) {
       return '<section class="card adm-role"><div class="adm-role__head"><h3 class="adm-role__title">' + esc(r.label) + '</h3>' +
@@ -51,8 +51,8 @@
       P.authSlack.peopleAll().then(function (p) {
         if (!ctx.alive() || !p || !p.ok) return;
         var names = {}; p.locations.forEach(function (l) { names[l.id] = l.name; });
-        holders = p.items.filter(function (u) { return u.canAddPeople && u.active; }).map(function (u) {
-          return { id: u.id, name: u.name, roleLabel: u.roleLabel, allLocations: u.allLocations, locNames: u.locationIds.map(function (id) { return names[id] || id; }) };
+        holders = p.items.filter(function (u) { return !u.canAddPeople && (u.role === 'senior_auditor' || u.role === 'manager'); }).map(function (u) {
+          return { id: u.id, name: u.name, roleLabel: u.roleLabel, allLocations: u.allLocations, active: u.active, locNames: u.locationIds.map(function (id) { return names[id] || id; }) };
         });
         draw();
       });

@@ -8,7 +8,7 @@
     other_team: ' · з іншого простору',
     bot: ' · бот'
   };
-  var ROLE_LABELS = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', location_lead: 'Старший локації', manager: 'Керівник', admin: 'Адмін' };
+  var ROLE_LABELS = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', manager: 'Керівник', admin: 'Адмін' };
 
   function real() { return !!(P.authSlack && typeof P.authSlack.real === 'function' && P.authSlack.real()); }
   function arr(v) { return Array.isArray(v) ? v : []; }
@@ -27,6 +27,10 @@
       addedToday: Number(a.addedToday) || 0 };
   }
 
+  function request(x) {
+    return { id: Number(x.id), slackId: String(x.slackId == null ? '' : x.slackId), name: x.name || '', createdAt: x.createdAt || null, status: x.status || 'pending', state: x.state || null };
+  }
+
   var T = P.authTeam = {
     list: function () {
       var back = real() ? P.authSlack.admin('users.list') : P.srv('peopleTeam', {});
@@ -35,12 +39,23 @@
         return { ok: true, users: arr(r.users || r.items).map(person), access: access(r.access) };
       });
     },
+    requests: function () {
+      var back = real() ? P.authSlack.admin('requests.list') : P.srv('admAccessRequests', {});
+      return Promise.resolve(back).then(function (r) {
+        if (!r || !r.ok) return r || { ok: false, code: 'server', error: 'Не вдалося отримати запити.' };
+        return { ok: true, requests: arr(r.requests).map(request) };
+      });
+    },
     save: function (p0) {
       var p = {}; Object.keys(p0 || {}).forEach(function (k) { if (k !== 'knownName') p[k] = p0[k]; });
       if (p.id && (!String(p.slackId || '').trim() || String(p.slackId).indexOf('…') >= 0)) delete p.slackId;
       if (!real()) return P.srv('peopleTeamSave', p).then(function (r) { if (r && r.ok && !r.name && p0 && p0.knownName) r.name = p0.knownName; return r; });
       return P.authSlack.admin('users.save', p).then(function (r) {
-        return r && r.ok ? { ok: true, id: r.id, name: p.name || (p0 && p0.knownName) || '', active: p.active === undefined ? null : p.active !== false, created: !p.id } : r;
+        if (!r || !r.ok) return r;
+        var out = { ok: true, id: r.id, name: p.name || (p0 && p0.knownName) || '', active: p.active === undefined ? null : p.active !== false, created: !p.id };
+        if (r.dm !== undefined) out.dm = r.dm;
+        if (r.dmError !== undefined) out.dmError = r.dmError;
+        return out;
       });
     },
     lookup: function (slackId) {

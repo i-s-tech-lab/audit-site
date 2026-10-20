@@ -75,16 +75,21 @@
     return s.toLowerCase().split('').map(function (c) { return D.translit[c] != null ? D.translit[c] : ''; }).join('');
   }
   function buildPeople(db, D, rnd) {
-    var seen = {};
+    var seen = {}, seq = 0;   // seq — номер для Slack ID (U-DEMO-nnn): збільшується і для людей, яких не додаємо (skipUser)
     function person() { return { first: rnd.pick(D.firstNames), ini: rnd.pick(D.initials) }; }
-    function addUser(id, role, locationIds, extra) {
+    function nextPerson() {
       var p, key;
       do { p = person(); key = translit(D, p.first) + '.' + translit(D, p.ini); } while (seen[key]);
-      seen[key] = 1;
-      var u = { id: id, name: p.first + ' ' + p.ini + '.', role: role, slackId: 'U-DEMO-' + pad(db.users.length + 1, 3), locationIds: locationIds };
+      seen[key] = 1; seq++;
+      return p;
+    }
+    function addUser(id, role, locationIds, extra) {
+      var p = nextPerson();
+      var u = { id: id, name: p.first + ' ' + p.ini + '.', role: role, slackId: 'U-DEMO-' + pad(seq, 3), locationIds: locationIds };
       if (extra) Object.keys(extra).forEach(function (k) { u[k] = extra[k]; });
       db.users.push(u);
     }
+    function skipUser() { nextPerson(); }
     db.locations.forEach(function (l, li) {
       var lc = l.id.slice(4), low = lc.toLowerCase(), counter = li * 100, used = {};
       db.departments.filter(function (d) { return d.locationId === l.id; }).forEach(function (d) {
@@ -100,7 +105,7 @@
         addUser('u_aud_' + low + a, 'auditor', [l.id], a === 2 && lc === 'A' ? { lenient: true } : null);
       }
       addUser('u_sen_' + low, 'senior_auditor', [l.id]);
-      addUser('u_lead_' + low, 'location_lead', [l.id]);
+      skipUser();   // тут був u_lead_*: роль прибрано, а решта людей і даних лишилась без змін (v1.7)
     });
     var all = db.locations.map(function (l) { return l.id; });
     addUser('u_manager', 'manager', all);

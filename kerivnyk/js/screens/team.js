@@ -4,7 +4,7 @@
   var ROLES = [['', 'Усі'], ['auditor', 'Аудитори'], ['senior_auditor', 'Старші аудитори']];
   var SHOWN = { auditor: 1, senior_auditor: 1 };   // кого показуємо в цій вкладці
   var OFF_BY = { admin: 'адміністратор', manager: 'керівник', senior_auditor: 'старший' };   // хто вимкнув доступ (disabledBy)
-  var NO_RIGHT = 'Додавати й змінювати людей можна з правом «Додавати людей» — його дає адміністратор. Вимкнути доступ можна й без нього.';
+  var NO_RIGHT = 'Право «Додавати людей» для вас вимкнено — увімкнути його може адміністратор. Вимкнути доступ можна й без нього.';
   var CANT_ENABLE = 'Увімкнути доступ може керівник із правом «Додавати людей» або адміністратор';
   var flt = { q: '', loc: '', role: '' };   // фільтри живуть, поки відкрита сторінка
 
@@ -39,7 +39,8 @@
 
   P.cab.tab({ id: 'team', label: 'Люди', ic: 'people', path: '/team', order: 60 });
   P.cab.screen('/team', { tab: 'team', title: 'Люди й доступ', render: function (ctx) {
-    var data = null, locs = [];
+    var data = null, locs = [], TR = P.teamRequests;
+    var reqs = TR.create({ box: function () { return q(ctx.el, '[data-tr-box]'); }, alive: ctx.alive });   // v1.1: картка «Хочуть увійти»
     function find(id) { return data.users.filter(function (x) { return x.id === id; })[0]; }
     function locName(id) { var l = locs.filter(function (x) { return x.id === id; })[0]; return l ? l.name : id; }
     function canAdd() { return data.access.addPeople; }
@@ -86,10 +87,11 @@
       var on = data.users.filter(function (u) { return u.active; }).length, acc = data.access;
       ctx.el.innerHTML = '<section class="tm-page"><div class="tm-head"><div><h2 class="h2">Люди й доступ</h2><p class="h2-sub">Аудитори й старші аудитори · ' + on + ' з доступом · ' + esc(K.asOf(new Date().toISOString())) + '</p></div>' +
         (canAdd() ? '<button class="btn btn--primary" type="button" data-act="tm-new">' + P.ic('add') + 'Додати людину</button>' : '') + '</div>' +
-        '<div class="card mgr-gap mgr-gap--sm"><div class="mgr-bar">' + K.search('tm-q', flt.q, 'Імʼя або Slack ID') +
+        (canAdd() ? TR.slot() : '') + '<div class="card mgr-gap mgr-gap--sm"><div class="mgr-bar">' + K.search('tm-q', flt.q, 'Імʼя або Slack ID') +
           K.select('tm-loc', [['', 'Усі локації']].concat(locs.map(function (l) { return [l.id, l.name]; })), flt.loc, 'Локація') + K.pills('tm-role', ROLES, flt.role, 'Роль') + '</div>' +
           '<p class="hint">' + (canAdd() ? (acc.addLimitPerDay ? 'Сьогодні додано: ' + acc.addedToday + ' з ' + acc.addLimitPerDay + '. ' : '') : esc(NO_RIGHT)) + '</p></div>' +
         '<section class="card" data-tm-list></section></section>';
+      reqs.show();   // v1.1: картка запитів (вона й сама тягне запити в load)
     }
     function load() {
       T.list().then(function (r) {
@@ -99,10 +101,11 @@
         locs = T.locations(ctx.me, data.users);
         if (flt.loc && !locs.some(function (l) { return l.id === flt.loc; })) flt.loc = '';
         frame(); list();
+        if (canAdd()) reqs.refresh();
       });
     }
 
-    function openEdit(u) {
+    function openEdit(u, rq) {
       var roles = data.access.addRoles.filter(function (r) { return SHOWN[r]; });
       var st = { role: u ? u.role : roles[0], locs: u ? u.locationIds.slice() : (flt.loc ? [flt.loc] : []), active: u ? u.active : true, touched: false };
       function locBlock() {
@@ -113,8 +116,9 @@
       }
       P.sr.modal({ size: 'sm', title: u ? 'Редагувати людину' : 'Додати людину', sub: u ? esc(u.name) : '',
         body: '<div class="tm-form">' +
-          field('name', 'Імʼя та перша літера прізвища', '<input class="input" name="name" value="' + esc(u ? u.name : '') + '" autocomplete="off" maxlength="60" placeholder="Олена К.">') +
+          field('name', 'Імʼя та перша літера прізвища', '<input class="input" name="name" value="' + esc(u ? u.name : rq ? rq.name : '') + '" autocomplete="off" maxlength="60" placeholder="Олена К.">') +
           (u ? '<div class="field"><span class="label">Slack ID</span><span class="select tm-locked">' + esc(P.authSlack.maskId(u.slackId)) + P.ic('lock', 'icon icon--sm') + '</span><span class="hint">Slack ID наявної людини змінює адміністратор.</span></div>'
+            : rq ? '<div class="field"><span class="label">Slack ID з запиту</span><span class="select tm-locked">' + esc(TR.idOf(rq)) + P.ic('lock', 'icon icon--sm') + '</span></div>'
             : field('slackId', 'Slack ID', '<input class="input" name="slackId" value="" autocomplete="off" maxlength="40" placeholder="Slack ID людини">', 'Знайти: профіль у Slack → «⋯» → «Скопіювати ID учасника».') +
               '<div class="field"><button class="btn btn--secondary btn--sm" type="button" data-act="tm-lookup" style="align-self:flex-start">' + P.ic('slack', 'ui-icon--sm') + 'Показати імʼя зі Slack</button>' +
               '<span class="hint" data-lookup-out aria-live="polite"></span></div>') +
@@ -151,13 +155,13 @@
           },
           'tm-save': function (t, e, layer) {
             var p = { name: val(layer.el, 'name'), role: st.role, locationIds: st.locs.slice() };
-            if (u) { p.id = u.id; if (st.touched) p.active = st.active; } else p.slackId = val(layer.el, 'slackId');
+            if (u) { p.id = u.id; if (st.touched) p.active = st.active; } else if (rq) p.requestId = rq.id; else p.slackId = val(layer.el, 'slackId');
             t.disabled = true;
             T.save(p).then(function (r) {
               t.disabled = false;
               if (!r.ok) { showErrors(layer.el, r); return; }
               layer.close();
-              P.toast('ok', (r.created ? 'Людину додано · ' : 'Збережено · ') + (r.name || (u ? u.name : '')), r.active === false ? 'Доступ вимкнено.' : '');
+              if (r.created) TR.saved(r, r.name); else P.toast('ok', 'Збережено · ' + (r.name || (u ? u.name : '')), r.active === false ? 'Доступ вимкнено.' : '');
               if (ctx.alive()) load();
             });
           }
@@ -181,6 +185,7 @@
     }
     ctx.on('tm-new', function () { openEdit(null); });
     ctx.on('tm-edit', function (t) { openEdit(find(t.getAttribute('data-id'))); });
+    ctx.on('tr-add', function (t) { var rq = reqs.find(t.getAttribute('data-id')); if (rq && canAdd()) openEdit(null, rq); });   // v1.1: «Додати» в картці запитів
     ctx.on('tm-access', access);
     ctx.on('tm-q', function (t) { flt.q = t.value; list(); });
     ctx.on('tm-loc', function (t) { flt.loc = t.value; list(); });

@@ -96,7 +96,7 @@
     });
     if (!shown) P.toast('warn', 'Не збережено', r.error);
   }
-  function failToast(r) { if (r && r.code !== 'forbidden') P.toast('danger', 'Не вдалося зберегти', (r && r.error) || ''); }
+  function failToast(r) { if (r && (r.code !== 'forbidden' || P.authSlack.real())) P.toast('danger', 'Не вдалося зберегти', (r && r.error) || ''); }
   function enterSubmits(el, act) {
     el.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter' || !e.target.matches('input.input') || e.target.hasAttribute('data-noenter')) return;

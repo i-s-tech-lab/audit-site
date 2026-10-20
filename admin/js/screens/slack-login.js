@@ -33,12 +33,18 @@
   P.cab.screen('/slack-login', { tab: 'slack', title: 'Вхід через Slack', render: function (ctx) {
     var items = [], real = P.authSlack.real();
 
+    function stateBadge(x) {
+      if (x.state === 'guest') return H.badge('гість простору', 'warn');
+      if (x.state === 'deleted') return H.badge('акаунт у Slack вимкнено', '');
+      if (x.state === 'bot' || x.state === 'other_team') return H.badge(P.accessApi.SLACK[x.state], '');
+      return !x.state || x.state === 'not_found' ? H.badge('стан у Slack невідомий', '') : '';
+    }
     function reqRow(x) {
-      var nm = x.name || 'Імʼя зі Slack не отримано';
+      var nm = x.name || 'Імʼя зі Slack не отримано', off = x.state === 'deleted';
       return '<div class="adm-person"><span class="avatar" aria-hidden="true">' + esc(x.name ? P.initials(x.name) : '?') + '</span>' +
-        '<div class="adm-person__main"><div class="adm-person__name"><b>' + esc(nm) + '</b></div>' +
+        '<div class="adm-person__main" style="min-width:min(100%,220px)"><div class="adm-person__name"><b>' + esc(nm) + '</b>' + stateBadge(x) + '</div>' +
         '<span class="adm-person__meta">Slack ' + esc(P.authSlack.maskId(x.slackId)) + ' · просить увійти · ' + esc(A.ago(x.createdAt)) + '</span></div>' +
-        '<div class="adm-person__acts"><button class="btn btn--primary btn--sm" type="button" data-act="sl-add"' + da('id', x.id) + '>' + P.ic('add', 'ui-icon--sm') + 'Додати</button>' +
+        '<div class="adm-person__acts"><button class="btn btn--primary btn--sm" type="button" data-act="sl-add"' + da('id', x.id) + (off ? ' disabled title="Акаунт цієї людини у Slack вимкнено"' : '') + '>' + P.ic('add', 'ui-icon--sm') + 'Додати</button>' +
           '<button class="btn btn--quiet btn--sm" type="button" data-act="sl-reject"' + da('id', x.id) + '>Відхилити</button></div></div>';
     }
     function draw() {
@@ -59,7 +65,8 @@
           '<button class="btn btn--secondary" type="button" data-act="sl-send" data-kind="person">' + P.ic('user', 'ui-icon--sm') + 'Надіслати людині</button></div></section>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('people', 'ui-icon--sm') + 'Хочуть увійти · ' + items.length + A.help('admin.slack.requests') + '</h3>' +
           (items.length ? '<div class="adm-people">' + items.map(reqRow).join('') + '</div>'
-            : H.empty('Зараз ніхто не чекає', 'Коли людина, якої немає в списку, натисне «Увійти в Аудит», вона зʼявиться тут.')) + '</section></section>';
+            : H.empty('Зараз ніхто не чекає', 'Коли людина, якої немає в списку, натисне «Увійти в Аудит», вона зʼявиться тут.')) +
+          '<p class="hint">Учасників нашого Slack-простору можуть додати й старші аудитори та керівники. Гостей — лише адміністратор.</p></section></section>';
     }
     function load() {
       P.authSlack.requests().then(function (r) {

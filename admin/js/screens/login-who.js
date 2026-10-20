@@ -32,6 +32,9 @@
     if (m < 1440) return Math.floor(m / 60) + ' год тому';
     return A.ago(iso);
   }
+  function grantOff() {
+    return H.badge('право «Додавати людей» вимкнено', 'warn').replace('<span class="badge', '<span style="height:auto;min-height:24px;padding:3px 10px;white-space:normal;line-height:1.25;border-radius:12px" class="badge');
+  }
   function stamp(iso) { return P.fmt.date(iso) + ', ' + P.fmt.time(iso); }
   function cell(label, inner, cls) { return '<div class="acc-c' + (cls ? ' ' + cls : '') + '"><span class="acc-lbl">' + esc(label) + '</span>' + inner + '</div>'; }
 
@@ -52,7 +55,7 @@
       var sl = API.slackText(u.slackState, u.slackCheckedAt), via = API.viaText(u.lastLoginVia);
       return '<div class="adm-person acc-row' + (u.active ? '' : ' adm-person--off') + '"><span class="avatar" aria-hidden="true">' + esc(P.initials(u.name)) + '</span>' +
         '<div class="acc-c acc-c--who"><div class="adm-person__name"><b>' + esc(u.name) + '</b>' + (u.isMe ? H.badge('це ви', 'info') : '') +
-          (u.active ? '' : H.badge('доступ вимкнено', '')) + (u.canAddPeople ? H.badge('може додавати людей', 'info') : '') + '</div>' +
+          (u.active ? '' : H.badge('доступ вимкнено', '')) + (!u.canAddPeople && (u.role === 'senior_auditor' || u.role === 'manager') ? grantOff() : '') + '</div>' +
           (by ? '<span class="adm-person__meta">' + esc(by) + '</span>' : '') + '</div>' +
         cell('Роль і локації', '<span class="acc-v">' + H.badge(u.roleLabel || API.roleText(u.role), u.role === 'admin' ? 'brand' : '') + '</span><span class="acc-sub">Slack ' + esc(u.slackId) + ' · ' + esc(locs) + '</span>') +
         cell('Останній вхід', '<span class="acc-v">' + (u.lastLoginAt ? esc(stamp(u.lastLoginAt)) + (via ? ' · ' + esc(via) : '') : 'Входу ще не було') + '</span>') +

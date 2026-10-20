@@ -5,6 +5,7 @@
   var DAYS = [[1, 'Сьогодні'], [7, '7 днів'], [30, '30 днів'], [90, '90 днів']];
   var KINDS = [['all', 'Усе'], ['login', 'Входи'], ['refused', 'Відмови'], ['people', 'Люди й доступи']];
   var ROLE_CODE = /\b(auditor|senior_auditor|location_lead|manager|admin)\b/g;   // сервер пише в подробицях код ролі — перекладаємо
+  var OLD_ROLE = { location_lead: 'Старший локації' };   // роль прибрано, а старі записи журналу ще містять її код
   var flt = { days: 7, kind: 'all', q: '' };   // період, розділ і пошук живуть, поки відкрита сторінка
 
   function whoText(e) {
@@ -17,9 +18,9 @@
     var parts = [], d = e.detail ? String(e.detail) : '', via = API.viaText(d);
     if (e.kind === 'people' && e.actor && e.target && e.actor.name && e.target.name) parts.push(e.actor.name + ' → ' + e.target.name);
     if (via) parts.push(via);
-    else if (e.event === 'exchange_ok') { if (API.ROLE[d]) parts.push(API.ROLE[d]); }
+    else if (e.event === 'exchange_ok') { if (API.ROLE[d] || OLD_ROLE[d]) parts.push(API.ROLE[d] || OLD_ROLE[d]); }
     else if (d && e.event !== 'button_press') {
-      d = d.replace(ROLE_CODE, function (m) { return API.roleText(m); });
+      d = d.replace(ROLE_CODE, function (m) { return OLD_ROLE[m] || API.roleText(m); });
       if (/[А-Яа-яІіЇїЄєҐґ]/.test(d) && !(e.target && d === e.target.name)) parts.push(d);
     }
     return parts.join(' · ');

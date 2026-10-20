@@ -2,7 +2,7 @@
   'use strict';
   var P = root.P = root.P || {};
 
-  var ROLE = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', location_lead: 'Старший локації', manager: 'Керівник', admin: 'Адмін' };
+  var ROLE = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', manager: 'Керівник', admin: 'Адмін' };
   var VIA = { button: 'кнопка в каналі', home: 'вкладка «Головна»', oidc: 'вхід на сайті' };
   var SLACK = { deleted: 'акаунт вимкнено', guest: 'гість простору', other_team: 'інший простір', bot: 'бот', not_found: 'не знайдено' };
 
@@ -32,6 +32,8 @@
     grant_off: 'Забрав право «Додавати людей»',
     admin_request_added: 'Запит «Хочуть увійти»: додано',
     admin_request_rejected: 'Запит «Хочуть увійти»: відхилено',
+    welcome_sent: 'Надіслано кнопку входу в Slack',
+    welcome_failed: 'Не вдалося надіслати кнопку входу в Slack',
     admin_postButton: 'Поклав кнопку входу в канал',
     admin_sendButton: 'Надіслав кнопку входу людині',
     sessions_closed: 'Закрив входи',

@@ -14,7 +14,7 @@
     { key: 'editOthersAudits', label: 'Виправляти чужі аудити' },
     { key: 'viewAllLocations', label: 'Бачити всі локації' }
   ];
-  var RIGHT_ROLES = ['auditor', 'senior_auditor', 'location_lead', 'manager'];
+  var RIGHT_ROLES = ['auditor', 'senior_auditor', 'manager'];
   var BASE = {};
   RIGHT_ROLES.forEach(function (r) { BASE[r] = C.canOf(r); });
   function rightOf(key) { return RIGHTS.filter(function (x) { return x.key === key; })[0] || null; }
@@ -93,7 +93,7 @@
       var ids = arr(e.locationIds).filter(function (id) { return has(isLoc, id); });
       if (ids.length) u.locationIds = ids;
       if (has(ALL_LOC, u.role)) u.locationIds = all.slice();
-      u.canAddPeople = typeof e.canAddPeople === 'boolean' ? e.canAddPeople : u.canAddPeople === true;
+      u.canAddPeople = typeof e.canAddPeople === 'boolean' ? e.canAddPeople : typeof u.canAddPeople === 'boolean' ? u.canAddPeople : P.demoAccess.defaultCanAddPeople(u.role);
       u.disabledBy = has(U.off, u.id) ? obj(U.off[u.id]).byRole || 'admin' : u.active === false ? 'senior_auditor' : null;
     });
     db.usersOff = db.users.filter(function (u) { return has(U.off, u.id); });

@@ -18,8 +18,8 @@
   var BUTTON_MESSAGE = 'Натисніть кнопку, щоб увійти в Аудит. Вона одна для всіх: Slack сам підтвердить, хто ви, а Аудит надішле вам особисте посилання на 10 хвилин.';
   var BUTTON_LABEL = 'Увійти в Аудит';
   var APPS = { pratsivnyk: 1, starshyi: 1, kerivnyk: 1, admin: 1, vhid: 1 };   // vhid — сторінка «Перевірка входу» (v1.4)
-  var ROLE_LABELS = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', location_lead: 'Старший локації', manager: 'Керівник', admin: 'Адмін' };
-  var ROLE_ORDER = ['admin', 'manager', 'location_lead', 'senior_auditor', 'auditor'];
+  var ROLE_LABELS = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', manager: 'Керівник', admin: 'Адмін' };
+  var ROLE_ORDER = ['admin', 'manager', 'senior_auditor', 'auditor'];
   var ASSIGNABLE = ['auditor', 'senior_auditor', 'manager', 'admin'];
   var DEMO_ONLY = { authDemoLogin: 1, authDemoUnknown: 1, demoReset: 1, authAdminView: 1 };
   var DEMO_ONLY_MSG = 'У справжньому додатку тестового входу немає — увійдіть через Slack.';
@@ -130,7 +130,12 @@
     };
 
     A.peopleAll = function () {
-      if (!A.real()) return P.srv('adminPeople', {});
+      if (!A.real()) {   // v1.6: adminPeople не віддає access — «Сьогодні додано: N з 50» беремо з peopleTeam (адмін теж може його питати)
+        return P.srv('adminPeople', {}).then(function (r) {
+          if (!r || !r.ok) return r;
+          return Promise.resolve(P.srv('peopleTeam', {})).then(function (t) { r.access = t && t.ok ? t.access || null : null; return r; });
+        });
+      }
       return A.admin('users.list').then(function (r) {
         if (!r || !r.ok) return r || { ok: false, code: 'server', error: 'Не вдалося отримати список людей.' };
         var s = A.session(), me = (s && s.me) || {}, users = r.users || r.items || [], byRole = {}, locs = {}, locList = [];
@@ -148,14 +153,14 @@
         });
         var roles = ROLE_ORDER.filter(function (k) { return ASSIGNABLE.indexOf(k) >= 0 || users.some(function (u) { return u.role === k; }); })
           .map(function (k) { return { id: k, label: ROLE_LABELS[k], count: byRole[k] || 0, assignable: ASSIGNABLE.indexOf(k) >= 0 }; });
-        return { ok: true, items: items, roles: roles, locations: locList };
+        return { ok: true, items: items, roles: roles, locations: locList, access: r.access || null };   // v1.6: access — скільки додано сьогодні
       });
     };
     A.savePerson = function (p0) {
       var p = {}; Object.keys(p0 || {}).forEach(function (k) { if (k !== 'knownName') p[k] = p0[k]; });
       if (!A.real()) return P.srv('adminPersonSave', p).then(function (r) { if (r && r.ok && !r.name && p0.knownName) r.name = p0.knownName; return r; });
       return A.admin('users.save', p).then(function (r) {
-        return r && r.ok ? { ok: true, id: r.id, name: p.name || p0.knownName || '', active: p.active === undefined ? null : p.active !== false, created: !p.id } : r;
+        return r && r.ok ? { ok: true, id: r.id, name: p.name || p0.knownName || '', active: p.active === undefined ? null : p.active !== false, created: !p.id, dm: r.dm || 'skipped', dmError: r.dmError } : r;
       });
     };
 

@@ -4,10 +4,11 @@
   P.demoApis = P.demoApis || [];
 
   var CHANNEL_ID = /^(?:[CG][A-Z0-9]{8,10}|C-DEMO-[0-9]{3})$/;     // ID каналу Slack: справжній або вигаданий (демо)
-  var NOT_LISTED_MSG = 'Вас ще немає в списку доступу. Адміністратор уже бачить ваш запит — коли він вас додасть, натисніть «Увійти через Slack» ще раз.';
+  var NOT_LISTED_MSG = 'Вас ще немає в списку доступу. Ми передали запит — щойно вас додасть старший аудитор, керівник чи адміністратор, вам у Slack прийде кнопка входу.';
   var SEED_REQUESTS = [
     { id: 1, slackId: 'U-DEMO-901', name: 'Марія Т.', agoMin: 95 },
-    { id: 2, slackId: 'U-DEMO-902', name: 'Ігор Б.', agoMin: 1560 }
+    { id: 2, slackId: 'U-DEMO-902', name: 'Ігор Б.', agoMin: 1560 },
+    { id: 3, slackId: 'U-DEMO-941', name: 'Олег Г.', agoMin: 40 }   // гість Slack-простору: його додає лише адмін (стан дає access-rules.js)
   ];
   var GUEST = { slackId: 'U-DEMO-950', name: 'Гість зі Slack' };   // «людина не зі списку» у демо-вході
 
@@ -42,10 +43,13 @@
 
   P.demoApis.push({
     admAccessRequests: function (p, me, env) {
-      if (!A.isAdmin(me)) return C.forbidden();
-      var items = reqStore(env).items.filter(function (x) { return x.status === 'pending'; })
+      var admin = A.isAdmin(me);
+      if (!admin && !(me && me.access && me.access.addPeople)) return C.forbidden();
+      var items = reqStore(env).items.filter(function (x) { return x.status === 'pending' && (admin || P.demoAccess.slackStateOf(x.slackId) === 'active'); })
         .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0; })
-        .map(function (x) { return { id: x.id, slackId: x.slackId, name: x.name, createdAt: x.createdAt, status: x.status }; });
+        .map(function (x) {
+          return { id: x.id, slackId: admin ? x.slackId : C.maskSlackId(x.slackId), name: x.name, createdAt: x.createdAt, status: x.status, state: P.demoAccess.slackStateOf(x.slackId) };
+        });
       return { ok: true, requests: items };
     },
 
@@ -100,6 +104,18 @@
       return C.fail('not_listed', NOT_LISTED_MSG);
     }
   });
+
+  A.reqFind = function (env, id) {
+    return typeof id === 'number' ? reqStore(env).items.filter(function (x) { return x.id === id && x.status === 'pending'; })[0] || null : null;
+  };
+  A.reqClose = function (env, me, slackId, userId) {
+    var st = reqStore(env), hit = st.items.filter(function (x) { return x.status === 'pending' && String(x.slackId).toUpperCase() === String(slackId).toUpperCase(); });
+    hit.forEach(function (r) {
+      r.status = 'added'; r.doneAt = env.now().toISOString(); r.by = me.id; r.userId = userId;
+      A.log(env, me, 'Вхід через Slack', r.name, [['Запит на вхід', 'чекав на рішення', 'додано до списку']]);
+    });
+    if (hit.length) env.storage.set(A.K.requests, st);
+  };
 
   A.GUEST = GUEST; A.NOT_LISTED_MSG = NOT_LISTED_MSG;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -14,7 +14,8 @@
     refused: ['not_listed', 'disabled', 'exchange_denied', 'exchange_fail', 'rate', 'wrong_team', 'request_created', 'request_skipped',
       'oidc_denied', 'oidc_bad_state', 'oidc_token_failed', 'oidc_userinfo_failed'],
     people: ['user_add', 'user_save', 'user_close', 'grant_on', 'grant_off', 'sessions_closed', 'slack_gone', 'slack_check',
-      'admin_user_add', 'admin_user_save', 'admin_request_added', 'admin_request_rejected', 'admin_postButton', 'admin_sendButton'],
+      'admin_user_add', 'admin_user_save', 'admin_request_added', 'admin_request_rejected', 'admin_postButton', 'admin_sendButton',
+      'welcome_sent', 'welcome_failed'],
     system: ['reply_failed', 'home_failed', 'bad_signature', 'oidc_start']
   };
   var KIND_OF = {};
@@ -138,6 +139,8 @@
         else event = 'user_save';
       } else if (x.area === 'Вхід через Slack') {
         if (x.what === 'Кнопку входу надіслано') { event = /^у канал/.test(x.to) ? 'admin_postButton' : 'admin_sendButton'; detail = x.to; }
+        else if (x.what === 'Кнопку входу надіслано в Slack') { event = 'welcome_sent'; detail = x.to; }
+        else if (x.what === 'Кнопку входу в Slack не надіслано') { event = 'welcome_failed'; detail = x.to; }
         else if (x.what === 'Запит на вхід') { event = x.to === 'додано до списку' ? 'admin_request_added' : 'admin_request_rejected'; detail = x.to; }
       }
       if (!event) return;

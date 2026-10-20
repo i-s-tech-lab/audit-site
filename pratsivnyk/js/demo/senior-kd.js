@@ -587,7 +587,7 @@
     return c;
   }
   function people(cx, me) {
-    var list = cx.env.db.users.filter(function (u) { return u.locationIds.indexOf(cx.loc.id) >= 0 && (u.role === 'senior_auditor' || u.role === 'location_lead') && !u.accessOff; });
+    var list = cx.env.db.users.filter(function (u) { return u.locationIds.indexOf(cx.loc.id) >= 0 && u.role === 'senior_auditor' && !u.accessOff; });
     if (!list.some(function (u) { return u.id === me.id; }) && cx.env.ix.user[me.id]) list.unshift(cx.env.ix.user[me.id]);
     return list.map(function (u) { return { id: u.id, name: u.name, roleLabel: P.demoDict.roleLabels[u.role], me: u.id === me.id }; });
   }
@@ -1076,7 +1076,7 @@
 
   function canSummary(me, locId) {
     if (me.role === 'manager' || me.role === 'admin') return C.hasLoc(me, locId) || !!(me.can && me.can.viewAllLocations);
-    return (me.role === 'senior_auditor' || me.role === 'location_lead') && C.hasLoc(me, locId);
+    return me.role === 'senior_auditor' && C.hasLoc(me, locId);
   }
   var RANK = { 'new': 0, pre: 1, check: 2, hold: 3 };
   function byRank(a, b) {

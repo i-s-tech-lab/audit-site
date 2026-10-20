@@ -2,7 +2,7 @@
   'use strict';
   var P = root.P = root.P || {}, C = P.demoCommon;
   P.demoApis = P.demoApis || [];
-  var ROLE_ORDER = { admin: 0, manager: 1, location_lead: 2, senior_auditor: 3, auditor: 4 };
+  var ROLE_ORDER = { admin: 0, manager: 1, senior_auditor: 2, auditor: 3 };
 
   function has(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
   function roleLabel(r) { return P.demoDict.roleLabels[r] || r; }

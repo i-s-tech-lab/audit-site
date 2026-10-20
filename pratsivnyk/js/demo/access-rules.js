@@ -5,7 +5,7 @@
   var ROLE_RANK = { auditor: 1, senior_auditor: 2, manager: 3, admin: 4 };
   var ASSIGNABLE_ROLES = ['auditor', 'senior_auditor', 'manager', 'admin'];
   var DELEGATE_ROLES = ['senior_auditor', 'manager'];
-  var DELEGATE_ADDS_PER_DAY = 20;
+  var ADDS_PER_DAY = 50;
 
   function has(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
   var isArr = Array.isArray;
@@ -40,11 +40,11 @@
 
   function accessOf(user) {
     var u = user || {};
-    if (u.role === 'admin') return { addPeople: true, addRoles: ASSIGNABLE_ROLES.slice(), addLimitPerDay: null };
+    if (u.role === 'admin') return { addPeople: true, addRoles: ASSIGNABLE_ROLES.slice(), addLimitPerDay: ADDS_PER_DAY };
     if (DELEGATE_ROLES.indexOf(u.role) >= 0 && isOn(u) && hasGrant(u)) {
-      return { addPeople: true, addRoles: addableRoles(u.role), addLimitPerDay: DELEGATE_ADDS_PER_DAY };
+      return { addPeople: true, addRoles: addableRoles(u.role), addLimitPerDay: ADDS_PER_DAY };
     }
-    return { addPeople: false, addRoles: [], addLimitPerDay: DELEGATE_ADDS_PER_DAY };
+    return { addPeople: false, addRoles: [], addLimitPerDay: ADDS_PER_DAY };
   }
 
 
@@ -73,8 +73,8 @@
       return bad('forbidden', 'Ця людина має й інші локації — змінити її може адміністратор.');
     }
     if (isCloseOnly({ cur: cur, had: hadIds, next: n })) return { ok: true, closeOnly: true };
-    if (!hasGrant(a)) return bad('forbidden', 'Додавати й змінювати людей можна з правом «Додавати людей» — його дає адміністратор.');
-    if (n.canAddPeople !== undefined && n.canAddPeople !== null && !!n.canAddPeople !== hasGrant(cur)) {
+    if (!hasGrant(a)) return bad('forbidden', 'Додавати й змінювати людей можна з правом «Додавати людей» — його вимкнув адміністратор; увімкнути його може лише адміністратор.');
+    if (n.canAddPeople !== undefined && n.canAddPeople !== null) {   // v1.2: будь-яке явне значення (і «так», і «ні»)
       return bad('forbidden', 'Право «Додавати людей» дає лише адміністратор.', 'canAddPeople');
     }
     if (addableRoles(a.role).indexOf(n.role) < 0) return bad('forbidden', 'Можна дати лише роль, нижчу за вашу.', 'role');
@@ -87,8 +87,9 @@
         ? 'Доступ цій людині вимкнув адміністратор — увімкнути може лише адміністратор.'
         : 'Доступ цій людині вимкнув керівник — увімкнути може керівник або адміністратор.', 'active');
     }
-    if (!cur && (Number(o.addedToday) || 0) >= DELEGATE_ADDS_PER_DAY) {
-      return bad('rate', 'Сьогодні ви вже додали ' + DELEGATE_ADDS_PER_DAY + ' людей — більше можна завтра або попросіть адміністратора.');
+    if (!cur) {
+      var lim = addLimitDecision(o.addedToday);
+      if (!lim.ok) return lim;
     }
     return { ok: true, closeOnly: false };
   }
@@ -116,16 +117,21 @@
     if (o.actorRole !== 'admin') return bad('forbidden', 'Право «Додавати людей» дає лише адміністратор.', 'canAddPeople');
     if (!o.value) return { ok: true };
     if (DELEGATE_ROLES.indexOf(o.targetRole) < 0) return bad('validation', 'Це право буває лише в старшого аудитора й керівника.', 'canAddPeople');
-    if (o.targetActive === false) return bad('validation', 'Спершу увімкніть людині доступ.', 'canAddPeople');
     return { ok: true };
   }
 
+  function defaultCanAddPeople(role) { return DELEGATE_ROLES.indexOf(role) >= 0; }
+
   function nextCanAddPeople(o) {
     var cur = o.cur;
-    if (o.nextActive === false || DELEGATE_ROLES.indexOf(o.nextRole) < 0) return false;
-    var hasGiven = o.given !== undefined && o.given !== null;
-    if (cur && cur.role !== o.nextRole && !hasGiven) return false;
-    return hasGiven ? !!o.given : hasGrant(cur);
+    if (!defaultCanAddPeople(o.nextRole)) return false;
+    if (o.given !== undefined && o.given !== null) return !!o.given;
+    return !cur || (o.byAdmin === true && cur.role !== o.nextRole) ? true : hasGrant(cur);
+  }
+
+  function addLimitDecision(addedToday) {
+    if ((Number(addedToday) || 0) < ADDS_PER_DAY) return { ok: true };
+    return bad('rate', 'Сьогодні вже додано ' + ADDS_PER_DAY + ' людей — наступних можна додати завтра.');
   }
 
   function disabledByFor(o) {
@@ -142,14 +148,14 @@
 
   var ADD_CHECK_TEXT = {
     deleted: 'У Slack цей акаунт вимкнено — додати не вийде.',
-    bot: 'Це бот, а не людина.',
-    guest: 'Це гість Slack-простору — додати можна лише учасника простору.',
-    other_team: 'Ця людина з іншого Slack-простору.',
+    bot: 'Це бот — увійти в Аудит він не зможе.',
+    guest: 'Це гість Slack-простору — його може додати лише адміністратор, з позначкою «Так, це гість».',
+    other_team: 'Ця людина з іншого Slack-простору — увійти в Аудит вона не зможе.',
     not_found: 'У Slack такої людини немає — перевірте ID.',
     error: 'Не вдалося перевірити людину в Slack — спробуйте ще раз за хвилину.'
   };
-  function addCheckDecision(state) {
-    if (state === 'active') return { ok: true };
+  function addCheckDecision(state, opts) {
+    if (state === 'active' || (state === 'guest' && !!opts && opts.allowGuest === true)) return { ok: true };
     return bad('validation', has(ADD_CHECK_TEXT, state) ? ADD_CHECK_TEXT[state] : ADD_CHECK_TEXT.error, 'slackId');
   }
 
@@ -169,11 +175,11 @@
   }
 
   P.demoAccess = {
-    ROLE_RANK: ROLE_RANK, ASSIGNABLE_ROLES: ASSIGNABLE_ROLES, DELEGATE_ROLES: DELEGATE_ROLES, DELEGATE_ADDS_PER_DAY: DELEGATE_ADDS_PER_DAY,
+    ROLE_RANK: ROLE_RANK, ASSIGNABLE_ROLES: ASSIGNABLE_ROLES, DELEGATE_ROLES: DELEGATE_ROLES, ADDS_PER_DAY: ADDS_PER_DAY,
     DEMO_SLACK: DEMO_SLACK, ADD_CHECK_TEXT: ADD_CHECK_TEXT,
     rankOf: rankOf, addableRoles: addableRoles, actorScope: actorScope, accessOf: accessOf, isCloseOnly: isCloseOnly,
     delegateSaveDecision: delegateSaveDecision, rowPermissions: rowPermissions, grantDecision: grantDecision,
-    nextCanAddPeople: nextCanAddPeople, disabledByFor: disabledByFor, addCheckDecision: addCheckDecision,
+    defaultCanAddPeople: defaultCanAddPeople, nextCanAddPeople: nextCanAddPeople, addLimitDecision: addLimitDecision, disabledByFor: disabledByFor, addCheckDecision: addCheckDecision,
     slackStateOf: slackStateOf, slackNameOf: slackNameOf
   };
 })(typeof window !== 'undefined' ? window : globalThis);
