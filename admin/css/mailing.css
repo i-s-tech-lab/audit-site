@@ -91,6 +91,9 @@
 .rz-tk--l { background: var(--info-soft); color: var(--info); text-decoration: underline; text-underline-offset: 2px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 22%, transparent); }
 .rz-link { color: var(--info); text-decoration: underline; }
 
+.rz-tk--ph { padding: 0 5px; border: 1px dashed color-mix(in srgb, var(--brand-ink) 55%, transparent); box-shadow: none; font-weight: 500; }
+.rz-tk--bad { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); text-decoration: line-through; }
+
 
 #overlay .ov .modal.rz-modal { width: min(1320px, calc(100% - 48px)); }
 .rz-modal .modal__foot { align-items: center; }
@@ -172,8 +175,7 @@
 .rz-palg__t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rz-palg__t b { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); }
 .rz-palg__t span { font-size: 13px; color: var(--text-3); line-height: 1.4; }
-.rz-chip { height: 36px; padding: 0 12px; font-size: 13px; border-style: dashed; cursor: grab; }
-.rz-chip--l { background: var(--info-soft); border-color: var(--info-line); color: var(--info); }
+
 
 
 #overlay .ov .modal.rz-amodal { width: min(720px, calc(100% - 48px)); }

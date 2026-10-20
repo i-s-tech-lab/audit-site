@@ -13,6 +13,11 @@
     isSlackId: function (s) { s = String(s == null ? '' : s); return C.SLACK_ID_RE.test(s) || C.DEMO_SLACK_ID_RE.test(s); },
     maskSlackId: function (id) { id = String(id == null ? '' : id); return id.length > 4 ? id.charAt(0) + '…' + id.slice(-3) : id; },
 
+    accessFor: function (u) {
+      return P.demoAccess ? P.demoAccess.accessOf({ role: u.role, active: u.active !== false, canAddPeople: u.canAddPeople === true })
+        : { addPeople: false, addRoles: [], addLimitPerDay: null };
+    },
+
     fail: function (code, error, errors) {
       var r = { ok: false, code: code, error: error };
       if (errors) r.errors = errors;
@@ -60,7 +65,8 @@
         locations: u.locationIds.map(function (id) { return { id: id, name: ix.loc[id].name }; }),
         defaultLocationId: u.locationIds[0],
         can: C.canOf(role),
-        rules: { editWindowMin: C.LIMITS.editWindowMin, sessionDays: C.SESSION_DAYS }
+        rules: { editWindowMin: C.LIMITS.editWindowMin, sessionDays: C.SESSION_DAYS },
+        access: C.accessFor(u)
       };
     },
 
@@ -69,6 +75,7 @@
       var loc = Object.prototype.hasOwnProperty.call(ix.loc, locId) ? locId : u.locationIds[0];   // лише справжня локація (не службове імʼя обʼєкта)
       me.admin = true; me.viewLocationId = loc; me.allLocations = me.locations;
       me.role = role; me.roleLabel = P.demoDict.roleLabels[role]; me.can = C.canOf(role);
+      me.access = C.accessFor({ role: role, canAddPeople: true });   // v1.7: у перегляді «як роль» — права цієї ролі додавати людей
       if (one) me.locations = [{ id: loc, name: ix.loc[loc].name }];
       me.defaultLocationId = one ? loc : me.locations[0].id;
       return me;

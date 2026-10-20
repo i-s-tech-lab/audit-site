@@ -97,7 +97,7 @@
       '<p class="group-label" style="padding:6px 12px 4px">Записати</p>' +
       menuItem('p-audit', 'audit', 'Новий аудит', 'Та сама форма, що в працівника, — у вікні') +
       '<div class="menu__sep"></div><p class="group-label" style="padding:6px 12px 4px">Додати в довідник</p>' +
-      menuItem('p-team', 'user', 'Аудитор', 'Доступ до додатку за Slack ID') +
+      (me.access && me.access.addPeople === false ? '' : menuItem('p-team', 'user', 'Аудитор', 'Доступ до додатку за Slack ID')) +
       menuItem('p-workers', 'people', 'Виробничий працівник', 'Підпис у цеху (напр. q5) і відділ') +
       menuItem('p-products', 'department', 'Виріб', 'Для типу відділу') +
       menuItem('p-defects', 'defect', 'Вид браку', 'З рівнем: неправильно зроблене · пошкоджене · зламане') +
@@ -169,7 +169,7 @@
   function boot() {
     S.closeAll();
     var as = /[?&]as=([^&#]+)/.exec(root.location.search || '');
-    if (as && !boot.tried) { boot.tried = true; P.srv('authDemoLogin', { userId: decodeURIComponent(as[1]) }).then(boot); return; }
+    if (as && !boot.tried && !P.authSlack.real()) { boot.tried = true; P.srv('authDemoLogin', { userId: decodeURIComponent(as[1]) }).then(boot); return; }
     P.authSlack.ready.then(function () { return P.srv('authMe', {}); }).then(function (r) {
       var m = r && r.ok ? r.me : null;
       if (m && (m.role === 'senior_auditor' || m.role === 'admin')) {

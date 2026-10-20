@@ -21,6 +21,8 @@
   var ROLE_LABELS = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', location_lead: 'Старший локації', manager: 'Керівник', admin: 'Адмін' };
   var ROLE_ORDER = ['admin', 'manager', 'location_lead', 'senior_auditor', 'auditor'];
   var ASSIGNABLE = ['auditor', 'senior_auditor', 'manager', 'admin'];
+  var DEMO_ONLY = { authDemoLogin: 1, authDemoUnknown: 1, demoReset: 1, authAdminView: 1 };
+  var DEMO_ONLY_MSG = 'У справжньому додатку тестового входу немає — увійдіть через Slack.';
 
   function expiryMs(x) {
     if (typeof x === 'number') return x < 1e12 ? x * 1000 : x;
@@ -47,6 +49,7 @@
       if (t && t <= now()) { env.storage.del(KEY); return null; }
       return s;
     };
+    A.onStorage = function (e) { if (A.real() && e && e.key === KEY && !e.newValue && env.reload) env.reload(); };
     A.headers = function () {
       var s = A.session(), h = { 'Content-Type': 'application/json' };
       if (s) h.Authorization = 'Bearer ' + s.session;
@@ -139,6 +142,7 @@
           (u.locationIds || []).forEach(function (id) { addLoc(id); });
           return { id: u.id, name: u.name || '', slackId: A.maskId(u.slackId), slackFull: String(u.slackId || ''), role: u.role,
             roleLabel: u.roleLabel || ROLE_LABELS[u.role] || u.role, locationIds: u.locationIds || [],
+            canAddPeople: !!u.canAddPeople, addedBy: u.addedBy || null, canEdit: u.canEdit !== false, canEnable: u.canEnable !== false,
             allLocations: u.role === 'manager' || u.role === 'admin', active: on, seniorOff: false, disabledBy: u.disabledBy || null,
             lastAuditAt: null, addedAt: u.createdAt || null, isMe: !!me.id && u.id === me.id };
         });
@@ -162,6 +166,7 @@
         if (fn === 'authMe') return A.me();
         if (fn === 'authLogout') return A.logout();
         if (fn === 'demoUsers') return Promise.resolve({ ok: true, users: [] });
+        if (Object.prototype.hasOwnProperty.call(DEMO_ONLY, fn)) return Promise.resolve({ ok: false, code: 'forbidden', error: DEMO_ONLY_MSG });
         return orig(fn, payload);
       } };
     };
@@ -180,7 +185,8 @@
   P.createAuthSlack = createAuthSlack;
   P.config = Object.assign({ backend: 'demo', authUrl: '' }, P.config || {});
   var A = P.authSlack = createAuthSlack({ config: P.config, fetch: root.fetch ? root.fetch.bind(root) : null, storage: browserStorage(),
-    location: root.location, history: root.history });
+    location: root.location, history: root.history, reload: function () { root.location.reload(); } });
+  if (A.real() && root.addEventListener) root.addEventListener('storage', A.onStorage);
 
   A.loginHtml = function (style) {
     var ui = style === 'ui';

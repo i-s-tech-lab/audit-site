@@ -3,6 +3,9 @@
   var P = root.P = root.P || {};
   var C = P.demoCommon;
   var OPEN_FNS = { demoUsers: 1, authDemoLogin: 1, authMe: 1, demoMeta: 1, demoReset: 1, authDemoUnknown: 1 };
+  var REAL_FORBIDDEN = { authDemoLogin: 1, authDemoUnknown: 1, demoReset: 1, authAdminView: 1 };
+  var REAL_FORBIDDEN_MSG = 'У справжньому додатку тестового входу немає — увійдіть через Slack.';
+  function realMode() { return !!(P.config && P.config.backend === 'supabase'); }
   var KEY_ADMIN = 'demo:admin';
   var SITE_SESSIONS = ['demo:me', 'demo:loggedAt', 'demo:me:sr', 'demo:me:sr:at', 'demo:me:adm', 'demo:me:adm:at', 'demo:me:mgr', 'demo:me:mgr:at'];
   var SCHEMA = '1';
@@ -86,6 +89,9 @@
     }
     load();
 
+    function noteLogin(event, userId) {
+      if (userId && P.demoAccessLog) P.demoAccessLog.note(env, { event: event, userId: userId, via: 'oidc' });
+    }
     function dropSession() { meId = null; loggedAt = null; storage.del(KEY_ME); storage.del(KEY_AT); }
 
     function currentMe() {
@@ -104,15 +110,17 @@
       authDemoLogin: function (p) {
         if (typeof p.userId !== 'string' || !has(env.ix.user, p.userId)) return C.fail('not_found', 'Користувача не знайдено.');
         var u = env.ix.user[p.userId];
-        if (accessOffNow(storage, u)) return C.fail('forbidden', 'Доступ вимкнено адміністратором.');
+        if (accessOffNow(storage, u)) return C.fail('forbidden', (P.demoAccessOffBy && P.demoAccessOffBy(storage, u.id)) === 'manager' ? 'Доступ вимкнено керівником.' : 'Доступ вимкнено адміністратором.');
         if (VIEW_ROLE && u.role === 'admin') {
           adminS = { userId: u.id, locationId: has(env.ix.loc, p.locationId) ? p.locationId : u.locationIds[0] };
           storage.set(KEY_ADMIN, adminS);
+          noteLogin('exchange_ok', u.id);
           return { ok: true, me: currentMe() };
         }
         adminS = null; storage.del(KEY_ADMIN);
         meId = p.userId; storage.set(KEY_ME, meId);
         loggedAt = now().toISOString(); storage.set(KEY_AT, loggedAt);
+        noteLogin('exchange_ok', meId);
         return { ok: true, me: currentMe() };
       },
       authMe: function () { return { ok: true, me: currentMe() }; },
@@ -124,6 +132,7 @@
         return { ok: true, me: currentMe() };
       },
       authLogout: function () {
+        noteLogin('logout', adminS ? adminS.userId : meId);
         if (adminS) { adminS = null; storage.del(KEY_ADMIN); SITE_SESSIONS.forEach(function (k) { storage.del(k); }); }
         dropSession();
         return { ok: true };
@@ -146,6 +155,7 @@
     function handle(fn, payload) {
       if (typeof fn !== 'string') return C.fail('not_found', 'Цієї дії немає. Оновіть сторінку.');
       if (failQueue[fn]) { delete failQueue[fn]; return C.fail('server', 'Демо: імітація збою сервера.'); }
+      if (realMode() && has(REAL_FORBIDDEN, fn)) return C.fail('forbidden', REAL_FORBIDDEN_MSG);
       syncAdmin();
       if (meId && P.demoAccessOff && P.demoAccessOff(storage, meId)) dropSession();
       var me = currentMe();

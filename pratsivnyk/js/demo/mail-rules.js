@@ -1,29 +1,19 @@
 (function (root) {
   'use strict';
-  var P = root.P = root.P || {}, C = P.demoCommon, S = P.demoSenior;
+  var P = root.P = root.P || {}, C = P.demoCommon, V = P.demoMailVars;
   P.demoApis = P.demoApis || []; P.demoResetKeys = P.demoResetKeys || [];
 
-  var KEY = 'demo:ml:rules', KEY_ADDR = 'demo:ml:addr';
-  P.demoResetKeys.push(KEY); P.demoResetKeys.push(KEY_ADDR);
+  var KEY = 'demo:ml:rules', KEY_ADDR = 'demo:ml:addr', KEY_SKIP = 'demo:ml:skip';
+  P.demoResetKeys.push(KEY, KEY_ADDR, KEY_SKIP);
   var EVERY = [5, 10, 15, 30, 60, 120, 180, 240, 360, 720];
   var KINDS = { every: 1, daily: 1, weekly: 1, event: 1 }, CONDS = { always: 1, audits: 1, over: 1 };
   var EVENTS = { audit: 'одразу після запису аудиту', over: 'щойно брак, % за сьогодні перевищить', kd: 'щойно готовий новий розбір коригуючих дій (раз на тиждень)' };
-  var WD = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота'];
   var WD_IN = ['неділю', 'понеділок', 'вівторок', 'середу', 'четвер', 'пʼятницю', 'суботу'];
   var DS = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-  var MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
-  var LINKS = { 'кабінет_старшого': 'Кабінет старшого', 'форма_аудиту': 'Форма аудиту' };
-  var GROUPS = [
-    { title: 'Сьогодні', items: [['локація', 'локація'], ['перевірено', 'перевірено, шт'], ['брак_шт', 'брак, шт'], ['брак_%', 'брак, %'], ['аудитів', 'аудитів'], ['без_аудитів', 'відділи без аудитів']] },
-    { title: 'Відділи', items: [['найбільший_брак', 'відділ з найбільшим % браку'], ['топ_браку', 'найчастіші види браку']] },
-    { title: 'Коригуючі дії', items: [['кд_нових', 'понад норму, не почато'], ['кд_на_перевірці', 'йде тиждень після впровадження']] },
-    { title: 'Посилання', items: [['кабінет_старшого', 'кабінет старшого'], ['форма_аудиту', 'форма аудиту']] },
-    { title: 'Час', items: [['день', 'день'], ['дата', 'дата'], ['час', 'час']] }
-  ];
-  var KNOWN = {}; GROUPS.forEach(function (g) { g.items.forEach(function (x) { KNOWN[x[0]] = 1; }); });
+  var KNOWN = {}; V.GROUPS.forEach(function (g) { g.items.forEach(function (x) { KNOWN[x[0]] = 1; }); });
   var PH = /\{([^{}\s]{1,20})\}/g;
   var DEP_ID = /^[A-Za-z0-9_-]{1,40}$/, SLACK_ID_MSG = 'Slack ID — літера U або W і ще 8–10 великих літер чи цифр.';
-  var MAX_TO = 10, MAX_RULES = 50, RULES_LIMIT = 'Розсилок уже 50 — видаліть зайві', CAPS = { noAudits: 10, topDefects: 5, auditors: 5, orders: 5 };   // скільки елементів у списках перегляду (як LIST_CAPS у mail-core.mjs)
+  var MAX_TO = 10, MAX_RULES = 50, RULES_LIMIT = 'Розсилок уже 50 — видаліть зайві';
 
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -196,8 +186,8 @@
     if (!tpl) err('template', 'Напишіть текст повідомлення.');
     else if (tpl.length > 1500) err('template', 'Текст — до 1500 знаків.');
     else {
-      var bad = []; tpl.replace(PH, function (all, n) { if (!KNOWN[n] && bad.indexOf(all) < 0) bad.push(all); return all; });
-      if (bad.length) err('template', 'Такої вставки немає: ' + bad.slice(0, 3).join(' ') + '. Оберіть вставку зі списку під текстом.');
+      var bad = []; tpl.replace(PH, function (all, n) { if (!KNOWN[n] && bad.indexOf(n) < 0) bad.push(n); return all; });
+      if (bad.length) err('template', 'Такої вставки немає: «' + bad.slice(0, 3).join('», «') + '». Оберіть вставку зі списку під текстом.');
     }
     return e.length ? { errors: e } : { rule: out };
   }
@@ -251,38 +241,14 @@
       return oneLoc || !env.ix.loc[d.locationId] ? d.name : d.name + ' (' + env.ix.loc[d.locationId].name + ')';
     }).join(', ');
   }
+  function skipLoad(env) { var st = env.storage.get(KEY_SKIP, null); return V.pruneSkipDays(st && st.items, env.day()); }
   function view(env, r) {
     var locs = r.locations === 'all' ? null : r.locations.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : id; }), known = people(env);
     return Object.assign(clone(r), { whenLabel: scheduleLabel(r), condLabel: condLabel(r), locLabel: locs ? locs.join(', ') : 'усі локації', depLabel: depLabel(env, r),
-      toLabels: r.to.map(function (t) { return toLabel(env, t, known); }) });
+      toLabels: r.to.map(function (t) { return toLabel(env, t, known); }),
+      nextAt: r.enabled ? V.nextSendAt(r, env.now(), skipLoad(env)) : null, lastSentAt: null, perDay: V.perDayMax(r) });
   }
 
-  function vars(env, me, loc, depIds) {
-    var today = env.day(), list = S.audits(env, loc.id, today, today);
-    var deps = env.db.departments.filter(function (d) { return d.locationId === loc.id && d.active !== false && (!depIds || depIds.indexOf(d.id) >= 0); });
-    if (depIds) { var inSet = {}; deps.forEach(function (d) { inSet[d.id] = 1; }); list = list.filter(function (a) { return has(inSet, a.departmentId); }); }
-    var checked = 0, rejected = 0, types = {}, worst = null, none = [];
-    deps.forEach(function (d) {
-      var st = S.deptStats(env, list, d.id);
-      checked += st.checked; rejected += st.rejected;
-      Object.keys(st.byType).forEach(function (id) { types[id] = (types[id] || 0) + st.byType[id]; });
-      if (!list.some(function (a) { return a.departmentId === d.id; })) none.push(d.name);
-      var pc = C.pct(st.rejected, st.checked);
-      if (pc != null && (!worst || pc > worst.pct)) worst = { name: d.name, pct: pc };
-    });
-    var top = Object.keys(types).sort(function (a, b) { return types[b] - types[a]; }).slice(0, CAPS.topDefects)
-      .map(function (id) { return (env.ix.def[id] ? env.ix.def[id].name : 'Невідомий вид браку') + ' ' + P.fmt.num(types[id]); });
-    var kd = null;
-    P.demoApis.forEach(function (api) {
-      if (kd || !has(api, 'srKdOverview')) return;
-      try { var r = api.srKdOverview({ locationId: loc.id }, me, env); if (r && r.ok && r.totals) kd = r.totals; } catch (e) { kd = null; }
-    });
-    var p = today.split('-'), dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])), pc = C.pct(rejected, checked);
-    return { 'локація': loc.name, 'перевірено': P.fmt.num(checked), 'брак_шт': P.fmt.num(rejected), 'брак_%': pc == null ? '—' : P.fmt.pct(pc),
-      'аудитів': P.fmt.num(list.length), 'без_аудитів': none.slice(0, CAPS.noAudits).join(', ') || 'немає', 'найбільший_брак': worst ? worst.name + ' — ' + P.fmt.pct(worst.pct) : '—',
-      'топ_браку': top.join(' · ') || 'немає', 'кд_нових': kd ? String(kd.new || 0) : '—', 'кд_на_перевірці': kd ? String(kd.review != null ? kd.review : kd.check || 0) : '—',
-      'день': WD[dt.getUTCDay()], 'дата': +p[2] + ' ' + MONTHS[+p[1] - 1], 'час': P.fmt.time(env.now().toISOString()) };
-  }
   function render(tpl, v) { return String(tpl || '').replace(PH, function (all, n) { return has(v, n) ? v[n] : all; }); }
 
   function idOf(p) { return typeof p.id === 'string' ? p.id : ''; }
@@ -297,7 +263,7 @@
           locations: u.locationIds.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : id; }) }; }),
         addressees: addrLoad(env).items.map(function (a) { return { id: a.slackId, name: a.name, jobTitle: a.jobTitle || '', locationId: a.locationId, departmentId: a.departmentId || null, active: a.active !== false }; }),
         presets: presets(env).map(function (x) { return { key: x.key, title: x.title, whenLabel: scheduleLabel(x), rule: x }; }),
-        options: { every: EVERY, groups: GROUPS, links: LINKS } };
+        options: { every: EVERY, groups: V.GROUPS, links: V.LINKS } };
     },
     mlRuleSave: function (p, me, env) {
       if (!admin(me)) return C.forbidden();
@@ -341,7 +307,7 @@
       if (!admin(me)) return C.forbidden();
       if (typeof p.locationId !== 'string' || !has(env.ix.loc, p.locationId)) return C.fail('not_found', 'Такої локації немає.');
       var ids = Array.isArray(p.departments) ? p.departments.filter(function (id) { return typeof id === 'string'; }) : [];
-      var loc = env.ix.loc[p.locationId], v = vars(env, me, loc, ids.length ? ids : null), tpl = String(p.template == null ? '' : p.template).slice(0, 1500);
+      var loc = env.ix.loc[p.locationId], v = V.vars(env, me, loc, ids.length ? ids : null), tpl = String(p.template == null ? '' : p.template).slice(0, 1500);
       return { ok: true, at: env.now().toISOString(), location: { id: loc.id, name: loc.name }, vars: v, text: render(tpl, v), onlyDepartments: ids.length > 0 };
     },
 
@@ -368,6 +334,28 @@
       st.items.splice(st.items.indexOf(a), 1);
       env.storage.set(KEY_ADDR, st);
       return { ok: true, id: a.id, name: a.name };
+    },
+
+    mlSkipDays: function (p, me, env) {
+      if (!admin(me)) return C.forbidden();
+      return { ok: true, items: skipLoad(env), today: env.day() };
+    },
+    mlSkipDaySave: function (p, me, env) {
+      if (!admin(me)) return C.forbidden();
+      var list = skipLoad(env), old = typeof p.oldDate === 'string' ? p.oldDate : '';
+      if (old && !list.some(function (d) { return d.date === old; })) return C.fail('not_found', 'Такого дня вже немає — оновіть сторінку.');
+      var v = V.validSkipDay(p, list, env.day(), old || undefined);
+      if (v.error) return C.fail('validation', v.error, [{ field: v.field, message: v.error }]);
+      list = V.pruneSkipDays(list.filter(function (d) { return d.date !== old; }).concat([v.item]), env.day());
+      env.storage.set(KEY_SKIP, { items: list });
+      return { ok: true, items: list, today: env.day() };
+    },
+    mlSkipDayDelete: function (p, me, env) {
+      if (!admin(me)) return C.forbidden();
+      var list = skipLoad(env), rest = list.filter(function (d) { return d.date !== p.date; });
+      if (rest.length === list.length) return C.fail('not_found', 'Такого дня вже немає — оновіть сторінку.');
+      env.storage.set(KEY_SKIP, { items: rest });
+      return { ok: true, items: rest, today: env.day() };
     }
   });
 })(typeof window !== 'undefined' ? window : globalThis);

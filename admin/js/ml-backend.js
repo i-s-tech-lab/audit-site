@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   var P = root.P = root.P || {}, esc = function (s) { return P.esc(s); };
-  var REAL = { mlRules: 1, mlRuleSave: 1, mlRuleOn: 1, mlRuleCopy: 1, mlRuleDelete: 1, mlAddrList: 1, mlAddrSave: 1, mlAddrDelete: 1 };
+  var REAL = { mlRules: 1, mlRuleSave: 1, mlRuleOn: 1, mlRuleCopy: 1, mlRuleDelete: 1, mlAddrList: 1, mlAddrSave: 1, mlAddrDelete: 1, mlSkipDays: 1, mlSkipDaySave: 1, mlSkipDayDelete: 1 };
   var NO_CODE = 'Введіть код розсилки, щоб відкрити справжні правила.';
   var dir = null, addr = [];   // останній довідник з демо-сервера і список активних адресатів зі справжнього — для підписів
 
@@ -87,7 +87,7 @@
 
   function loginHtml(message) {
     var steps = ['Відкрийте <b>supabase.com</b> → ваш проєкт → <b>Edge Functions → Secrets</b>.',
-      'Код — це значення секрету <b>MAIL_ADMIN_CODE</b>. Ви задавали його самі, коли вмикали розсилку (від 8 знаків).',
+      'Код — це значення секрету <b>MAIL_ADMIN_CODE</b>. Ви задавали його самі, коли вмикали розсилку (від 20 знаків).',
       'Забули код — задайте в Supabase новий: він діє одразу, перевстановлювати нічого не треба.'];
     return '<div class="rz-code"><section class="card rz-code__main"><h3 class="h2">Відкрити розсилки</h3>' +
       '<p><b>Правила розсилок лежать у Supabase</b>, а сайт відкритий для всіх, хто знає адресу. Тому, щоб бачити й змінювати розсилки, потрібен <b>код розсилки</b>.</p>' +

@@ -6,7 +6,20 @@
 
   function da(k, v) { return ' data-' + k + '="' + esc(v) + '"'; }
   function forLoc(r, id) { return id === 'all' || r.locations === 'all' || r.locations.indexOf(id) >= 0; }
-  function when(iso, now) { return P.fmt.dayKey(iso) === P.fmt.dayKey(now) ? 'сьогодні о ' + P.fmt.time(iso) : P.fmt.dateTime(iso); }
+  var DS = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  var MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+  var MAX_PER_DAY = 60;   // дзеркало MAX_PER_RECIPIENT_DAY (сервер, mail-plan.mjs); справжній ліміт приходить у стані розсилки (limits)
+  function dayWord(iso, now) {
+    var k = P.fmt.dayKey(iso), t = Date.parse(k + 'T12:00:00Z'), diff = Math.round((t - Date.parse(P.fmt.dayKey(now) + 'T12:00:00Z')) / 86400000), d = new Date(t);
+    return diff === 0 ? 'сьогодні' : diff === 1 ? 'завтра' : DS[d.getUTCDay()] + ', ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()];
+  }
+  function nextLine(r, now) {
+    if (r.when.kind === 'event') return 'Наступне: щойно станеться подія';
+    if (!r.enabled) return 'Наступне: розсилку вимкнено — не надсилається';
+    if (!r.nextAt) return 'Наступного надсилання в найближчі 14 днів немає';
+    return 'Наступне: ' + dayWord(r.nextAt, now) + ' о ' + P.fmt.time(r.nextAt);
+  }
+  function lastLine(iso) { return 'Востаннє надіслано: ' + (iso ? P.fmt.date(iso) + ', ' + P.fmt.time(iso) : 'ще не надсилалося'); }
 
   function intro() {
     var steps = [['Ви налаштовуєте правило:', ' для яких локацій і відділів, коли надсилати, кому і який текст.'],
@@ -90,11 +103,14 @@
       var off = !r.enabled, why = r.waits !== undefined ? (r.waits ? K.waitWhy(r, K.labels(data.options)) : null) : K.waitWhy(r, K.labels(data.options));
       var note = K.whereNote(r), ppl = (r.to || []).filter(function (t) { return t.type === 'user'; });
       var nobody = r.to.length && ppl.length === r.to.length && !ppl.some(function (t) { return ix[t.id] && ix[t.id].active; });
+      var last = r.lastSentAt || lastSent[r.id], cap = st && st.limits && st.limits.perRecipientDay || MAX_PER_DAY;
       var msg = nobody ? K.box('bad', '<b>Нікому не піде:</b> людей із «Кому» немає серед активних користувачів чи адресатів. Додайте отримувача або ввімкніть адресата.')
         : why ? K.box('warn', '<b>Чекає бази даних:</b> ' + esc(why) + '. Правило збережене й запрацює саме, щойно база буде.')
-        : !off && lastSent[r.id] && !(st && st.settings && st.settings.paused) ? K.box('ok', '<b>Працює вже зараз.</b> Востаннє надіслано ' + esc(when(lastSent[r.id], st.now)) + ' — дійшло в Slack.') : '';
+        : !off && last && !(st && st.settings && st.settings.paused) ? K.box('ok', '<b>Працює вже зараз.</b> Останнє повідомлення дійшло в Slack.') : '';
+      if (r.perDay > cap) msg += K.box('warn', 'Понад ' + cap + ' на добу одному отримувачу не надсилається.');
       return '<article class="card rz-card' + (off ? ' rz-card--off' : '') + '"><div class="rz-card__top"><div class="rz-card__main"><h3 class="card-title">' + esc(r.title) + '</h3>' +
-        '<p class="rz-card__sum">' + esc(K.whenShort(r) + ' · ' + K.toShort(r, ix) + ' · ' + K.condShort(r)) + '</p></div>' +
+        '<p class="rz-card__sum">' + esc(K.whenShort(r) + ' · ' + K.toShort(r, ix) + ' · ' + K.condShort(r)) + '</p>' +
+        '<p class="rz-card__next"><span>' + esc(nextLine(r, data.now)) + '</span><span>' + esc(lastLine(last)) + '</span></p></div>' +
         '<div class="rz-card__on">' + (off ? H.badge('Вимкнено — не надсилається', '') : H.badge('Увімкнено', 'ok')) +
         '<button class="toggle' + (off ? '' : ' toggle--on') + '" type="button" role="switch" aria-checked="' + !off + '" aria-label="' + (off ? 'Увімкнути' : 'Вимкнути') + ' розсилку «' + esc(r.title) + '»" data-act="rz-on"' + da('id', r.id) + '></button></div></div>' +
         '<dl class="kv rz-kv"><dt>Де</dt><dd>' + esc(K.whereText(r)) + (note ? ' <span class="rz-kv__n">(' + esc(note) + ')</span>' : '') + '</dd>' +

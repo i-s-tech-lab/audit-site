@@ -3,7 +3,7 @@
   var P = root.P, esc = P.esc;
   var DS = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   var WD_IN = ['неділю', 'понеділок', 'вівторок', 'середу', 'четвер', 'пʼятницю', 'суботу'];
-  var DATA = ['локація', 'перевірено', 'брак_шт', 'брак_%', 'аудитів', 'без_аудитів', 'найбільший_брак', 'топ_браку', 'кд_нових', 'кд_на_перевірці'];
+  var DATA = P.rzExamples ? P.rzExamples.DATA : [];
   var PH = /\{([^{}\s]{1,20})\}/g;
   var counts = { rules: null, addr: null };   // лічильники в перемикачі розділів — оновлюють екрани після завантаження
   var chan = null;                             // назва тестового каналу (зі стану розсилки), коли відома
@@ -145,7 +145,9 @@
     var h = esc(tpl).replace(PH, function (all, n) {
       if (has(links, n)) return '<span class="rz-tk rz-tk--l">' + safeVal(links[n]) + ' ↗</span>';
       var v = has(vars, n) ? vars[n] : P.rzChips && P.rzChips.example ? P.rzChips.example(n) : null;
-      return v == null || v === '' ? all : '<span class="rz-tk">' + safeVal(v) + '</span>';
+      var lb = P.rzExamples ? P.rzExamples.label(n) : null;
+      if (v != null && v !== '') return '<span class="rz-tk">' + safeVal(v) + '</span>';
+      return lb ? '<span class="rz-tk rz-tk--ph">' + safeVal(lb) + '</span>' : '<span class="rz-tk rz-tk--bad">' + n + '?</span>';   // n — уже з екранованого тексту
     });
     return h.replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?])/gm, '$1<i>$2</i>').replace(/\n/g, '<br>');
   }

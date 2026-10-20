@@ -5,18 +5,9 @@
 
   var K = { locs: 'demo:adm:locs', people: 'demo:adm:people', rights: 'demo:adm:rights', rules: 'demo:adm:rules', log: 'demo:adm:log',
     requests: 'demo:adm:requests' };
-  var K_SR_USERS = 'demo:sr:mg:users';    // правки людей старшого (senior-manage.js): { add: [...], edit: { id: {name, slackId, active} } }
   var ROLES = ['auditor', 'senior_auditor', 'manager', 'admin'];   // ролі, які адміністратор може дати людині
   var ALL_LOC = { manager: 1, admin: 1 };                           // ці ролі завжди мають усі локації
   var LOC_MAX = 30, LOG_DAYS = 30, LOG_MAX = 300;
-  var CHANNEL_ID = /^(?:[CG][A-Z0-9]{8,10}|C-DEMO-[0-9]{3})$/;     // ID каналу Slack: справжній або вигаданий (демо)
-  var SLACK_ID_MSG = 'Slack ID — літера U або W і ще 8–10 великих літер чи цифр.';
-  var NOT_LISTED_MSG = 'Вас ще немає в списку доступу. Адміністратор уже бачить ваш запит — коли він вас додасть, натисніть «Увійти через Slack» ще раз.';
-  var SEED_REQUESTS = [
-    { id: 1, slackId: 'U-DEMO-901', name: 'Марія Т.', agoMin: 95 },
-    { id: 2, slackId: 'U-DEMO-902', name: 'Ігор Б.', agoMin: 1560 }
-  ];
-  var GUEST = { slackId: 'U-DEMO-950', name: 'Гість зі Slack' };   // «людина не зі списку» у демо-вході
 
   var RIGHTS = [
     { key: 'recordAudit', label: 'Записувати аудити' },
@@ -62,8 +53,8 @@
   function locStore(st) { var s = obj(st.get(K.locs, null)); return { add: arr(s.add), edit: obj(s.edit) }; }
   function peopleStore(st) { var s = obj(st.get(K.people, null)); return { add: arr(s.add), edit: obj(s.edit), off: obj(s.off) }; }
   P.demoAccessOff = function (st, id) { return has(peopleStore(st).off, id); };
+  P.demoAccessOffBy = function (st, id) { var o = peopleStore(st).off; return has(o, id) ? (obj(o[id]).byRole || 'admin') : null; };
   function allUsers(env) { return env.db.users; }
-  function locNames(env, ids) { return ids.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : id; }).join(', '); }
 
   function readLog(env) {
     var cut = new Date(env.now().getTime() - LOG_DAYS * 86400000).toISOString();
@@ -102,6 +93,8 @@
       var ids = arr(e.locationIds).filter(function (id) { return has(isLoc, id); });
       if (ids.length) u.locationIds = ids;
       if (has(ALL_LOC, u.role)) u.locationIds = all.slice();
+      u.canAddPeople = typeof e.canAddPeople === 'boolean' ? e.canAddPeople : u.canAddPeople === true;
+      u.disabledBy = has(U.off, u.id) ? obj(U.off[u.id]).byRole || 'admin' : u.active === false ? 'senior_auditor' : null;
     });
     db.usersOff = db.users.filter(function (u) { return has(U.off, u.id); });
     db.usersOff.forEach(function (u) { u.seniorOff = u.active === false; u.accessOff = true; u.active = false; });
@@ -136,28 +129,6 @@
     else if (isInt(r.from, 0, 23) && r.to <= r.from) errs.push({ field: 'remTo', message: 'Кінець — пізніше за початок.' });
     if (!isInt(r.every, 1, 12)) errs.push({ field: 'remEvery', message: 'Кожні 1–12 годин.' });
     return errs.length ? { errs: errs } : { v: { on: r.on, from: r.from, to: r.to, every: r.every } };
-  }
-
-  function reqStore(env) {
-    var s = obj(env.storage.get(K.requests, null));
-    if (!Array.isArray(s.items)) {
-      var t = env.now().getTime();
-      s = { items: SEED_REQUESTS.map(function (r) { return { id: r.id, slackId: r.slackId, name: r.name, createdAt: new Date(t - r.agoMin * 60000).toISOString(), status: 'pending' }; }) };
-    }
-    s.items = s.items.filter(function (x) { return x && typeof x === 'object'; }).map(function (x) {
-      var m = typeof x.id === 'string' ? /^rq_(\d+)$/.exec(x.id) : null, y = Object.assign({}, x);
-      if (m) y.id = +m[1];
-      if (!y.createdAt && y.at) y.createdAt = y.at;
-      delete y.at;
-      if (y.status === 'new') y.status = 'pending';   // v1.6: старі збережені запити
-      return y;
-    });
-    return s;
-  }
-  function reqNextId(items) {
-    var n = 0;
-    items.forEach(function (x) { if (typeof x.id === 'number') n = Math.max(n, x.id); });
-    return n + 1;
   }
 
   P.demoApis.push({
@@ -202,75 +173,6 @@
       return { ok: true, id: id, name: x.name, active: x.active !== false, created: !loc };
     },
 
-    adminPersonSave: function (p, me, env) {
-      if (!isAdmin(me)) return C.forbidden();
-      env.reload();
-      var st = peopleStore(env.storage), all = allUsers(env), u = null, errs = [], v = {};
-      if (p.id !== undefined) {
-        u = typeof p.id === 'string' ? all.filter(function (x) { return x.id === p.id; })[0] : null;
-        if (!u) return C.fail('not_found', 'Цієї людини немає в списку — оновіть сторінку.');
-      }
-      var wasOn = !u || !has(st.off, u.id);
-      if (!u || p.name !== undefined) {
-        var name = squash(p.name);
-        if (name.length < 2 || name.length > 60) errs.push({ field: 'name', message: 'Імʼя — від 2 до 60 знаків, наприклад «Олена К.».' }); else v.name = name;
-      }
-      if (!u || (p.slackId !== undefined && squash(p.slackId) !== '')) {
-        var slackId = squash(p.slackId).toUpperCase();
-        if (!C.isSlackId(slackId)) errs.push({ field: 'slackId', message: SLACK_ID_MSG });
-        else if (all.some(function (x) { return x !== u && String(x.slackId).toUpperCase() === slackId; })) errs.push({ field: 'slackId', message: 'Цей Slack ID уже є в списку.' });
-        else v.slackId = slackId;
-      }
-      var role = u ? u.role : null;
-      if (!u || p.role !== undefined) {
-        if (ROLES.indexOf(p.role) >= 0 || (u && p.role === u.role)) role = p.role;
-        else errs.push({ field: 'role', message: 'Оберіть роль зі списку.' });
-      }
-      var locIds = u ? u.locationIds.slice() : [];
-      if (role && has(ALL_LOC, role)) locIds = env.db.locations.map(function (l) { return l.id; });
-      else if (!u || p.locationIds !== undefined || (u && has(ALL_LOC, u.role))) {
-        var seen = {};
-        locIds = arr(p.locationIds).filter(function (id) { if (typeof id !== 'string' || !has(env.ix.loc, id) || seen[id]) return false; seen[id] = 1; return true; });
-        if (!locIds.length) errs.push({ field: 'locationIds', message: 'Оберіть хоча б одну локацію.' });
-      }
-      var on = wasOn;
-      if (p.active !== undefined) { if (typeof p.active !== 'boolean') errs.push({ field: 'active', message: 'Оберіть: доступ увімкнено чи вимкнено.' }); else on = p.active; }
-      var selfSlack = !!u && u.id === me.id && v.slackId !== undefined && v.slackId !== String(u.slackId || '').toUpperCase();
-      if (u && u.id === me.id && (!on || role !== 'admin' || selfSlack)) errs.push({ field: !on ? 'active' : selfSlack ? 'slackId' : 'role', message: 'Свою роль, доступ і Slack ID змінює інший адміністратор.' });
-      else if (u && u.role === 'admin' && wasOn && (!on || role !== 'admin') &&
-        !all.some(function (x) { return x !== u && x.role === 'admin' && !has(st.off, x.id); })) {
-        errs.push({ field: !on ? 'active' : 'role', message: 'Це єдиний адміністратор із доступом. Спершу додайте ще одного адміністратора.' });
-      }
-      if (errs.length) return verr(errs);
-      var rows = [], L = P.demoDict.roleLabels, id = u ? u.id : null;
-      if (!u) {
-        var n = 0;
-        all.concat(st.add).forEach(function (x) { var m = /^u_new(\d+)$/.exec(x.id); if (m) n = Math.max(n, +m[1]); });
-        id = 'u_new' + (n + 1);
-        st.add.push({ id: id, name: v.name, role: role, slackId: v.slackId, locationIds: locIds, addedAt: env.now().toISOString(), addedBy: me.id });
-        rows.push(['Нова людина', null, L[role] + ' · ' + locNames(env, locIds)]);
-      } else {
-        var prof = {};
-        if (has(v, 'name') && v.name !== u.name) { prof.name = v.name; rows.push(['Імʼя', u.name, v.name]); }
-        if (has(v, 'slackId') && v.slackId !== u.slackId) { prof.slackId = v.slackId; rows.push(['Slack ID', C.maskSlackId(u.slackId), C.maskSlackId(v.slackId)]); }
-        if (Object.keys(prof).length) {
-          var sr = obj(env.storage.get(K_SR_USERS, null)); sr.add = arr(sr.add); sr.edit = obj(sr.edit);
-          sr.edit[id] = Object.assign(obj(sr.edit[id]), prof); env.storage.set(K_SR_USERS, sr);
-        }
-        var e = obj(st.edit[id]);
-        if (role !== u.role) { e.role = role; rows.push(['Роль', L[u.role], L[role]]); }
-        if (locIds.join() !== u.locationIds.join()) { e.locationIds = locIds; rows.push(['Локації', locNames(env, u.locationIds), locNames(env, locIds)]); }
-        st.edit[id] = e;
-        if (on !== wasOn) rows.push(['Доступ', wasOn ? 'увімкнено' : 'вимкнено', on ? 'увімкнено' : 'вимкнено']);
-      }
-      if (on) delete st.off[id]; else st.off[id] = { at: env.now().toISOString(), by: me.id };
-      env.storage.set(K.people, st);
-      log(env, me, 'Люди й доступи', u ? u.name : v.name, rows);
-      env.reload();
-      var x = allUsers(env).filter(function (y) { return y.id === id; })[0];
-      return { ok: true, id: id, name: x.name, active: on, created: !u };
-    },
-
     adminRightsSave: function (p, me, env) {
       if (!isAdmin(me)) return C.forbidden();
       env.reload();
@@ -311,67 +213,9 @@
       if (v !== was) log(env, me, 'Правила', r.label, [['Значення', withUnit(was, r.unit, r.names), withUnit(v, r.unit, r.names)]]);
       env.reload();
       return { ok: true, key: r.key, value: GET[r.key](env.db), was: was };
-    },
-
-    admAccessRequests: function (p, me, env) {
-      if (!isAdmin(me)) return C.forbidden();
-      var items = reqStore(env).items.filter(function (x) { return x.status === 'pending'; })
-        .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0; })
-        .map(function (x) { return { id: x.id, slackId: x.slackId, name: x.name, createdAt: x.createdAt, status: x.status }; });
-      return { ok: true, requests: items };
-    },
-
-    admAccessResolve: function (p, me, env) {
-      if (!isAdmin(me)) return C.forbidden();
-      var st = reqStore(env), r = typeof p.id === 'string' || typeof p.id === 'number' ? st.items.filter(function (x) { return String(x.id) === String(p.id); })[0] : null;
-      if (!r || r.status !== 'pending') return C.fail('not_found', 'Цього запиту вже немає — оновіть сторінку.');
-      if (p.decision !== 'added' && p.decision !== 'rejected') return verr([{ field: 'decision', message: 'Оберіть: додати чи відхилити.' }]);
-      r.status = p.decision; r.doneAt = env.now().toISOString(); r.by = me.id;
-      if (p.decision === 'added' && typeof p.userId === 'string') r.userId = p.userId;
-      env.storage.set(K.requests, st);
-      log(env, me, 'Вхід через Slack', r.name, [['Запит на вхід', 'чекав на рішення', p.decision === 'added' ? 'додано до списку' : 'відхилено']]);
-      return { ok: true, id: r.id, decision: p.decision, name: r.name };
-    },
-
-    admLoginButtonSend: function (p, me, env) {
-      if (!isAdmin(me)) return C.forbidden();
-      var dest;
-      if (p.kind === 'channel') {
-        var ch = squash(p.channelId).toUpperCase();
-        if (!CHANNEL_ID.test(ch)) return verr([{ field: 'channelId', message: 'ID каналу — літера C або G і ще 8–10 великих літер чи цифр.' }]);
-        dest = 'у канал ' + C.maskSlackId(ch);
-      } else if (p.kind === 'person') {
-        var u = typeof p.userId === 'string' ? allUsers(env).filter(function (x) { return x.id === p.userId; })[0] : null;
-        if (!u || has(peopleStore(env.storage).off, u.id) || !u.slackId) return verr([{ field: 'userId', message: 'Оберіть людину зі списку.' }]);
-        dest = 'особисто · ' + u.name;
-      } else return verr([{ field: 'kind', message: 'Оберіть: у канал чи людині.' }]);
-      log(env, me, 'Вхід через Slack', 'Кнопка входу', [['Кнопку входу надіслано', null, dest]]);
-      return { ok: true, kind: p.kind, destination: dest };
-    },
-
-    slackLookup: function (p, me, env) {
-      if (!isAdmin(me) && !(me.can && me.can.manageWhitelist)) return C.forbidden();
-      var id = squash(p.slackId).toUpperCase();
-      if (!C.isSlackId(id)) return verr([{ field: 'slackId', message: SLACK_ID_MSG }]);
-      var u = allUsers(env).filter(function (x) { return String(x.slackId).toUpperCase() === id; })[0];
-      var name = u ? u.name : null;
-      if (!name) { var r = reqStore(env).items.filter(function (x) { return x.slackId === id && x.status === 'pending'; })[0]; if (r) name = r.name; }
-      return { ok: true, found: !!name, name: name };
-    },
-
-    authDemoUnknown: function (p, me, env) {
-      env.reload();   // адміністратор міг додати гостя з іншої вкладки
-      if (allUsers(env).some(function (x) { return x.slackId === GUEST.slackId; })) return C.fail('conflict', 'Цього гостя вже додано до списку — оберіть його серед користувачів угорі.');
-      var st = reqStore(env), r = st.items.filter(function (x) { return x.slackId === GUEST.slackId; })[0];
-      if (r && r.status === 'pending') return C.fail('not_listed', NOT_LISTED_MSG);
-      if (r) { r.status = 'pending'; r.createdAt = env.now().toISOString(); }
-      else st.items.push({ id: reqNextId(st.items), slackId: GUEST.slackId, name: GUEST.name, createdAt: env.now().toISOString(), status: 'pending' });
-      env.storage.set(K.requests, st);
-      return C.fail('not_listed', NOT_LISTED_MSG);
     }
   });
 
   P.demoAdmin = { K: K, ROLES: ROLES, RIGHTS: RIGHTS, RIGHT_ROLES: RIGHT_ROLES, BASE: BASE, RULES: RULES, DEF: DEF, GET: GET,
-    isAdmin: isAdmin, allUsers: allUsers, peopleStore: peopleStore, readLog: readLog, remText: remText,
-    NOT_LISTED_MSG: NOT_LISTED_MSG, GUEST: GUEST };
+    isAdmin: isAdmin, allUsers: allUsers, peopleStore: peopleStore, readLog: readLog, remText: remText, log: log };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,0 +1,35 @@
+
+
+
+.rz-card__next { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0; font-size: var(--fs-xs); line-height: 1.45; color: var(--text-2); }
+.rz-card__next span { overflow-wrap: anywhere; }
+.rz-card--off .rz-card__next { color: var(--text-3); }
+
+
+.rz-dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 12px; align-items: start; }
+.rz-dgrid > .card { min-width: 0; gap: 12px; }
+.rz-days__d { margin: 0; font-size: var(--fs-xs); line-height: 1.45; }
+.rz-daylist, .rz-chglist { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.rz-dayrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 4px 0; border-top: 1px solid var(--line); font-size: var(--fs-xs); }
+.rz-dayrow:first-child { border-top: 0; }
+.rz-dayrow__t { min-width: 0; overflow-wrap: anywhere; }
+.rz-dayrow__a { display: inline-flex; flex: none; gap: 2px; }
+.rz-dayrow--edit { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; padding: 10px 0; }
+.rz-dayfields { display: grid; grid-template-columns: minmax(150px, 190px) minmax(0, 1fr); gap: 10px; }
+.rz-dayfields .input { height: 44px; }
+.rz-dayadd { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rz-dayadd .rz-dayfields { flex: 1 1 320px; min-width: 0; }
+.rz-dayadd .btn { flex: none; height: 44px; }
+.rz-days .err { margin: 0; }
+
+.rz-chglist li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: var(--fs-xs); line-height: 1.4; }
+.rz-chglist li:first-child { border-top: 0; }
+.rz-chg__t { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.rz-chg__b { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.rz-chg__b .hint { display: block; }
+
+@media (max-width: 720px) {
+  .rz-dayfields { grid-template-columns: 1fr; }
+  .rz-dayadd .btn { flex: 1 1 100%; justify-content: center; }
+  .rz-chglist li { grid-template-columns: 1fr; gap: 2px; }
+}

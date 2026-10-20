@@ -2,9 +2,12 @@
   'use strict';
   var P = root.P, esc = P.esc, K = P.mlKit;
   var DEP_NONE = 'Оберіть хоча б один відділ.';   // той самий текст дає сервер (validRule): показуємо одразу, не чекаючи «Зберегти»
-  var PH_HELP = { 'Сьогодні': 'admin.ml.ph.today', 'Відділи': 'admin.ml.ph.depts', 'Коригуючі дії': 'admin.ml.ph.kd', 'Посилання': 'admin.ml.ph.links' };
-  var PH_DESC = { 'Сьогодні': 'цифри за сьогодні по обраних відділах', 'Відділи': 'відділ з найбільшим % браку й найчастіші види браку',
-    'Коригуючі дії': 'скільки дій зараз у кожному стані', 'Посилання': 'посилання на наш сайт', 'Час': 'коли пішло повідомлення' };
+  var PH_HELP = { 'Сьогодні': 'admin.ml.ph.today', 'Вчора': 'admin.ml.ph.yday', 'Минулий тиждень': 'admin.ml.ph.week', 'Відділи': 'admin.ml.ph.depts',
+    'Коригуючі дії': 'admin.ml.ph.kd', 'Посилання': 'admin.ml.ph.links', 'Час': 'admin.ml.ph.time' };
+  var PH_DESC = { 'Сьогодні': 'цифри за сьогодні по обраних відділах', 'Вчора': 'ті самі цифри за вчорашній день', 'Минулий тиждень': 'цифри з понеділка по неділю минулого тижня',
+    'Відділи': 'відділ з найбільшим % браку й найчастіші види браку', 'Коригуючі дії': 'скільки дій зараз у кожному стані', 'Посилання': 'посилання на наш сайт',
+    'Час': 'коли пішло повідомлення: день, дата, номер тижня, місяць' };
+  var MAX_PER_DAY = 60;   // скільки повідомлень на добу сервер надішле одному отримувачу (дзеркало MAX_PER_RECIPIENT_DAY у mail-plan.mjs)
 
   function da(k, v) { return ' data-' + k + '="' + esc(v) + '"'; }
   function q(el, sel) { return el.querySelector(sel); }
@@ -70,8 +73,8 @@
         '<div class="rz-pal"><span class="label">Вставки — натисніть, щоб додати туди, де курсор, або перетягніть у текст</span>' + data.options.groups.map(function (g) {
           var link = g.title === 'Посилання';
           return '<div class="rz-palg"><div class="rz-palg__t"><b>' + esc(g.title) + help(PH_HELP[g.title]) + '</b>' + (PH_DESC[g.title] ? '<span>' + esc(PH_DESC[g.title]) + '</span>' : '') + '</div><div class="chips">' + g.items.map(function (x) {
-            return '<button class="chip-pick rz-chip' + (link ? ' rz-chip--l' : '') + '" type="button" draggable="true" data-act="rz-ph"' + da('v', x[0]) + da('rz-drag', x[0]) +
-              ' title="Натисніть — вставити туди, де курсор, або перетягніть у текст · {' + esc(x[0]) + '}">' + esc(x[1]) + '</button>'; }).join('') + '</div></div>';
+            return '<button class="rz-chip' + (link ? ' rz-chip--l' : '') + '" type="button" draggable="true" data-act="rz-ph"' + da('v', x[0]) + da('rz-drag', x[0]) +
+              ' title="Натисніть — вставити туди, де курсор, або перетягніть у текст"><span class="rz-chip__plus" aria-hidden="true">+</span>' + esc(x[1]) + '</button>'; }).join('') + '</div></div>';
         }).join('') + '</div>';
     }
     function formHtml() {
@@ -87,13 +90,19 @@
     function drawForm() { q(layer.el, '[data-rz-form]').innerHTML = formHtml(); pv.locations(d.locations); mountText(); side(); }
     function mountText() {
       ce = P.rzChips.mount(q(layer.el, '[data-rz-tpl]'), { value: d.template, groups: data.options.groups, links: data.options.links || {}, max: 1500, history: ceHist,
-        placeholder: 'Напр. Перевірено {перевірено} шт · брак {брак_%}',
+        placeholder: 'Пишіть текст, а цифри й дати додавайте плашками нижче',
         sample: function (n) { return vars && Object.prototype.hasOwnProperty.call(vars, n) ? vars[n] : null; },
         onChange: function (v) { d.template = v; pv.update(d); side(); } });
     }
+    function perDay(w) { return w.kind !== 'every' ? null : Math.max(1, Math.floor((+w.hour_to - +w.hour_from) * 60 / (+w.every_min || 60)) + 1); }
+    function capNote() {
+      var n = perDay(d.when);
+      if (n == null) return '';
+      return ' ' + (n > MAX_PER_DAY ? 'Понад ' + MAX_PER_DAY + ' на добу одному отримувачу не надсилається.' : 'За розкладом — до ' + n + ' ' + K.plural(n, ['повідомлення', 'повідомлення', 'повідомлень']) + ' на добу кожному отримувачу.');
+    }
     function side() {
       var s = q(layer.el, '[data-rz-sum]'), w = q(layer.el, '[data-rz-wait]'), n = q(layer.el, '[data-rz-sendnote]');
-      if (s) s.innerHTML = K.summary(labelled(), ix, allowEmpty);
+      if (s) s.innerHTML = K.summary(labelled(), ix, allowEmpty) + esc(capNote());
       var why = K.waitWhy(d, labels);
       if (w) w.innerHTML = why ? K.box('warn', '<b>Поки чекатиме бази даних:</b> ' + esc(why) + '. Правило збережеться й запрацює саме, щойно база буде.') : '';
       if (n) n.textContent = P.mlPreview.sendHint();

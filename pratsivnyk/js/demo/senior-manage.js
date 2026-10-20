@@ -410,9 +410,9 @@
           if (!last) login = { kind: 'never' };
           else { var until = S.addDays(P.fmt.dayKey(last), C.SESSION_DAYS); login = until >= today ? { kind: 'ok', until: until } : { kind: 'expired' }; }
         }
-        return { id: u.id, name: u.name, slackId: C.maskSlackId(u.slackId), active: u.active !== false && !u.accessOff, byAdmin: !!u.accessOff, lastAuditAt: last, login: login, addedAt: u.addedAt || null };
+        return Object.assign({ id: u.id, name: u.name, slackId: C.maskSlackId(u.slackId), active: u.active !== false && !u.accessOff, byAdmin: !!u.accessOff, lastAuditAt: last, login: login, addedAt: u.addedAt || null }, P.demoPeople.srRow(me, u));
       }).sort(function (a, b) { return (a.active ? 0 : 1) - (b.active ? 0 : 1) || a.name.localeCompare(b.name, 'uk'); });
-      return { ok: true, location: { id: r.loc.id, name: r.loc.name }, counts: counts(env, r.loc.id), items: items };
+      return { ok: true, location: { id: r.loc.id, name: r.loc.name }, counts: counts(env, r.loc.id), items: items, access: P.demoPeople.srAccess(env, me) };
     },
 
     srMgUserSave: function (p, me, env) {
@@ -434,8 +434,11 @@
         else patch.slackId = slackId;
       }
       if (p.active !== undefined) patch.active = !!p.active;
-      if (p.active === true && p.id && env.ix.user[p.id] && env.ix.user[p.id].accessOff) return C.fail('forbidden', 'Доступ цій людині вимкнув адміністратор — увімкнути може лише він.');
+      if (p.active === true && p.id && env.ix.user[p.id] && env.ix.user[p.id].accessOff && env.ix.user[p.id].disabledBy !== 'manager') return C.fail('forbidden', 'Доступ цій людині вимкнув адміністратор — увімкнути може лише він.');
       if (errs.length) return verr(errs);
+      var gate = P.demoPeople.srGate(env, me, u, { role: 'auditor', slackId: patch.slackId || (u ? u.slackId : ''), locationIds: u ? u.locationIds : [r.loc.id],
+        active: patch.active !== undefined ? patch.active : !u || u.active !== false, name: p.name !== undefined ? patch.name : undefined });
+      if (gate) return gate;
       var was = u ? { name: u.name, slackId: C.maskSlackId(u.slackId), active: u.active !== false } : {}, id = p.id;
       if (!id) {
         var pre = 'u_aud_' + r.loc.id.slice(4).toLowerCase(), n = 0;
@@ -448,6 +451,7 @@
       var x = env.ix.user[id];
       journal(env, me, r.loc.id, 'team', p.id ? 'edit' : 'add', x.name,
         diff([['Імʼя', was.name, x.name], ['Slack ID', was.slackId, C.maskSlackId(x.slackId)], ['Доступ', was.active, x.active !== false]]));
+      P.demoPeople.srLog(env, me, r.loc, was, x, !p.id);   // і в журнал адміністратора («Люди й доступи»)
       return { ok: true, id: id, name: x.name, active: x.active !== false, created: !p.id };
     },
 

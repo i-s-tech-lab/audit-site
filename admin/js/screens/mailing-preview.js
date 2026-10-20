@@ -4,7 +4,9 @@
 
   function slackHtml(text, links) {
     var h = esc(text).replace(/\{([^{}\s]{1,20})\}/g, function (all, n) {
-      return Object.prototype.hasOwnProperty.call(links, n) ? '<span class="rz-link">' + esc(links[n]) + '</span>' : all;
+      if (Object.prototype.hasOwnProperty.call(links, n)) return '<span class="rz-link">' + esc(links[n]) + '</span>';
+      var lb = P.rzExamples ? P.rzExamples.label(n) : null;   // n — уже з екранованого тексту, тож у розмітку йде як є
+      return lb ? '<span class="rz-tk rz-tk--ph">' + esc(lb) + '</span>' : '<span class="rz-tk rz-tk--bad">' + n + '?</span>';
     });
     return h.replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?])/gm, '$1<i>$2</i>').replace(/\n/g, '<br>');
   }

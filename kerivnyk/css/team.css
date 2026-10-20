@@ -1,0 +1,30 @@
+
+.tm-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }   
+.tm-head { display: flex; align-items: flex-start; gap: 12px 16px; flex-wrap: wrap; }
+.tm-head > div:first-child { flex: 1; min-width: 240px; }
+.tm-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tm-off b, .tm-off td { color: var(--text-2); }
+
+
+.tm-sw { padding: 0; border: 0; font: inherit; cursor: pointer; }
+.tm-sw:disabled { opacity: .6; cursor: not-allowed; }
+.tm-sw:focus-visible { outline: 3px solid var(--brand-line); outline-offset: 2px; }
+
+
+.tm-card { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tm-card__who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tm-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+
+
+.tm-form { display: flex; flex-direction: column; gap: 16px; }
+.tm-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.tm-chips .chip-pick { gap: 6px; cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; }
+.tm-locked { color: var(--text-2); cursor: default; }
+
+@media (max-width: 560px) {
+  .tm-head > div:first-child { min-width: 0; flex-basis: 100%; }
+  .tm-head .btn { flex: 1 1 100%; justify-content: center; }
+  .tm-modal .modal__foot { justify-content: flex-end; }   
+  .tm-modal .seg { flex-wrap: wrap; }
+  .tm-modal .seg__btn { flex: 1 1 auto; }
+}

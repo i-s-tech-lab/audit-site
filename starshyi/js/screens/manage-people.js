@@ -7,22 +7,54 @@
 
   M.section('team', 'Аудитори', function (v) {
     var data = null;
-    function load() { v.get('srMgTeam', function (r) { data = r; draw(); }); }
+    function load() {
+      if (!P.authSlack.real()) { v.get('srMgTeam', function (r) { data = r; draw(); }); return; }
+      P.authTeam.list().then(function (r) {
+        if (!v.ctx.alive()) return;
+        if (!r.ok) { v.col.innerHTML = H.error(r); return; }
+        data = { ok: true, location: { id: v.loc, name: v.ctx.loc.name }, access: { canAdd: r.access.addPeople, addedToday: r.access.addedToday, limit: r.access.addLimitPerDay },
+          items: r.users.filter(function (u) { return u.role === 'auditor' && u.locationIds.indexOf(v.loc) >= 0; }).map(function (u) {
+            return { id: u.id, name: u.name, slackId: P.authSlack.maskId(u.slackId), active: u.active, disabledBy: u.disabledBy, lastAuditAt: null, login: null,
+              addedAt: u.createdAt, canEnable: u.canEnable };
+          }) };
+        draw();
+        if (v.wantNew && v.openNew) { v.wantNew = false; v.openNew(); }
+      });
+    }
+    function save(p) {
+      var body = Object.assign({}, p);
+      if (!P.authSlack.real()) { delete body.knownName; return v.call('srMgUserSave', body); }
+      if (!body.id) { body.role = 'auditor'; body.locationIds = [v.loc]; }
+      return P.authTeam.save(body);
+    }
     function find(id) { return data.items.filter(function (x) { return x.id === id; })[0]; }
+    var OFF_BY = { admin: 'адміністратор', manager: 'керівник', senior_auditor: 'старший' };   // хто вимкнув доступ (disabledBy)
+    var CANT_ENABLE = 'Увімкнути доступ може старший із правом «Додавати людей» або адміністратор';
+    function canAdd() { return !!(data.access && data.access.canAdd); }
+    function swLabel(u) {
+      if (u.active) return 'Доступ увімкнено · ' + u.name;
+      if (u.canEnable) return 'Доступ вимкнено · ' + u.name;
+      if (!canAdd()) return CANT_ENABLE;
+      return u.disabledBy === 'manager' ? 'Доступ вимкнув керівник — увімкнути може керівник або адміністратор' : 'Доступ вимкнув адміністратор — увімкнути може лише адміністратор';
+    }
     function row(u) {
       var login = !u.login ? '—' : u.login.kind === 'never' ? H.badge('ще не входив', 'info') : u.login.kind === 'expired' ? H.badge('треба увійти знову', 'warn') : 'до ' + H.dayShort(u.login.until);
+      var locked = !u.active && !u.canEnable;   // вимкнений, а вмикати цій людині не можна
+      var sw = M.sw(u.active, 'mg-access', da('id', u.id), swLabel(u));
       return '<tr' + (u.active ? '' : ' class="mg-off"') + '><td><b>' + esc(u.name) + '</b>' +
-        (!u.active ? '<span class="sub">' + (u.byAdmin ? 'доступ вимкнув адміністратор' : 'доступ вимкнено') + '</span>' : u.addedAt ? '<span class="sub">' + M.added(u.addedAt) + '</span>' : '') + '</td>' +
+        (!u.active ? '<span class="sub">' + (OFF_BY[u.disabledBy] ? 'доступ вимкнув ' + OFF_BY[u.disabledBy] : 'доступ вимкнено') + '</span>' : u.addedAt ? '<span class="sub">' + M.added(u.addedAt) + '</span>' : '') + '</td>' +
         '<td>' + esc(u.slackId) + '</td><td class="mg-nowrap">' + M.ago(u.lastAuditAt) + '</td><td>' + login + '</td>' +
-        '<td>' + M.sw(u.active, 'mg-access', da('id', u.id), (u.active ? 'Доступ увімкнено' : 'Доступ вимкнено') + ' · ' + u.name) + '</td>' +
-        '<td>' + M.pen('mg-edit', da('id', u.id), 'Редагувати ' + u.name) + '</td></tr>';
+        '<td>' + (locked ? sw.replace('<button ', '<button disabled ') : sw) + '</td>' +
+        '<td>' + (canAdd() ? M.pen('mg-edit', da('id', u.id), 'Редагувати ' + u.name) : '') + '</td></tr>';
     }
     function draw() {
-      v.col.innerHTML = M.head('Аудитори', data.location.name + ' · вхід через Slack', M.btnNew('Новий аудитор')) +
-        '<section class="card">' + (data.items.length ? '<div class="tbl-box"><table class="tbl"><thead><tr><th>Аудитор</th><th>Slack ID</th><th>Останній аудит</th><th>Вхід діє' + M.hq('sr.mg.login') + '</th><th>Доступ' + M.hq('sr.mg.access') + '</th><th><span class="mg-vh">Дії</span></th></tr></thead><tbody>' +
+      var acc = data.access || {};
+      v.col.innerHTML = M.head('Аудитори', data.location.name + ' · вхід через Slack', canAdd() ? M.btnNew('Новий аудитор') : '') +
+        '<section class="card">' + (canAdd() && acc.limit ? '<p class="hint">Сьогодні додано: ' + acc.addedToday + ' з ' + acc.limit + '.</p>' : '') +
+        (data.items.length ? '<div class="tbl-box"><table class="tbl"><thead><tr><th>Аудитор</th><th>Slack ID</th><th>Останній аудит</th><th>Вхід діє' + M.hq('sr.mg.login') + '</th><th>Доступ' + M.hq('sr.mg.access') + '</th><th><span class="mg-vh">Дії</span></th></tr></thead><tbody>' +
           data.items.map(row).join('') + '</tbody></table></div>'
           : H.empty('Аудиторів ще немає', '')) +
-        '<p class="hint">Вимкнений доступ: вхід закрито, аудити людини лишаються в історії.</p></section>';
+        '<p class="hint">Вимкнений доступ: вхід закрито, аудити людини лишаються в історії.' + (canAdd() ? '' : ' Додавати й змінювати аудиторів можна з правом «Додавати людей» — його дає адміністратор. Вимкнути доступ можна й без нього.') + '</p></section>';
     }
     function openEdit(u) {
       var st = { active: u ? u.active : true };
@@ -44,16 +76,14 @@
             var out = q(layer.el, '[data-lookup-out]'), id = M.val(layer.el, 'slackId').trim();
             if (!id) { out.textContent = 'Впишіть Slack ID, щоб побачити імʼя.'; return; }
             t.disabled = true;
-            P.authSlack.lookup(id).then(function (r) {
-              t.disabled = false;
-              out.textContent = !r.ok ? (r.error || 'Не вдалося перевірити.') : r.found ? 'У Slack це: ' + r.name : 'Не знайдено';
-            });
+            P.authTeam.lookup(id).then(function (r) { t.disabled = false; out.textContent = P.authTeam.lookupText(r); });
           },
           'mg-save': function (t, e, layer) {
-            var p = { name: M.val(layer.el, 'name'), slackId: M.val(layer.el, 'slackId') };
+            var p = { name: M.val(layer.el, 'name') }, sid = M.val(layer.el, 'slackId').trim();
+            if (!u || sid) p.slackId = sid;   // v1.5: Slack ID наявного аудитора шлемо, лише коли його вписали (порожнє — без змін)
             if (u) { p.id = u.id; p.active = st.active; }
             t.disabled = true;
-            v.call('srMgUserSave', p).then(function (r) {
+            save(p).then(function (r) {
               t.disabled = false;
               if (!r.ok) { M.showErrors(layer.el, r); return; }
               layer.close();
@@ -63,14 +93,14 @@
           }
         } });
     }
-    v.openNew = function () { openEdit(null); };
-    v.ctx.on('mg-new', function () { openEdit(null); });
+    v.openNew = function () { if (canAdd()) openEdit(null); };   // v1.5: без права «Додавати людей» нового аудитора не додати
+    v.ctx.on('mg-new', function () { if (canAdd()) openEdit(null); });
     v.ctx.on('mg-edit', function (t) { openEdit(find(t.getAttribute('data-id'))); });
     v.ctx.on('mg-access', function (t) {
       var u = find(t.getAttribute('data-id'));
       function go() {
         t.disabled = true;
-        v.call('srMgUserSave', { id: u.id, active: !u.active }).then(function (r) {
+        save({ id: u.id, active: !u.active, knownName: u.name }).then(function (r) {
           if (!v.ctx.alive()) return;
           if (!r.ok) { t.disabled = false; M.failToast(r); return; }
           P.toast('ok', (r.active ? 'Доступ увімкнено · ' : 'Доступ вимкнено · ') + r.name, r.active ? '' : 'Записані аудити лишились в історії.');

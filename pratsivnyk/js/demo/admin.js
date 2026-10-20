@@ -30,13 +30,16 @@
     adminPeople: function (p, me, env) {
       var A = P.demoAdmin;
       if (!A.isAdmin(me)) return C.forbidden();
-      var off = A.peopleStore(env.storage).off, last = lastByAuditor(env), byRole = {};
+      var off = A.peopleStore(env.storage).off, last = lastByAuditor(env), byRole = {}, byId = {};
+      A.allUsers(env).forEach(function (x) { byId[x.id] = x; });
       var items = A.allUsers(env).map(function (u) {
         var on = !has(off, u.id);
         if (on) byRole[u.role] = (byRole[u.role] || 0) + 1;
         return { id: u.id, name: u.name, slackId: C.maskSlackId(u.slackId), role: u.role, roleLabel: roleLabel(u.role),
           locationIds: u.locationIds.slice(), allLocations: u.role === 'manager' || u.role === 'admin', active: on,
-          seniorOff: u.accessOff ? !!u.seniorOff : u.active === false, lastAuditAt: last[u.id] || null, addedAt: u.addedAt || null, isMe: u.id === me.id };
+          seniorOff: u.accessOff ? !!u.seniorOff : u.active === false, lastAuditAt: last[u.id] || null, addedAt: u.addedAt || null, isMe: u.id === me.id,
+          canAddPeople: u.canAddPeople === true, disabledBy: u.active === false ? u.disabledBy || null : null,
+          addedBy: u.addedBy && has(byId, u.addedBy) ? { id: u.addedBy, name: byId[u.addedBy].name, role: byId[u.addedBy].role } : null };
       }).sort(function (a, b) {
         return (a.active ? 0 : 1) - (b.active ? 0 : 1) || (ROLE_ORDER[a.role] || 9) - (ROLE_ORDER[b.role] || 9) || a.name.localeCompare(b.name, 'uk');
       });

@@ -3,6 +3,13 @@
   var P = root.P, esc = P.esc, H = P.sr.h, A = P.adm, da = A.da, q = A.q;
   var LAST_CHANNEL = 'adm:slack:lastChannel';   // останній канал, куди слали кнопку (щоб не вписувати ID щоразу)
 
+  function subnav(cur) {
+    return '<nav class="pills adm-subnav" aria-label="Розділи вкладки">' + [['main', '/slack-login', 'Кнопка й запити'], ['who', '/slack-login/who', 'Хто входить'], ['log', '/slack-login/log', 'Журнал входів']].map(function (s) {
+      return '<a class="pill' + (s[0] === cur ? ' pill--on' : '') + '" href="#' + s[1] + '"' + (s[0] === cur ? ' aria-current="page"' : '') + '>' + esc(s[2]) + '</a>';
+    }).join('') + '</nav>';
+  }
+  P.admLogin = { subnav: subnav };
+
   var STEPS = [
     ['Створіть додаток у Slack', 'На сайті для розробників Slack: Create New App, назва «Аудит якості», робоча команда компанії.'],
     ['Увімкніть вхід через Slack', 'У додатку ввімкніть вхід через Slack (Sign in with Slack) і впишіть адреси повернення на сайт — їх дасть розробник.'],
@@ -36,7 +43,7 @@
     }
     function draw() {
       ctx.el.innerHTML = '<section class="adm-col">' +
-        A.head('Вхід через Slack', real ? 'Slack підключено · ' + A.asOf() : 'Тестова версія — Slack не підключено', '', 'admin.slack.setup') +
+        A.head('Вхід через Slack', real ? 'Slack підключено · ' + A.asOf() : 'Тестова версія — Slack не підключено', '', 'admin.slack.setup') + subnav('main') +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('slack', 'ui-icon--sm') + 'Стан підключення</h3>' +
           (real ? '<p class="hint">Slack підключено: люди входять кнопкою «Увійти в Аудит» або кнопкою «Увійти через Slack» на сайті.</p>'
             : '<p class="hint">Тестова версія — Slack не підключено. Вхід на цьому сайті показано на вигаданих людях; кнопки нижче лише показують, як усе виглядатиме.</p>') +

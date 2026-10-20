@@ -3,22 +3,10 @@
   var P = root.P = root.P || {}, doc = root.document;
   var PH = /\{([^{}\s]{1,20})\}/g, ONE_PH = /^\{([^{}\s]{1,20})\}$/;
   var DRAG_TYPE = 'text/x-rz-ph';
-  var EXAMPLES = { 'локація': 'Цех А', 'перевірено': '1 156', 'брак_шт': '44', 'брак_%': '3,8%', 'аудитів': '18', 'без_аудитів': 'Пакування, Склад',
-    'найбільший_брак': 'Оздоблення — 4,9%', 'топ_браку': 'Розрив шва 12 · Перекіс деталі 9', 'кд_нових': '3', 'кд_на_перевірці': '1' };
-  var WD = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота'];
-  var MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
-
   function has(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
   function esc(s) { return P.esc ? P.esc(s) : String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  function example(name) {
-    if (has(EXAMPLES, name)) return EXAMPLES[name];
-    var d = new Date();
-    if (name === 'день') return WD[d.getDay()];
-    if (name === 'дата') return d.getDate() + ' ' + MONTHS[d.getMonth()];
-    if (name === 'час') return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
-    return null;
-  }
+  function example(name) { return P.rzExamples ? P.rzExamples.example(name) : null; }
 
   function parse(v) {
     var out = [], last = 0;
@@ -49,10 +37,10 @@
       return x != null ? x : labels[name] || name;
     }
     function chipHtml(name) {
-      var known = has(labels, name), link = has(links, name), sample = known ? sampleOf(name) : '{' + name + '}';
+      var known = has(labels, name), link = has(links, name), sample = known ? sampleOf(name) : name + '?';
       var label = known ? labels[name] : 'Такої вставки немає — замініть або приберіть';
       return '<span class="rz-tok' + (known ? '' : ' rz-tok--bad') + (link ? ' rz-tok--link' : '') + '" contenteditable="false" draggable="true"' +
-        ' data-ph="' + esc(name) + '" title="' + esc(label + (known ? ' · вставка {' + name + '} · натисніть, щоб змінити, або перетягніть' : '')) + '"' +
+        ' data-ph="' + esc(name) + '" title="' + esc(label + (known ? ' · натисніть, щоб змінити, або перетягніть' : '')) + '"' +
         ' aria-label="Вставка: ' + esc(label) + (known && !link ? ', приклад ' + esc(sample) : '') + '">' + esc(sample) + '</span>';
     }
     function render(v) {
@@ -275,11 +263,11 @@
     });
     function openMenu(chip) {
       var name = chip.getAttribute('data-ph'), known = has(labels, name), at = chipOffset(chip), len = name.length + 2;
-      var body = '<div class="rz-tokmenu"><p class="rz-tokmenu__h"><b>' + esc(known ? labels[name] : 'Невідома вставка {' + name + '}') + '</b>' +
-          (known ? '<span>' + (has(links, name) ? 'посилання на наш сайт' : 'приклад: ' + esc(sampleOf(name))) + ' · у тексті {' + esc(name) + '}</span>' : '<span>Такої вставки немає — сервер не збереже текст. Замініть або приберіть.</span>') + '</p>' +
+      var body = '<div class="rz-tokmenu"><p class="rz-tokmenu__h"><b>' + esc(known ? labels[name] : 'Невідома вставка «' + name + '»') + '</b>' +
+          (known ? '<span>' + (has(links, name) ? 'посилання на наш сайт' : 'приклад: ' + esc(sampleOf(name))) + '</span>' : '<span>Такої вставки немає — сервер не збереже текст. Замініть або приберіть.</span>') + '</p>' +
         '<p class="rz-tokmenu__t">Замінити на</p>' + (o.groups || []).map(function (g) {
           return '<div class="rz-tokmenu__g"><span>' + esc(g.title) + '</span><div class="chips">' + g.items.map(function (x) {
-            return '<button class="chip-pick rz-chip' + (x[0] === name ? ' chip-pick--on' : '') + '" type="button" data-act="rz-tok-to" data-v="' + esc(x[0]) + '">' + esc(x[1]) + '</button>'; }).join('') + '</div></div>';
+            return '<button class="rz-chip' + (has(links, x[0]) ? ' rz-chip--l' : '') + (x[0] === name ? ' rz-chip--on' : '') + '" type="button" data-act="rz-tok-to" data-v="' + esc(x[0]) + '">' + esc(x[1]) + '</button>'; }).join('') + '</div></div>';
         }).join('') +
         '<button class="btn btn--quiet btn--sm rz-tokmenu__rm" type="button" data-act="rz-tok-rm">' + (P.ic ? P.ic('delete', 'ui-icon--sm') : '') + 'Прибрати вставку</button></div>';
       var on = {
