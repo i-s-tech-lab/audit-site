@@ -1,0 +1,41 @@
+
+.rz-ce {
+  min-height: 168px; max-height: 420px; overflow-y: auto; box-sizing: border-box; width: 100%;
+  padding: 10px 12px; border: 1px solid var(--line-strong, var(--line)); border-radius: var(--r-md, 10px);
+  background: var(--surface); color: var(--text); font: inherit; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere; outline: none; cursor: text;
+}
+.rz-ce:focus { border-color: var(--brand, var(--brand-fill)); box-shadow: 0 0 0 3px var(--focus-soft, rgba(232, 125, 47, .18)); }
+.rz-ce.is-empty::before { content: attr(data-placeholder); color: var(--text-3, var(--text-2)); pointer-events: none; float: left; height: 0; }
+
+
+.rz-tok {
+  display: inline; padding: 1px 6px; margin: 0 1px; border-radius: 6px;
+  background: var(--brand-soft); color: var(--brand-ink); font-weight: 600;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  cursor: grab; user-select: none; -webkit-user-select: none; white-space: pre-wrap;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 22%, transparent);
+  transition: box-shadow .12s ease, background .12s ease;
+}
+.rz-tok:hover { box-shadow: inset 0 0 0 2px var(--brand-ink); }
+.rz-tok.is-drag { opacity: .45; cursor: grabbing; }
+.rz-tok--link { background: var(--info-soft); color: var(--info); text-decoration: underline; text-underline-offset: 2px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 22%, transparent); }
+.rz-tok--link:hover { box-shadow: inset 0 0 0 2px var(--info); }
+.rz-tok--bad { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); text-decoration: line-through; }
+
+.rz-ce__n { margin: 4px 0 0; font-size: 13px; color: var(--text-2); min-height: 0; }
+.rz-ce__n:empty { display: none; }
+.rz-ce__n--over { color: var(--danger); font-weight: 600; }
+
+
+[data-rz-drag] { cursor: grab; }
+
+
+.rz-tokmenu { display: flex; flex-direction: column; gap: 10px; padding: 12px; max-height: 70vh; overflow-y: auto; }
+.rz-tokmenu__h { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.rz-tokmenu__h span { color: var(--text-2); font-size: 13px; }
+.rz-tokmenu__t { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.rz-tokmenu__g { display: flex; flex-direction: column; gap: 4px; }
+.rz-tokmenu__g > span { font-size: 12px; color: var(--text-2); }
+.rz-tokmenu__rm { align-self: flex-start; }

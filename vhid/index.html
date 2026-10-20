@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uk" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>Перевірка входу — Аудит якості</title>
+  
+  <link rel="stylesheet" href="../pratsivnyk/css/ds.css?v=20261020030947">
+  <link rel="stylesheet" href="vhid.css?v=20261020030947">
+  <script>
+    /* Тема як у системі телефона/компʼютера; справжній вхід — лише на цій сторінці (адреса серверної функції входу). */
+    (function () {
+      var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      window.P = { config: { backend: 'supabase', authUrl: 'https://zptcvjylemhwolhihukl.supabase.co/functions/v1/slack-auth' } };
+    })();
+  </script>
+<meta name="app-build" content="20261020030947"></head>
+<body>
+  <main class="vh">
+    <header class="vh__head">
+      <p class="vh__kicker">Аудит якості</p>
+      <h1 class="ui-title-lg">Перевірка входу через Slack</h1>
+      <p class="vh__lead">Тут перевіряємо справжній вхід. Кабінети поки на вигаданих даних — вхід у них увімкнемо разом із базою.</p>
+    </header>
+    <section class="ui-card vh__card" id="vh-state" aria-live="polite">
+      <div class="vh__busy"><span class="ui-spinner" aria-hidden="true"></span><span>Перевіряю…</span></div>
+    </section>
+    <section class="ui-card vh__card vh__card--soft">
+      <h2 class="vh__h2">Що перевіряє ця сторінка</h2>
+      <ol class="vh__steps">
+        <li><b>Сервер входу відповідає.</b> Сторінка сама питає його, щойно відкрилась.</li>
+        <li><b>Кнопка в Slack працює.</b> Натисніть «Увійти в Аудит» у Slack — прийде особисте посилання на 10 хвилин. Воно відкриє цю сторінку вже зі входом.</li>
+        <li><b>Вас знає список доступу.</b> Після входу видно ваше імʼя, роль і локації — так, як їх записав адміністратор.</li>
+      </ol>
+    </section>
+  </main>
+  <noscript>Для перевірки входу потрібен JavaScript.</noscript>
+  <script src="../pratsivnyk/js/core.js?v=20261020030947"></script>
+  <script src="../pratsivnyk/js/icons.js?v=20261020030947"></script>
+  <script src="../pratsivnyk/js/auth-slack.js?v=20261020030947"></script>
+  <script src="vhid.js?v=20261020030947"></script>
+</body>
+</html>

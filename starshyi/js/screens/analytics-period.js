@@ -1,0 +1,201 @@
+(function (root) {
+  'use strict';
+  var P = root.P, h = P.sr.h, esc = P.esc, A = P.srAn, X = P.srAnParts, ui = X.ui;
+  var LV = X.LV;
+  var MODES = [['pcs', 'Брак, шт'], ['pct', 'Брак, %'], ['chk', 'Перевірено, шт']];
+  var chart = null;   // контролер графіка по днях (P.srChart.mount)
+
+  function summary(view) {
+    var r = view.data, t = r.totals, p = r.prev, n = t.days;
+    function cell(label, val, prev, help) {
+      return '<div class="an-sum__i"><span class="an-sum__l">' + label + A.q(help) + '</span><b class="an-sum__v">' + val + '</b>' +
+        '<span class="an-sum__p">попередні ' + X.dn(n) + ' — <b>' + prev + '</b></span></div>';
+    }
+    view.box('an-sum').innerHTML = '<div><h2 class="h2">За період · ' + esc(view.scope()) + A.q('sr.an.period') + '</h2><p class="h2-sub">' + esc(A.span(r.from, r.to)) + ' · ' + X.dn(n) +
+      ' · під кожним числом — те саме за попередні ' + X.dn(n) + ': ' + esc(A.span(p.from, p.to)) + '</p></div>' +
+      '<div class="an-sum">' + cell('Аудитів', h.num(t.audits), h.num(p.audits)) +
+      cell('Днів з аудитами', t.daysWithAudits + ' з ' + n, p.daysWithAudits + ' з ' + n, 'sr.an.daysWith') +
+      cell('Перевірено, шт', h.num(t.checked), h.num(p.checked), 'term.checked') + cell('Брак, шт', h.num(t.rejected), h.num(p.rejected), 'term.rejected') +
+      cell('Брак, % · брак, шт ÷ перевірено, шт', h.pct(t.pct), h.pct(p.pct), 'term.rate') + '</div>';
+  }
+
+  function pickRow(kind, title, s, norm, href, btn) {
+    var facts = [['аудитів', h.num(s.audits)], ['перевірено', h.num(s.checked) + ' шт']].concat(norm ? [norm] : [], [['брак, шт · %', X.brak(s.rejected, s.pct)]]);
+    return '<div class="an-pick"><div class="an-pick__title"><span class="hint">' + kind + '</span><b>' + esc(title) + '</b></div>' +
+      '<div class="an-pick__facts">' + facts.map(function (f) { return '<span><i>' + f[0] + '</i><b>' + f[1] + '</b></span>'; }).join('') + '</div>' +
+      (s.rejected ? h.legend(s.levels) : '') + '<span class="an-pick__btns">' +
+      (s.audits ? '<a class="btn btn--secondary btn--sm" href="' + href + '">' + h.ic('audit', 'ui-icon--sm') + btn + '</a>' : '') +
+      '<button class="btn btn--quiet btn--sm" type="button" data-act="an-unpick">' + h.ic('close', 'ui-icon--sm') + 'Зняти вибір</button></span></div>';
+  }
+  function drawPick(view) {
+    var box = view.box('an-pick');
+    if (!box) return;
+    var r = view.data, dep = r.department, depId = dep ? dep.id : '', normLabel = dep ? 'норма дня' : 'норма дня, усі відділи';
+    if (ui.day) {
+      var d = r.days.filter(function (x) { return x.day === ui.day; })[0];
+      box.innerHTML = pickRow('Обраний день · ' + esc(view.scope()), A.dcap(d.day), d, d.target != null ? [normLabel, h.num(d.target) + ' шт'] : null,
+        X.hist({ d1: d.day, d2: d.day, dep: depId }), 'Аудити дня');
+    } else if (ui.range) {
+      var list = r.days.filter(function (x) { return x.day >= ui.range[0] && x.day <= ui.range[1]; }), s = X.sum(list);
+      box.innerHTML = pickRow('Обрані дні · ' + esc(view.scope()), A.span(ui.range[0], ui.range[1]), s, ['днів з аудитами', s.daysWithAudits + ' з ' + s.days],
+        X.hist({ d1: ui.range[0], d2: ui.range[1], dep: depId }), 'Відкрити ці дні в історії');
+    } else {
+      box.innerHTML = '<p class="hint an-pick__empty">День не обрано. Натисніть стовпчик — тут будуть числа дня і кнопка «Аудити дня». Проведіть по кількох — сума за ці дні. Фільтри сторінки від цього не міняються.</p>';
+    }
+  }
+  function daysCard(view) {
+    var r = view.data, days = r.days, dep = r.department, mode = ui.unit, box = view.box('an-days');
+    function has(k) { return days.some(function (d) { return d.day === k; }); }
+    if (ui.day && !has(ui.day)) ui.day = null;                                   // період змінили — вибір поза ним знімаємо
+    if (ui.range && !(has(ui.range[0]) && has(ui.range[1]))) ui.range = null;
+    if (!r.totals.audits && !r.totals.rejected) {                                // порожній період — графіку нема що показати
+      chart = null;
+      box.innerHTML = '<div><h2 class="card-title">Брак і перевірене за днями</h2><p class="hint">' + esc(view.scope()) + ' · ' + esc(A.span(r.from, r.to)) + '</p></div>' +
+        h.empty('Аудитів за період не було', view.scope() + ' · ' + A.span(r.from, r.to));
+      return;
+    }
+    var target = days.length ? days[0].target : null, normLabel = dep ? 'Норма дня' : 'Норма дня, усі відділи';
+    var title = mode === 'pcs' ? 'Брак за днями, шт' : mode === 'pct' ? 'Брак за днями, % від перевіреного' : 'Перевірено за днями, шт';
+    var line = mode === 'chk' ? (target != null ? { v: target, label: normLabel.toLowerCase() + ' — ' + h.num(target) + ' шт' } : null)
+      : mode === 'pct' ? { v: r.criticalPct, label: 'критичний рівень — ' + r.criticalPct + '%' } : null;
+    var keys = mode === 'chk' ? [['an-key__one', 'перевірено, шт']].concat(line ? [['an-key__dash', line.label]] : [])
+      : mode === 'pct' ? [['an-key__dash', line.label]] : [];
+    box.innerHTML = '<div class="card-head" style="flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2 class="card-title">' + title + A.q('sr.an.days') + '</h2>' +
+      '<p class="hint">' + esc(view.scope()) + ' · ' + esc(A.span(r.from, r.to)) + (mode === 'chk' ? '' : ' · колір — рівень браку') +
+      ' · наведіть або торкніться стовпчика — числа дня · натисніть — закріпити · проведіть по кількох — сума за ці дні</p></div>' +
+      '<span class="pills" role="group" aria-label="Що показує графік">' + MODES.map(function (m) {
+        return '<button class="pill' + (mode === m[0] ? ' pill--on' : '') + '" type="button" data-act="an-unit" data-v="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>'; }).join('') + '</span></div>' +
+      X.legend(mode !== 'chk', keys.concat([['an-key__none', 'аудитів не було']])) + '<div data-chart="days"></div><div id="an-pick"></div>';
+    chart = P.srChart.mount(box.querySelector('[data-chart]'), {
+      items: days.map(function (d) {
+        return { key: d.day, x: h.dayShort(d.day), d: d, v: mode === 'pcs' ? d.rejected : mode === 'pct' ? d.pct || 0 : d.checked,
+          levels: mode === 'chk' ? null : d.levels, none: !d.audits && (mode !== 'pcs' || !d.rejected) };
+      }),
+      height: root.innerWidth < 900 ? 240 : dep ? 280 : 420, label: title + ' · ' + view.scope(), line: line,
+      tip: function (it) { return X.dayTip(it.d, normLabel); },
+      tipRange: function (list, a, b) {
+        var s = X.sum(list.map(function (x) { return x.d; }));
+        return P.srChart.tipDay({ title: A.span(a.key, b.key), sub: X.dn(s.days) + ' · з аудитами — ' + s.daysWithAudits, audits: s.audits, checked: s.checked, rejected: s.rejected, pct: s.pct, levels: s.levels });
+      },
+      pin: ui.day, range: ui.range,
+      onPin: function (it) { ui.day = it ? it.key : null; if (it) ui.range = null; drawPick(view); },
+      onRange: function (a, b) { ui.range = a ? [a.key, b.key] : null; if (a) ui.day = null; drawPick(view); }
+    });
+    drawPick(view);
+  }
+
+  function levelsCard(view) {
+    var r = view.data, L = r.levels, t = L.total, tot = A.total(t), pt = A.total(L.prev), n = r.totals.days;
+    var head = '<div><h2 class="card-title">Рівні браку' + A.q('term.levels') + '</h2><p class="hint">' + esc(view.scope()) + ' · ' + X.dn(n) + ' · ' + h.num(tot) + ' шт браку · частка рівня = його штуки ÷ увесь брак</p></div>';
+    var box = view.box('an-levels');
+    if (!tot && !pt) { box.innerHTML = head + h.empty('Браку за період не знайдено', view.scope() + ' · ' + A.span(r.from, r.to)); return; }
+    function cellOf(o, k) { var s = A.total(o); return s ? '<b>' + A.share(o, k) + '%</b> · ' + h.num(o[k]) + ' шт' : '—'; }
+    var cmp = '<div class="an-cmp" role="table" aria-label="Рівні браку: цей період і попередній"><div class="an-cmp__h" role="row"><span></span><span>цей період · ' + X.dn(n) + '</span><span>попередні ' + X.dn(n) + '</span></div>' +
+      LV.map(function (k) { return '<div class="an-cmp__r" role="row">' + h.lvl(k) + '<span>' + cellOf(t, k) + '</span><span>' + cellOf(L.prev, k) + '</span></div>'; }).join('') +
+      '<div class="an-cmp__r an-cmp__r--sum" role="row"><span>усього браку</span><span><b>' + h.num(tot) + ' шт</b></span><span><b>' + h.num(pt) + ' шт</b></span></div></div>' +
+      '<p class="hint">Попередні ' + X.dn(n) + ' — це ' + esc(A.span(L.prevFrom, L.prevTo)) + '.</p>';
+    var byDept = r.department ? '' : '<div class="an-bydept"><p class="group-label" style="padding:0">По відділах · натисніть — сторінка відділу</p>' + L.depts.map(function (d) {
+      var s = A.total(d.levels);
+      return '<button class="lvl-row an-lvl an-lvlbtn" type="button" data-act="an-dep" data-id="' + esc(d.id) + '"><span>' + esc(d.name) + '</span>' + h.stack(d.levels, 14) +
+        '<span class="lvl-row__n">' + (s ? h.num(s) + ' шт · зламане ' + A.share(d.levels, 'scrap') + '%' : 'браку немає') + '</span></button>';
+    }).join('') + '</div>';
+    box.innerHTML = head + '<div class="kpis an-kpis3" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + LV.map(function (k) {
+      return '<div class="kpi"><span class="kpi__val" style="color:' + A.LV_COLOR[k] + '">' + (tot ? A.share(t, k) + '%' : '—') + '</span><span class="kpi__label">' +
+        esc(P.sr.LEVELS[k]) + ' · ' + h.num(t[k]) + ' шт · ' + A.LV_NEXT[k] + '</span></div>'; }).join('') + '</div>' + h.stack(t) + cmp + byDept;
+  }
+
+  function topCard(view) {
+    var r = view.data, dep = r.department, types = r.top.types, shown = ui.top ? types.slice(0, ui.top) : types, max = types.length ? types[0].pieces : 1;
+    var q = dep ? '?dep=' + encodeURIComponent(dep.id) : '';
+    view.box('an-top').innerHTML = '<div class="card-head" style="flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2 class="card-title">Що бракує найчастіше · ' + esc(view.scope()) + A.q('sr.an.top') + '</h2>' +
+      '<p class="hint">' + esc(A.span(r.from, r.to)) + ' · ' + A.n(types.length, 'вид', 'види', 'видів') + ' браку · ' + h.num(r.top.pieces) + ' шт' +
+      (dep ? ' · брак, що рахується відділу «' + esc(dep.name) + '»' : '') + ' · біля виду — його рівень і частка від усіх цих штук · натисніть — екран виду браку</p></div>' +
+      '<span class="pills" role="group" aria-label="Скільки видів показати">' + [[10, 'Перші 10'], [30, 'Перші 30'], [0, 'Усі']].map(function (x) {
+        return '<button class="pill' + (ui.top === x[0] ? ' pill--on' : '') + '" type="button" data-act="an-top" data-n="' + x[0] + '" aria-pressed="' + (ui.top === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</span></div>' +
+      (types.length ? '<div class="an-toplist">' + shown.map(function (t, i) {
+        return A.hbar({ rank: i + 1, name: t.name, sub: h.lvl(t.level) + '<span>' + h.pct(X.pctOf(t.pieces, r.top.pieces)) + ' від ' + h.num(r.top.pieces) + ' шт</span>' + (dep ? '' : '<span>' + esc(t.depts.join(', ')) + '</span>'),
+          share: t.pieces / max, n: t.pieces, href: '#/analytics/defect/' + encodeURIComponent(t.id) + q });
+      }).join('') + '</div>' + (shown.length < types.length ? '<p class="hint">Показано ' + shown.length + ' з ' + types.length + '.</p>' : '')
+        : h.empty('Браку за період не знайдено', view.scope() + ' · ' + A.span(r.from, r.to)));
+  }
+
+  var DCOLS = [
+    ['name', 'Вид браку', 'sr.an.ds.name', function (t) { return t.name; }],
+    ['audits', 'У скількох аудитах трапився', 'sr.an.ds.audits', function (t) { return t.audits; }],
+    ['avgAll', 'Середній % у всіх аудитах', 'sr.an.ds.avgAll', function (t) { return t.avgAll; }],
+    ['avgAny', 'Середній % в аудитах з браком', 'sr.an.ds.avgAny', function (t) { return t.avgAny; }],
+    ['share', 'Частка в усьому браку', 'sr.an.ds.share', function (t) { return t.pieces; }],
+    ['pct', 'Брак, % за період', 'sr.an.ds.pct', function (t) { return t.pct; }],
+    ['worst', 'Найгірший аудит', 'sr.an.ds.worst', function (t) { return t.worst ? t.worst.pct : null; }]
+  ];   // v1.1 — 18.10: колонку «Тижнів розбору понад норму» прибрано (власник: незрозуміла й не потрібна)
+  ui.dsort = ui.dsort || { k: 'share', dir: 'desc' };   // за замовчуванням — за часткою в усьому браку
+  var stats = null, statsReq = 0;                       // відповідь srAnDefectStats і лічильник запитів (відповідь на старий відділ відкидаємо)
+
+  function sortedStats(list) {
+    var col = DCOLS.filter(function (c) { return c[0] === ui.dsort.k; })[0] || DCOLS[4], sign = ui.dsort.dir === 'asc' ? 1 : -1;
+    return list.slice().sort(function (a, b) {
+      var x = col[3](a), y = col[3](b);
+      if (x == null || y == null) { if (x != null) return -1; if (y != null) return 1; }
+      else if (x !== y) return (typeof x === 'string' ? x.localeCompare(y, 'uk') : x < y ? -1 : 1) * sign;   // назви — за українською абеткою
+      return b.pieces - a.pieces || a.name.localeCompare(b.name, 'uk');
+    });
+  }
+  function dHead(c) {
+    var on = ui.dsort.k === c[0], dir = on ? ui.dsort.dir : '';
+    var word = dir === 'desc' ? 'від більшого до меншого' : dir === 'asc' ? 'від меншого до більшого' : 'без сортування';
+    return '<th' + (c[0] === 'name' ? '' : ' class="n"') + (on ? ' aria-sort="' + (dir === 'asc' ? 'ascending' : 'descending') + '"' : '') + '><span class="an-dth">' +
+      '<button class="an-osort an-dsort' + (on ? ' an-osort--on' : '') + '" type="button" data-act="an-dsort" data-k="' + c[0] + '" aria-label="' + esc(c[1] + ' — сортування: ' + word) + '">' + esc(c[1]) +
+      h.ic(dir === 'desc' ? 'arrow-down' : dir === 'asc' ? 'arrow-up' : 'sort', 'ui-icon--sm') + '</button>' + A.q(c[2]) + '</span></th>';
+  }
+  function drawStatsTable(view) {
+    var box = view.box('an-dtbl'), r = stats;
+    if (!box || !r) return;
+    box.innerHTML = '<table class="tbl an-dtbl"><thead><tr>' + DCOLS.map(dHead).join('') + '</tr></thead><tbody>' + sortedStats(r.types).map(function (t) {
+      return '<tr><td><b>' + esc(t.name) + '</b><span class="sub">' + h.lvl(t.level) + '</span></td>' +
+        '<td class="n"><b>' + h.pct(t.auditsShare) + '</b><span class="sub">' + h.num(t.audits) + ' з ' + h.num(r.audits) + '</span></td>' +
+        '<td class="n">' + h.pct(t.avgAll) + '</td><td class="n">' + h.pct(t.avgAny) + '</td>' +
+        '<td class="n"><b>' + h.pct(t.share) + '</b><span class="sub">' + h.num(t.pieces) + ' з ' + h.num(r.rejected) + ' шт</span></td>' +
+        '<td class="n">' + h.pct(t.pct) + '</td>' +
+        '<td class="n">' + (t.worst ? '<button class="an-dlink" type="button" data-act="an-aud" data-id="' + esc(t.worst.auditId) + '"><b>' + h.pct(t.worst.pct) + '</b>' +
+          '<span class="sub">' + esc(A.dshort(t.worst.day)) + ' · відкрити аудит</span></button>' : '—') + '</td></tr>';
+    }).join('') + '</tbody><tfoot><tr><td><b>Разом</b></td><td class="n"><b>' + h.num(r.withDefects) + ' з ' + h.num(r.audits) + '</b><span class="sub">аудитів з браком</span></td>' +
+      '<td class="n">—</td><td class="n">—</td><td class="n"><b>100%</b></td><td class="n"><b>' + h.pct(r.pct) + '</b></td><td class="n">—</td></tr></tfoot></table>';
+  }
+  function statsCard(view) {
+    var box = view.box('an-dstats'), dep = view.data.department, my = ++statsReq;
+    if (!box) return;
+    stats = null;
+    if (!dep) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = '';
+    var head = '<div class="card-head"><div style="flex:1"><h2 class="card-title">Види браку відділу — статистика · ' + esc(dep.name) + A.q('sr.an.ds') + '</h2>';
+    box.innerHTML = head + '<p class="hint">' + esc(A.span(view.data.from, view.data.to)) + '</p></div></div>' + h.loading();
+    P.srv('srAnDefectStats', { locationId: view.ctx.loc.id, departmentId: dep.id, from: view.data.from, to: view.data.to }).then(function (r) {
+      if (!view.ctx.alive() || my !== statsReq) return;
+      if (!r.ok) { box.innerHTML = head + '</div></div>' + h.error(r); return; }
+      stats = r;
+      var sub = esc(A.span(r.from, r.to)) + ' · ' + A.n(r.audits, 'аудит', 'аудити', 'аудитів') + ' відділу · перевірено ' + h.num(r.checked) + ' шт · брак ' + h.num(r.rejected) + ' шт (' + h.pct(r.pct) + ')';
+      if (!r.audits) { box.innerHTML = head + '<p class="hint">' + esc(A.span(r.from, r.to)) + '</p></div></div>' + h.empty('Аудитів відділу за період не було', dep.name + ' · ' + A.span(r.from, r.to)); return; }
+      if (!r.types.length) { box.innerHTML = head + '<p class="hint">' + sub + '</p></div></div>' + h.empty('Браку за період не знайдено', dep.name + ' · ' + A.span(r.from, r.to)); return; }
+      box.innerHTML = head + '<p class="hint">' + sub + ' · норма браку відділу — ' + r.threshold + '% · натисніть назву колонки — сортування</p></div></div><div class="tbl-box" id="an-dtbl"></div>';
+      drawStatsTable(view);
+    });
+  }
+
+  X.period = {
+    draw: function (view) { summary(view); daysCard(view); levelsCard(view); topCard(view); statsCard(view); },
+    bind: function (view) {
+      var ctx = view.ctx;
+      ctx.on('an-dsort', function (t) {
+        var k = t.getAttribute('data-k'), s = ui.dsort;
+        ui.dsort = s.k === k ? { k: k, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { k: k, dir: k === 'name' ? 'asc' : 'desc' };
+        drawStatsTable(view);
+        var again = Array.prototype.filter.call(view.box('an-dtbl').querySelectorAll('.an-dsort'), function (b) { return b.getAttribute('data-k') === k; })[0];
+        if (again) again.focus();   // таблицю перемалювали — фокус на тій самій кнопці
+      });
+      ctx.on('an-aud', function (t) { if (P.srHist) P.srHist.openAudit(t.getAttribute('data-id')); });
+      ctx.on('an-unit', function (t) { ui.unit = t.getAttribute('data-v'); daysCard(view); });
+      ctx.on('an-unpick', function () { ui.day = ui.range = null; if (chart) chart.clear(); drawPick(view); });
+      ctx.on('an-top', function (t) { ui.top = +t.getAttribute('data-n'); topCard(view); });
+    }
+  };
+})(window);

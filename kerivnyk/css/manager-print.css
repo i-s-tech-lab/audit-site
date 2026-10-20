@@ -1,0 +1,92 @@
+
+
+@page {
+  size: A4 portrait; margin: 12mm 11mm 15mm;
+  
+  @bottom-right { content: "Сторінка " counter(page) " з " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #000; }
+}
+
+
+.mgr-rep { display: none; }
+
+@media print {
+  html, body { background: #fff !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 10.5pt; }
+
+  
+  .sr-demo, .hdr, .sr-tabsbar, .wrap.bar, .mgr-noprint, .hq, .ui-toasts, #overlay, .ctip, .upd { display: none !important; }
+  .page, .wrap, .content, #cab-main { max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
+
+  
+  .mgr-phone { display: none !important; }
+  .mgr-desk { display: block !important; }
+  .tbl-box { overflow: visible !important; border: 0 !important; }
+  .tbl { width: 100%; font-size: 9pt; }
+  .tbl th, .tbl td { padding: 4px 6px !important; white-space: normal !important; }
+  .tbl th { font-size: 8pt; }
+  .tbl tr { break-inside: avoid; }
+  .tbl thead { display: table-header-group; }
+
+  
+  .card { box-shadow: none !important; border: 1px solid #c8c8c8 !important; padding: 10px 12px !important; }
+  .mgr-page { gap: 10px !important; }
+  .mgr-avoid, .mgr-kdbig, .mgr-top10__d, .mgr-causes, .mgr-split__key { break-inside: avoid; }
+  .h2, .card-title, .mgr-top10__h { break-after: avoid; }
+  .row, .mgr-print-stack { display: block !important; }
+  .row > div { margin-bottom: 10px; }
+  .h2 { font-size: 15pt; }
+  .card-title { font-size: 12pt; }
+
+  
+  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  .kpi__val { font-size: 16pt !important; }
+  .mgr-kdbigs { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 8px !important; }
+  .mgr-kdbig { padding: 6px 8px !important; }
+  .mgr-kdbig__v { font-size: 16pt !important; }
+  .mgr-top10 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+  .mgr-top10__d { padding: 8px 10px !important; }
+  .mgr-top10__l { font-size: 9pt; gap: 3px; }
+  .mgr-busy { opacity: 1 !important; }
+
+  
+  .mgr-month { display: block !important; }
+  .mgr-month > :not(.mgr-rep) { display: none !important; }
+  .mgr-rep { display: block !important; color: #000; background: #fff; font: 9.5pt/1.35 Arial, Helvetica, sans-serif; font-variant-numeric: tabular-nums; }
+  .mgr-rep * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
+
+  
+  .mgr-rep__head { border-bottom: 1pt solid #000; padding-bottom: 6pt; margin-bottom: 8pt; }
+  .mgr-rep__title { font: bold 14pt/1.25 Arial, Helvetica, sans-serif; margin: 0 0 6pt; letter-spacing: 0; }
+  .mgr-rep__meta { display: grid; grid-template-columns: max-content 1fr; gap: 1pt 6pt; margin: 0; }
+  .mgr-rep__meta dt { font-weight: bold; margin: 0; }
+  .mgr-rep__meta dd { margin: 0; }
+
+  
+  .mgr-rep__s { margin: 0 0 10pt; }
+  .mgr-rep__h2, .mgr-rep__h3 { font-family: Arial, Helvetica, sans-serif; font-weight: bold; margin: 10pt 0 4pt; break-after: avoid; page-break-after: avoid; }
+  .mgr-rep__h2 { font-size: 12pt; }
+  .mgr-rep__h3 { font-size: 10pt; margin-top: 8pt; }
+  .mgr-rep__keep, .mgr-rep__t--keep { break-inside: avoid; page-break-inside: avoid; }
+
+  
+  .mgr-rep__t { width: 100%; border-collapse: collapse; margin: 0 0 6pt; font-size: 8.5pt; }
+  .mgr-rep__t th, .mgr-rep__t td { border: 0.5pt solid #000; padding: 2pt 4pt; text-align: left; vertical-align: top; }
+  .mgr-rep__t th { font-weight: bold; vertical-align: bottom; }
+  .mgr-rep__t .n { text-align: right; white-space: nowrap; }
+  .mgr-rep__t th.n { white-space: normal; }
+  .mgr-rep__t .mgr-rep__gh { text-align: center; }
+  .mgr-rep__t thead { display: table-header-group; }
+  .mgr-rep__t tr { break-inside: avoid; page-break-inside: avoid; }
+  .mgr-rep__total td { font-weight: bold; }
+  .mgr-rep__grp td { font-weight: bold; }
+  .mgr-rep__t td.mgr-rep__sub { padding-left: 14pt; }
+  .mgr-rep__over { display: block; font-size: 7pt; font-weight: normal; }
+  .mgr-rep__empty { margin: 0 0 6pt; }
+  
+  .mgr-rep__lead { margin: 0 0 4pt; font-size: 8.5pt; break-after: avoid; page-break-after: avoid; }
+
+  
+  .mgr-rep__notes { border-top: 0.5pt solid #000; margin-top: 12pt; padding-top: 4pt; font-size: 7.5pt; break-inside: avoid; }
+  .mgr-rep__notes p { font-weight: bold; margin: 0 0 2pt; }
+  .mgr-rep__notes ol { margin: 0; padding-left: 14pt; }
+}
