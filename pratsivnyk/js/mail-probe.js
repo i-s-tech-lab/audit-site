@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   var P = root.P = root.P || {};
-  var URL = 'https://zptcvjylemhwolhihukl.supabase.co/functions/v1/mail-api';
+  var URL = '/functions/v1/mail-api';
   var KEY = 'audit-mail:code';   // не під префіксом демо-даних: «Скинути тестові дані» код не стирає
 
   function code() { try { return root.localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
