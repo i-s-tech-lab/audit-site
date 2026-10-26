@@ -1,0 +1,22 @@
+
+body { margin: 0; background: var(--bg); color: var(--text); }
+.st-demo { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 16px; background: var(--warn-soft);
+  color: var(--warn); border-bottom: 1px solid var(--warn-line); font-size: 13px; font-weight: 600; text-align: center; }
+.st-demo > span { display: inline-flex; }
+.st { box-sizing: border-box; width: 100%; max-width: 560px; margin: 0 auto; padding: var(--sp-7) var(--sp-4) var(--sp-8);
+  display: flex; flex-direction: column; gap: var(--sp-5); }
+.st__head { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); text-align: center; }
+.st__logo { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--r-lg); background: var(--brand-soft); color: var(--brand-ink); }
+.st__logo .ui-icon { width: 28px; height: 28px; }
+.st__lead { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.st__card { padding: var(--sp-3); }
+.st .ps__item { text-decoration: none; }                          
+.st .ps__item:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.st__how { padding: var(--sp-4) var(--sp-5); gap: var(--sp-2); }
+.st__h2 { margin: 0; font-size: var(--fs-sm); font-weight: 700; }
+.st__steps { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--sp-2); font-size: 15px; line-height: 1.45; color: var(--text-2); }
+.st__steps b { color: var(--text); font-weight: 600; }
+.st__note { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-3); }
+.st__foot { margin: 0; text-align: center; font-size: 14px; color: var(--text-3); }
+.st__foot a { color: inherit; }
+@media (max-width: 400px) { .st { padding-top: var(--sp-5); } }
