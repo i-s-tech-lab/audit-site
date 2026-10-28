@@ -58,8 +58,17 @@
   }
   function finalOf(v1, v2) { return v1 === 'norm' && v2 === 'norm' ? 'helped' : 'held_types'; }
 
+  var SELF_CLOSE_DAYS = 3;
+  var SELF_CLOSE_MAX_DAYS = 7;
+  function selfCloseOk(days, p, typesBefore, T, min) {
+    var o = earlyClose(p, typesBefore, T, min);
+    o.days = days; o.daysOk = days >= SELF_CLOSE_DAYS && days <= SELF_CLOSE_MAX_DAYS; o.ok = o.ok && o.daysOk;
+    return o;
+  }
+
   var R = { Z: Z, LEVEL_ORDER: LEVEL_ORDER, lowEdge: lowEdge, earlyOk: earlyOk, earlyRates: earlyRates, levelRank: levelRank,
-    pareto: pareto, weekVerdict: weekVerdict, finalOf: finalOf, highEdge: highEdge, earlyClose: earlyClose };
+    pareto: pareto, weekVerdict: weekVerdict, finalOf: finalOf, highEdge: highEdge, earlyClose: earlyClose,
+    SELF_CLOSE_DAYS: SELF_CLOSE_DAYS, SELF_CLOSE_MAX_DAYS: SELF_CLOSE_MAX_DAYS, selfCloseOk: selfCloseOk };
   P.demoKdRules = R;
   if (typeof module !== 'undefined' && module.exports) module.exports = R;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -2,7 +2,8 @@
   'use strict';
   var P = root.P, esc = P.esc, K = P.srKd, B = K.board;
   var PHASE = { open: 'Без плану', relapse: 'Рецидив · потрібен новий план' };
-  var FINAL = { helped: 'Закрито: тримається', held_types: 'Закрито: її види браку нижче, ніж до дії', not_needed: 'Дія не потрібна', not_helped: 'Закрито: рецидив' };
+  var FINAL = { helped: 'Закрито: тримається', held_types: 'Закрито: її види браку нижче, ніж до дії', not_needed: 'Дія не потрібна', not_helped: 'Закрито: рецидив',
+    self_closed: 'Закрито без участі старшого' };
 
   var def = { tab: 'kd', title: 'Коригуючі дії', period: false, render: function (ctx) {
     var depId = ctx.params.id, key = ctx.params.key || null, data = null, req = 0, q = ctx.query || {};
@@ -53,7 +54,8 @@
         ctx.el.classList.remove('kd-busy');
         if (!r.ok) { data = null; ctx.el.innerHTML = '<div class="kb"><a class="kb-out kb-back" href="#/kd">← Усі відділи</a>' + P.sr.h.error(r) + '</div>'; return; }
         data = r;
-        ctx.el.innerHTML = '<div class="kb">' + B.compactBar(r, r.dept.id) + B.ruleLine(B.weekOf(r.tiles) && B.weekOf(r.tiles).start, r.threshold, null, { list: '#/kd/list?dep=' + encodeURIComponent(r.dept.id), after: '#/kd/stats?dep=' + encodeURIComponent(r.dept.id) }) + B.tiles(r, r.dept.id) +
+        if (B.kdWait(r)) { ctx.el.innerHTML = '<div class="kb"><a class="kb-out kb-back" href="#/kd">← Усі відділи</a>' + B.kdFromNote(r) + '</div>'; return; }
+        ctx.el.innerHTML = '<div class="kb">' + B.compactBar(r, r.dept.id) + B.ruleLine(B.weekOf(r.tiles) && B.weekOf(r.tiles).start, r.threshold, null, { list: '#/kd/list?dep=' + encodeURIComponent(r.dept.id), after: '#/kd/stats?dep=' + encodeURIComponent(r.dept.id) }) + B.kdFromNote(r) + B.tiles(r, r.dept.id) +
           kdRow(r, !!(r.kd && (r.actives.length || key))) + (r.kd && (r.actives.length || key) ? page(r) : empty(r)) + '</div>';
         B.mountCompact(ctx);
         var inKd = !!(r.kd && (r.kd.types || []).some(function (x) { return x.defectTypeId === st.t; }));
@@ -71,8 +73,8 @@
   function obsText(a) { return a.extra ? 'до розбору — дні ще не рахуються' : (a.obsDay || 0) + ' з 14 днів'; }
   function actText(a) {
     if (a.phase === 'observe') return '№' + a.no + ' · на спостереженні · ' + obsText(a);
-    if (a.phase === 'relapse') return '№' + a.no + ' · рецидив · потрібен новий план';
-    return '№' + a.no + ' · без плану' + (a.early ? ' · достроково' : '');
+    if (a.phase === 'relapse') return '№' + a.no + ' · рецидив · ' + (a.analysis ? B.anText(a) : 'потрібен новий план');
+    return '№' + a.no + ' · ' + (a.analysis ? B.anText(a) : 'без плану') + (a.early ? ' · достроково' : '');
   }
   function kdRow(r, shown) {
     var kd = r.kd, sel = kd ? kd.key : null, list = r.actives || [];
@@ -80,7 +82,7 @@
       return '<a class="kb-kdi' + (a.key === sel ? ' kb-kdi--on' : '') + '" href="' + B.href(r.dept.id, a.key) + '"><i class="kb-dot kb-dot--' + B.kindOf(a.phase) + '"></i>' + esc(actText(a)) + '</a>';
     }).join('');
     if (shown && kd.phaseUi === 'final' && !list.some(function (a) { return a.key === sel; })) {
-      chips += '<a class="kb-kdi kb-kdi--on" href="' + B.href(r.dept.id, kd.key) + '">' + (kd.status === 'not_needed' ? '○' : '✓') + ' №' + kd.no + ' · ' + (kd.closedEarly ? 'закрито достроково ' : 'закрито ') + B.day(kd.finishedOn || kd.notNeededAt) + '</a>';
+      chips += '<a class="kb-kdi kb-kdi--on" href="' + B.href(r.dept.id, kd.key) + '">' + (kd.status === 'not_needed' ? '○' : '✓') + ' №' + kd.no + ' · ' + (kd.closedEarly ? 'закрито достроково ' : kd.selfClosed ? 'закрито без участі старшого ' : 'закрито ') + B.day(kd.finishedOn || kd.notNeededAt) + '</a>';
     }
     (r.quiet || []).forEach(function (x) { if (!shown || x.key !== sel) chips += '<a class="kb-kdi" href="' + B.href(r.dept.id, x.key) + '">' + B.quietChip(x) + '</a>'; });
     return '<div class="kb-kdrow"><span class="kb-cs kb-b">Відкриті дії відділу «' + esc(r.dept.name) + '»:</span>' + (chips || '<span class="kb-cs">зараз немає</span>') +
@@ -108,6 +110,7 @@
       return B.chip('done', 'Закрито достроково — після 7 днів · ' + B.day(kd.finishedOn)) + qp;
     }
     if (kd.phaseUi === 'final') return B.chip(kd.status === 'not_needed' ? 'skip' : kd.status === 'not_helped' ? 'rel' : kd.status === 'held_types' ? 'part' : 'done', esc(FINAL[kd.status] || 'Закрито') + (kd.finishedOn ? ' · ' + B.day(kd.finishedOn) : ''));
+    if (kd.analysis) return B.chip(kd.phaseUi === 'relapse' ? 'rel' : 'open', (kd.phaseUi === 'relapse' ? 'Рецидив · ' : '') + 'Аналіз · ' + kd.analysis.days + '-й день');
     if (kd.phaseUi === 'observe') {
       var w = liveWeek(kd);
       if (kd.inExtra) return '<span class="kb-pill kb-pill--teal"><i class="kb-dot"></i>План є · до звичайного розбору дні не рахуються · спостереження з ' + esc(B.wd(kd.obsStart)) + '</span>';
@@ -117,14 +120,23 @@
   }
   function page(r) {
     var kd = r.kd, T = r.threshold, btns = '';
+    if (r.canWrite && kd.canAnalysis) btns += '<button type="button" class="kb-out" data-act="kb-an"' + B.ref(kd) + '>' + (kd.analysis ? 'Нотатка аналізу' : 'Почати аналіз') + '</button>';   // v3.6
     if (r.canWrite && kd.canPlan) btns += '<button type="button" class="kb-main" data-act="kb-plan"' + B.ref(kd) + '>Записати план</button>';
     if (r.canWrite && kd.canNotNeeded) btns += '<button type="button" class="kb-out" data-act="kb-nn"' + B.ref(kd) + '>Позначити «Не потрібно»</button>';
     var pills = phasePill(kd) + (isEarly(kd) ? B.chip('open', 'відкрито достроково · ' + B.day(kd.openedAt)).replace('kb-pill--open', 'kb-pill--soft') : '') +
       (kd.repeatOf ? '<span class="kb-pill kb-pill--none">повторна — ' + (kd.onRelapse ? 'відкрита одразу після рецидиву' : 'після рецидиву') + '</span>' : '') + (!kd.repeatOf && kd.parallelWith && kd.parallelWith.length ? '<span class="kb-pill kb-pill--none">паралельна</span>' : '');   // повторна — без «паралельна» (одна дія, той самий №)
     return '<div class="kb-title"><h1>' + esc(kd.departmentName || r.dept.name) + ' · коригуюча дія №' + kd.no + '</h1>' + pills + (btns ? '<span class="kb-title__b">' + btns + '</span>' : '') + '</div>' +
+      B.stages(kd) + anLine(kd) +
       '<div class="kb-kpis">' + kpis(kd, T) + '</div>' +
       '<div class="kb-g2">' + dailyCard(kd, T, r.today) + resultCard(kd, T, r.today) + '</div>' +
       '<div class="kb-g2"><div class="kb-col" data-kb-types></div><div class="kb-col">' + compCard(kd, T) + moreCard(kd, r.today, T) + '</div></div>';
+  }
+
+  function anLine(kd) {
+    var a = kd.analysis;
+    if (!a) return '';
+    return '<p class="kb-an"><b>Аналіз ' + (a.to ? esc(B.rng(a.from, a.to)) : 'з ' + esc(B.wd(a.from)) + ' · ' + a.days + '-й день') + '</b>' + (a.byName ? ' · почав(ла) ' + esc(a.byName) : '') +
+      (a.note ? ' · що перевіряють: «' + esc(a.note) + '»' : '') + B.help('kd.p.analysis') + '</p>';
   }
 
   function kpi(label, value, sub, cls, helpKey) {
@@ -153,6 +165,7 @@
       : isEarly(kd) && sp && sp.before ? 'достроково · з ' + esc(B.wdShort(kd.periodStart)) + ' ' + B.num(sp.before.checked) + ' шт · <b>' + B.p(sp.before.rate) + '</b>'
       : 'на розборі · брак ' + B.p(kd.rate) + ' за ' + esc(B.rng(kd.periodStart, kd.periodEnd)), 'open', 'kd.p.opened'));
     if (kd.status === 'not_needed') out.push(kpi('Дія не потрібна', esc(B.wd(kd.notNeededAt)), esc(kd.notNeededReason || '')));
+    else if (kd.selfClose) out.push(kpi('Закрито без участі старшого', esc(B.wd(kd.finishedOn)), 'аналізу й плану не було · брак упав за ' + esc(B.rng(kd.selfClose.from, kd.selfClose.to)), 'good', 'kd.p.self'));
     else out.push(kpi('План впроваджено', kd.implementedAt ? esc(B.wd(kd.implementedAt)) : '—', kd.implementedAt ? 'цього дня — фото «до дії»' + (kd.whoName ? ' · відповідає ' + esc(kd.whoName) : '') : 'ще не записано'));
     var sr = startRange(kd), plan = !!kd.implementedAt;
     out.push(kpi(plan ? 'Види браку в дії — до дії (фото)' : 'Види браку в дії — на початку', B.p(start), (plan ? 'фото: ' : '') + esc(B.rng(sr.from, sr.to)) + (sr.pieces != null ? ' · ' + B.num(sr.pieces) + ' шт' : ''), 'blue', 'kd.p.photo'));
@@ -160,13 +173,14 @@
     out.push(weekKpi(kd, 2, start));
     var lw = liveWeek(kd);
     if (kd.closedEarly) out.push(kpi('Результат', 'закрито достроково', 'після 7 днів · ' + esc(B.wd(kd.finishedOn)), 'good'));
+    else if (kd.selfClose) out.push(kpi('Види браку в дії — після', B.now(start, kd.selfClose.typesRate), 'за ' + esc(B.rng(kd.selfClose.from, kd.selfClose.to)) + ' · брак відділу ' + B.p(kd.selfClose.deptRate), 'good'));
     else if (kd.phaseUi === 'final') out.push(kpi('Результат', esc((FINAL[kd.status] || 'закрито').replace('Закрито: ', '')), kd.finishedOn ? 'закрито ' + esc(B.wd(kd.finishedOn)) : ''));
     else if (lw) out.push(kpi('Результат', est(lw) + esc(B.wd(K.addDays(lw.end, 1))), 'після ' + (lw.n === 1 ? '7-го' : '14-го') + ' дня з аудитами' + (lw.estimated ? ' · дата — оцінка' : '')));
     else out.push(kpi('Результат', '—', 'після плану — 14 днів з аудитами'));
     return out.join('');
   }
 
-  var STG = { before: ['kb-st--pre', ''], early: ['kb-st--open', 'Відкрита дія · без плану'], open: ['kb-st--open', 'Відкрита дія · без плану'], extra: ['kb-st--extra', 'До розбору'],
+  var STG = { before: ['kb-st--pre', ''], early: ['kb-st--open', 'Відкрита дія · без плану'], open: ['kb-st--open', 'Відкрита дія · без плану'], analysis: ['kb-st--analysis', 'Аналіз'], extra: ['kb-st--extra', 'До розбору'],
     week1: ['kb-st--w1', 'Дні 1–7 після плану'], week2: ['kb-st--w2', 'Дні 8–14'], quiet: ['kb-st--quiet', 'Тихий нагляд'] };
   function svgText(x, y, cls, txt, anchor) { return '<text class="' + cls + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + esc(txt) + '</text>'; }
   function stageText(kd, s, today) {
@@ -176,6 +190,7 @@
       else sub.push(B.rng(s.from, s.to) + ' · план ' + B.day(kd.implementedAt));
     }
     if (s.kind === 'extra') { sub.push('дні не рахуються'); sub.push(B.rng(s.from, s.to)); }
+    if (s.kind === 'analysis') sub.push(kd.implementedAt ? B.rng(s.from, s.to) + ' · план ' + B.day(kd.implementedAt) : 'з ' + B.day(s.from));   // v3.6
     var w = (kd.weeks || []).filter(function (x) { return (s.kind === 'week1' && x.n === 1) || ((s.kind === 'week2' || s.kind === 'quiet') && x.n === 2); })[0];
     if (w) {
       if (w.status === 'running') { lab = perName(w, true) + ' · ' + w.days + ' з 7'; sub.push('поки: брак відділу ' + B.p(w.deptRate)); sub.push('види браку в дії ' + B.p(w.typesRate)); }
@@ -240,7 +255,7 @@
         return;
       }
       if (b.w < 70) {   // вузький етап: лише коротка назва, якщо вміщається
-        var short = { extra: 'до розбору', quiet: 'нагляд', week1: 'дні 1–7', week2: 'дні 8–14' }[b.s.kind];
+        var short = { extra: 'до розбору', quiet: 'нагляд', week1: 'дні 1–7', week2: 'дні 8–14', analysis: 'аналіз' }[b.s.kind];
         if (short && b.w >= short.length * 5.6 + 10) o.push(stText(b.x + 5, 35, 'kb-day__st kb-day__b kb-day__st--' + b.s.kind, short));
         return;
       }
@@ -298,7 +313,7 @@
       if (openLab) o.push(svgText(Math.min(Math.max(openX, 110), 690), 10, 'kb-day__opent', openLab, 'middle'));
       if (planLab) o.push(svgText(Math.min(Math.max(planX, 90), 710), 10, 'kb-day__plant', planLab, 'middle'));
     }
-    var CHK = { p1: 'після 7-го дня', p2: 'після 14-го дня', quiet: 'кінець нагляду' };
+    var CHK = { p1: 'після 7-го дня', p2: 'після 14-го дня', quiet: 'кінець нагляду', self: 'закрито без участі старшого' };
     (d.checks || []).forEach(function (c) {
       var i = ix(c.day, true);
       if (c.day < days[0].day || c.day > days[n - 1].day) return;
@@ -306,7 +321,7 @@
       o.push('<line class="kb-day__chk' + (c.done ? '' : ' kb-day__chk--est') + '" x1="' + cx.toFixed(1) + '" y1="18" x2="' + cx.toFixed(1) + '" y2="' + (OBS_Y + 22) + '"></line>');
       o.push(svgText(cx - 4, OBS_Y + 20, 'kb-day__chkt', (c.est ? '≈ ' : '') + CHK[c.kind], 'end'));
     });
-    var ti = d.todayDay ? ix(d.todayDay, true) : -1;
+    var ti = d.todayDay && d.todayDay <= days[n - 1].day ? ix(d.todayDay, true) : -1;
     if (ti >= 0 && !days[ti].future) o.push('<line class="kb-day__today" x1="' + X(ti).toFixed(1) + '" y1="18" x2="' + X(ti).toFixed(1) + '" y2="282"></line>');
     var marks = [];
     if (d.openDay) marks.push(ix(d.openDay));
@@ -364,6 +379,7 @@
     if (plan) lg.push(['<i class="kb-ln kb-ln--plan"></i>', 'план — останній день фото «до дії»']);
     if (plan && kd.typesBefore != null && (kd.weeks || []).some(function (w) { return w.n === 1 && w.close; })) lg.push(['<i class="kb-ln kb-ln--half"></i>', '½ до дії — межа дострокового закриття']);
     lg.push(['<i class="kb-sw kb-sw--pre"></i>', kd.repeatOf ? 'перша спроба дії — до рецидиву' : 'дії ще не було'], ['<i class="kb-sw kb-sw--stage"></i>', 'етап дії']);
+    if (st.indexOf('analysis') >= 0) lg.push(['<i class="kb-sw kb-sw--analysis"></i>', 'аналіз — шукають причину']);
     if (st.indexOf('extra') >= 0) lg.push(['<i class="kb-sw kb-sw--extra"></i>', 'до звичайного розбору — дні не рахуються']);
     if (st.indexOf('quiet') >= 0) lg.push(['<i class="kb-sw kb-sw--quiet"></i>', 'тихий нагляд після дострокового закриття']);
     if (plan) lg.push(['<i class="kb-on kb-on--1">1</i>', 'день спостереження — лише дні з аудитами'], ['<i class="kb-on kb-on--off"></i>', 'день без аудитів — не рахується'], ['<i class="kb-ln kb-ln--chk"></i>', 'перевірка після 7-го і 14-го дня (≈ — оцінка)']);
@@ -437,7 +453,9 @@
   function resultCard(kd, T, today) {
     var ws = kd.weeks || [], w1 = ws.filter(function (w) { return w.n === 1; })[0];
     var body = ws.length ? ws.map(function (w) { return weekBox(w, kd, T, today, w1); }).join('')
-      : '<p class="kb-cs">' + (kd.status === 'not_needed' ? 'Дію позначено «Не потрібно» — днів спостереження немає.' : 'Плану ще немає: 14 днів спостереження (лише дні, коли у відділі були аудити) почнуться наступного дня після запису впровадженого плану.') + '</p>';
+      : kd.selfClose ? B.selfBlock(kd, T)   // v3.6: закрито без участі старшого — факти й числа
+      : '<p class="kb-cs">' + (kd.status === 'not_needed' ? 'Дію позначено «Не потрібно» — днів спостереження немає.' : 'Плану ще немає: 14 днів спостереження (лише дні, коли у відділі були аудити) почнуться наступного дня після запису впровадженого плану.' +
+        (kd.analysis ? '' : ' Поки аналіз не почато і плану немає, дія може закритись сама, коли брак упаде.')) + '</p>';
     return B.card('Результат по днях спостереження', 'kd.p.result', 'рахуємо лише дні з аудитами · спершу брак відділу, потім види браку в дії', body);
   }
 
@@ -456,7 +474,7 @@
     var nowSum = types.length ? Math.round(types.reduce(function (s, t) { return s + (t.now || 0); }, 0) * 10) / 10 : null;
     var tot = types.length ? '<span class="kb-tp__tot"><b>Разом</b></span>' + (plan ? '<span class="kb-tp__tot kb-hide-m kb-cs">за цим рядком — результат дії</span>' : '') +
       '<span class="kb-tp__tot kb-r"><b>' + B.p(start) + '</b></span><span class="kb-tp__tot kb-r">' + B.now(start, nowSum) + '</span>' : '';
-    var sub = plan ? 'план · ' + B.wd(kd.implementedAt) + (kd.whoName ? ' · відповідає ' + kd.whoName : '') : 'список ще може змінитись';
+    var sub = plan ? 'план · ' + B.wd(kd.implementedAt) + (kd.whoName ? ' · відповідає ' + kd.whoName : '') : kd.selfClosed ? 'види на момент відкриття' : kd.phaseUi === 'final' ? '' : 'список ще може змінитись';
     var body = types.length ? '<div class="kb-tp' + (plan ? '' : ' kb-tp--np') + '" role="table" aria-label="' + esc('Види браку дії №' + kd.no) + '">' +
       '<span class="kb-tp__h">Вид браку</span>' + (plan ? '<span class="kb-tp__h kb-hide-m">Причина</span>' : '') +
       '<span class="kb-tp__h kb-r">' + (plan ? 'до дії (фото)' : 'на початку') + (from && to ? ' · ' + esc(B.rng(from, to)) : '') + '</span><span class="kb-tp__h kb-r">зараз · ' + esc(nowLbl) + '</span>' + rows + tot + '</div>'

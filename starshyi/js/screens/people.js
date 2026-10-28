@@ -102,7 +102,9 @@
         '<span class="hint">Його види браку, % від перевірених у відділі' + (a.result ? ' (до дії → дні 1–7 після плану)' : ' (тиждень КД)') + ': ' + ba + '</span>' +
         '<span class="hint">Брак, % усього відділу: ' + esc(K.rates(a)) + '</span>' +
         (a.implementedAt ? '<span class="hint">Впроваджений план · що зроблено (' + h.dayShort(a.implementedAt) + '): ' + esc(a.plan) + '</span>'
-          : a.status === 'not_needed' ? '<span class="hint">Дія не потрібна: «' + esc(a.notNeededReason) + '»</span>' : '<span class="hint">Впроваджений план ще не записано.</span>') + '</a>';
+          : a.status === 'not_needed' ? '<span class="hint">Дія не потрібна: «' + esc(a.notNeededReason) + '»</span>'
+          : a.status === 'self_closed' ? '<span class="hint">Закрито без участі старшого: брак упав сам, плану не було.</span>'
+          : '<span class="hint">Впроваджений план ще не записано.</span>') + '</a>';
     }).join('') + '</div>' + types;
   }
   function mountWeeks(slot, r) {
@@ -192,7 +194,7 @@
         var open = pf.open === a.id, mute = a.active ? '' : ' style="color:var(--text-3)"';
         var tr = '<tr data-act="pp-aud" data-id="' + esc(a.id) + '"' + (open ? ' class="sel"' : '') + ' aria-expanded="' + open + '"><td' + mute + '><span style="display:inline-flex;align-items:center;gap:6px">' +
           h.ic(open ? 'chevron-down' : 'chevron-right', 'ui-icon--sm') + '<b>' + esc(a.name) + '</b></span>' +
-          (a.role === 'senior_auditor' ? '<span class="sub" style="padding-left:24px">старший аудитор</span>' : '') + (a.active ? '' : '<span class="sub" style="padding-left:24px">доступ вимкнено</span>') + '</td>' +
+          (a.role === 'senior_auditor' ? '<span class="sub" style="padding-left:24px">старший аудитор</span>' : '') + (a.legacy ? '<span class="sub" style="padding-left:24px">ще не в новій системі</span>' : a.active ? '' : '<span class="sub" style="padding-left:24px">доступ вимкнено</span>') + '</td>' +
           '<td class="n"' + mute + '><b>' + a.audits + '</b></td><td class="n"' + mute + '>' + (a.audits ? dec(a.perDay) : '—') + '</td>' +
           '<td class="n"' + mute + '>' + (a.perAudit == null ? '—' : h.num(a.perAudit)) + (a.normPerAudit != null ? '<span class="sub">норма на аудит ' + h.num(a.normPerAudit) + '</span>' : '') + '</td>' +
           '<td class="n"' + mute + '>' + (a.audits ? '<b>' + h.pct(a.pct) + '</b>' : '—') + (a.peersPct != null ? '<span class="sub">інші аудитори ' + h.pct(a.peersPct) + '</span>' : '') + '</td>' +

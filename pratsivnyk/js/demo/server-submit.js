@@ -210,7 +210,7 @@
       var rec = { id: newId(day, db), day: day, createdAt: createdAt, clientId: p.clientId || null, locationId: p.locationId,
         departmentId: p.departmentId, auditorId: me.id, orders: body.orders, items: body.items, checkedWorkers: arr(p.checkedWorkers).slice(),
         helpers: helpersOf(p, db),
-        comment: p.comment || '', noDefects: !!p.noDefects || body.defects.length === 0, defects: body.defects, isTest: true };
+        comment: p.comment || '', noDefects: !!p.noDefects || body.defects.length === 0, defects: body.defects, isTest: !env.real };
       db.audits.push(rec);
       var fresh = env.storage.get('demo:audits:new', []);
       fresh.push(rec);

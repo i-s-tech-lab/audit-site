@@ -2,7 +2,8 @@
   'use strict';
   var P = root.P, esc = P.esc, K = P.srKd, B = K.board, X = K.pages;
   var FILTERS = [['open', 'Без плану', 'open'], ['relapse', 'Рецидив', 'rel'], ['observe', 'На спостереженні', 'obs'],
-    ['helped', 'Закрито: тримається', 'helped'], ['held_types', 'Закрито: її види нижче', 'held'], ['not_needed', 'Не потрібно', 'skip'], ['not_helped', 'Закрито: рецидив', 'rel']];
+    ['helped', 'Закрито: тримається', 'helped'], ['held_types', 'Закрито: її види нижче', 'held'], ['not_needed', 'Не потрібно', 'skip'], ['not_helped', 'Закрито: рецидив', 'rel'],
+    ['self_closed', 'Закрито без участі старшого', 'helped']];   // 28.10: брак упав сам — аналізу й плану не було
   var TAGS = [['early', 'достроково'], ['parallel', 'паралельна'], ['repeat', 'повторна після рецидиву']];
 
   P.sr.screen('/kd/list', { tab: 'kd', title: 'Коригуючі дії — список дій', period: false, render: function (ctx) {

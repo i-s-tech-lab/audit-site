@@ -208,6 +208,7 @@
   K.decisionBtns = function (a) {
     var b = function (cls, act, label, ic) { return '<button class="btn ' + cls + ' btn--sm" type="button" data-act="' + act + '"' + K.ref(a) + '>' + (ic ? P.ic(ic, 'ui-icon--sm') : '') + label + '</button>'; };
     if (a.status === 'not_needed') return b('btn--secondary', 'nn', 'Змінити причину', 'edit');
+    if (a.status === 'self_closed') return '';   // рецензія 28.10: закрита сама — рішень немає («Змінити план» сервер відкине)
     if (K.isOpen(a)) return b('btn--primary', 'impl', 'Впроваджений план', 'check') + b('btn--quiet', 'nn', 'Не потрібно');
     return b('btn--secondary', 'edit', 'Змінити план', 'edit');
   };

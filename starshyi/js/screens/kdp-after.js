@@ -94,8 +94,10 @@
     var base2 = items.filter(function (x) { return x.week1 === 'norm' || x.week1 === 'types_lower'; });
     var by = function (list, key, v) { return c(list, function (x) { return x[key] === v; }); };
     var unNeed = c(items, function (x) { return !x.planned && x.final === 'not_needed'; });
+    var alone = c(items, function (x) { return !x.planned && x.final === 'self_closed'; });   // 28.10: закрито без участі старшого
     var body = '<div class="kdp-fn">' +
-      frow('Відкрилось', 'дії за ' + w, [[planned.length, 'plan', 'план записано'], [N - planned.length - unNeed, 'open', 'без плану зараз'], [unNeed, 'skip', 'не потрібна']], N, N) +
+      frow('Відкрилось', 'дії за ' + w, [[planned.length, 'plan', 'план записано'], [N - planned.length - unNeed - alone, 'open', 'без плану зараз'], [unNeed, 'skip', 'не потрібна'],
+        [alone, 'done', 'закрито без участі старшого']], N, N) +
       frow('Дні 1–7 після плану', 'з ' + planned.length + ' дій, де план записано', [[by(planned, 'week1', 'norm'), 'w2', 'брак відділу в нормі'], [by(planned, 'week1', 'types_lower'), 'part', 'її види нижче, ніж до дії'],
         [by(planned, 'week1', 'relapse'), 'rel', 'рецидив'], [by(planned, 'week1', 'running'), 'run', 'дні ще йдуть'], [by(planned, 'week1', 'wait') + by(planned, 'week1', null), 'wait', 'план є — дні ще не почались']], planned.length, N) +
       frow('Дні 8–14 після плану', 'з ' + base2.length + ' дій без рецидиву в днях 1–7', [[by(base2, 'week2', 'helped'), 'done', '✓ закрито: тримається'], [by(base2, 'week2', 'held_types'), 'part', '✓ закрито: її види нижче'],
@@ -127,7 +129,7 @@
   }
 
   var NOW = [['open', 'open', 'без плану'], ['w1', 'plan', D1], ['w2', 'w2', D2], ['wait', 'wait', 'план є — дні ще не почались'], ['relapse', 'rel', 'рецидив'],
-    ['helped', 'done', 'тримається'], ['held_types', 'part', 'її види нижче'], ['not_needed', 'skip', 'не потрібна']];
+    ['helped', 'done', 'тримається'], ['held_types', 'part', 'її види нижче'], ['not_needed', 'skip', 'не потрібна'], ['self_closed', 'done', 'без участі старшого']];
   function nowOf(x) {
     if (x.final === 'observe') {
       if (x.finalWaiting) return 'wait';
@@ -185,6 +187,7 @@
     if (r === 'held_types') return B.chip('part', '✓ її види нижче');
     if (r === 'relapse') return B.chip('rel', 'рецидив');
     if (r === 'running' || r === 'wait') return B.chip('obs', esc(X.obsText({ waiting: r === 'wait', week: x.week2 === 'running' ? 2 : 1, day: x.day })));
+    if (x.selfClosed) return B.chip('done', '✓ без участі старшого');   // 28.10: плану не було, брак упав сам
     return B.chip('none', 'плану немає');
   }
   function slopeCard(items, T) {

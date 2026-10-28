@@ -46,7 +46,7 @@
     var made = P.fmt && P.fmt.dayKey && r.asOf ? date(P.fmt.dayKey(r.asOf)) + ', ' + P.fmt.time(r.asOf) : '—';
     return '<header class="mgr-rep__head"><h1 class="mgr-rep__title">ЗВІТ ПРО ЯКІСТЬ · ' + esc(M.month(r.month)) + '</h1><dl class="mgr-rep__meta">' +
       '<dt>Локація:</dt><dd>' + esc(l.name) + '</dd><dt>Період:</dt><dd>' + esc(period) + '</dd>' +
-      '<dt>Сформовано:</dt><dd>' + esc(made) + '</dd><dt>Джерело:</dt><dd>додаток «Аудит» (тестова версія — вигадані дані)</dd></dl></header>';
+      '<dt>Сформовано:</dt><dd>' + esc(made) + '</dd><dt>Джерело:</dt><dd>додаток «Аудит»' + (P.authSlack && P.authSlack.real() ? '' : ' (тестова версія — вигадані дані)') + '</dd></dl></header>';
   }
   function totals(l, crit) {
     var lv = l.levels || {};

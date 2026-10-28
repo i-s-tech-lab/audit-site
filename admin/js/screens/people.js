@@ -13,7 +13,7 @@
   }
   P.admPeople = { subnav: subnav };
 
-  P.cab.tab({ id: 'people', label: 'Люди й доступи', ic: 'people', path: '/people', order: 20 });
+  P.cab.tab({ id: 'people', label: 'Люди й доступи', ic: 'people', path: '/people', order: 20, real: true });   // real — працює і на справжньому сервері
   P.cab.screen('/people', { tab: 'people', title: 'Люди й доступи', render: function (ctx) {
     var data = null;
     function find(id) { return data.items.filter(function (x) { return x.id === id; })[0]; }
@@ -127,6 +127,7 @@
               u ? 'Зараз: ' + u.slackId + '. Порожнє поле — без змін.' : 'Знайти: профіль у Slack → «⋯» → «Скопіювати ID учасника».', 'admin.people.slackId') +
             '<div class="field adm-lookup"><button class="btn btn--secondary btn--sm" type="button" data-act="pp-lookup" style="align-self:flex-start">' + P.ic('slack', 'ui-icon--sm') + 'Показати імʼя зі Slack</button>' +
               '<span class="hint" data-lookup-out aria-live="polite"></span></div>') +
+          A.field('email', 'Пошта', A.input('email', u ? u.email : '', ' type="email" autocomplete="off" maxlength="254" placeholder="name@…"'), 'Необовʼязково') +   // v1.9
           A.field('role', 'Роль', '<select class="input" name="role">' + roles.map(function (r) { return '<option value="' + esc(r.id) + '"' + (r.id === st.role ? ' selected' : '') + '>' + esc(r.label) + '</option>'; }).join('') + '</select>', '', 'admin.people.role') +
           slot('data-pp-grant', grantBlock()) + slot('data-pp-guest', T.guestBlock(st.guest)) +
           '<div class="field" data-f="locationIds" data-pp-locs>' + locBlock() + '</div>' +
@@ -161,7 +162,7 @@
             });
           },
           'adm-save': function (t, e, layer) {
-            var p = { name: A.val(layer.el, 'name'), role: st.role }, sid = A.val(layer.el, 'slackId').trim();
+            var p = { name: A.val(layer.el, 'name'), role: st.role, email: A.val(layer.el, 'email').trim() }, sid = A.val(layer.el, 'slackId').trim();   // v1.9: порожня пошта = прибрати
             if (from && from.reqId) p.requestId = from.reqId;
             else if (!u || (sid && sid.toUpperCase() !== String(u.slackFull || u.slackId).toUpperCase())) p.slackId = sid;
             if (st.guest) {

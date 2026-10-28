@@ -61,7 +61,7 @@
           (whoId ? '<button class="chip-pick chip-pick--on" type="button" data-act="lg-unwho" aria-label="Показати події всіх людей">× ' + esc(whoName || 'Людина') + '</button>' : '') + '</div>' +
         '<section class="card adm-flat"><p class="hint" data-lg-n></p><div data-lg-list></div>' +
           '<div class="acc-more"><button class="btn btn--secondary" type="button" data-act="lg-more" data-lg-more hidden>Показати ще</button></div></section>' +
-        '<p class="hint">Журнал зберігається 90 днів. Slack ID показано скорочено.</p></section>';
+        '<p class="hint">Журнал зберігається 6 місяців. Slack ID показано скорочено.</p></section>';
       drawList();
     }
     function fetchPage(reset) {

@@ -25,11 +25,11 @@
 
   function compareCard(r) {
     var wl = X.wl(r.weeks), head = [['Локація'], ['відкрилось дій', 'kb-r'], ['закрилось дій', 'kb-r'], ['з них тримається', 'kb-r kb-hide-m'], ['з них види нижче, ніж до дії', 'kb-r kb-hide-m'],
-      ['з них «не потрібно»', 'kb-r kb-hide-m'], ['рецидивів', 'kb-r kb-hide-m'], ['брак видів дії: до → після, середнє', 'kb-r'], ['днів до плану, середнє', 'kb-r kb-hide-m']];
+      ['з них «не потрібно»', 'kb-r kb-hide-m'], ['з них без участі старшого', 'kb-r kb-hide-m'], ['рецидивів', 'kb-r kb-hide-m'], ['брак видів дії: до → після, середнє', 'kb-r'], ['днів до плану, середнє', 'kb-r kb-hide-m']];
     var rows = r.locations.map(function (l) {
       var c = l.closed || {}, ta = l.typesAvg || {};
       return { cells: [['<a class="mkd-link" href="' + locHref(l.id, r.weeks) + '">' + esc(l.name) + '</a>'], [l.opened || 0, 'kb-r'], ['<b>' + (c.total || 0) + '</b>', 'kb-r'],
-        [c.helped || 0, 'kb-r kb-hide-m'], [c.held_types || 0, 'kb-r kb-hide-m'], [c.not_needed || 0, 'kb-r kb-hide-m'],
+        [c.helped || 0, 'kb-r kb-hide-m'], [c.held_types || 0, 'kb-r kb-hide-m'], [c.not_needed || 0, 'kb-r kb-hide-m'], [c.self_closed || 0, 'kb-r kb-hide-m'],
         ['<span class="' + (l.relapses ? 'kb-up' : '') + '">' + (l.relapses || 0) + '</span>', 'kb-r kb-hide-m'], [X.arrow(ta.before, ta.after), 'kb-r kb-nw'], [X.n1(l.daysToPlan), 'kb-r kb-hide-m']] };
     });
     return X.card('Порівняння локацій ' + wl, 'mkd.compare', 'рахуємо дії, що відкрились або закрились з ' + X.day(r.from) + ' по ' + X.day(r.to),
@@ -65,7 +65,7 @@
     return X.card('Види браку, що знову потрапляють у дії', 'mkd.returning', '', body, '', 'вид браку був пунктом у 2 і більше діях ' + X.wl(r.weeks));
   }
 
-  P.cab.tab({ id: 'kd', label: 'Коригуючі дії', ic: 'corrective', path: '/kd', order: 35 });
+  P.cab.tab({ id: 'kd', label: 'Коригуючі дії', ic: 'corrective', path: '/kd', order: 35, real: 'mgrKdBoard' });
   P.cab.screen('/kd', { tab: 'kd', title: 'Коригуючі дії', period: false, render: function (ctx) {
     var w = X.weeks(ctx.query), first = null;
     X.bind(ctx, function () { return first; });
@@ -75,7 +75,8 @@
       if (!r.ok) { ctx.el.innerHTML = P.sr.h.error(r); return; }
       if (!r.locations || !r.locations.length) { ctx.el.innerHTML = '<section class="card">' + P.sr.h.empty('Локацій ще немає', 'Коли адміністратор додасть локацію, тут зʼявляться її коригуючі дії.') + '</section>'; return; }
       first = r.locations[0].id;
-      ctx.el.innerHTML = '<div class="kb mkd">' + X.periodBar(r, function (n) { return '#/kd' + (n !== 8 ? '?w=' + n : ''); }) +
+      if (X.kdWait(r)) { ctx.el.innerHTML = '<div class="kb mkd">' + X.kdFromNote(r) + '</div>'; return; }
+      ctx.el.innerHTML = '<div class="kb mkd">' + X.periodBar(r, function (n) { return '#/kd' + (n !== 8 ? '?w=' + n : ''); }) + X.kdFromNote(r) +
         '<div class="mkd-locs">' + r.locations.map(function (l) { return locCard(l, r); }).join('') + '</div>' +
         X.legend([['<i class="mkd-osw mkd-o1"></i>', 'тримається'], ['<i class="mkd-osw mkd-o2"></i>', 'її види нижче, ніж до дії'], ['<i class="mkd-osw mkd-o3"></i>', 'старший позначив «не потрібно»'],
           ['<i class="kb-sw kb-sw--slate"></i>', 'брак цеху, % по тижнях'], ['<i class="kb-sw kb-sw--red"></i>', 'тиждень понад норму'], ['<i class="kb-sw kb-sw--dim"></i>', 'тиждень ще йде'],

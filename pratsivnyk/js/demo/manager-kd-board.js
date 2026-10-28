@@ -8,7 +8,7 @@
   }
   var C = P.demoCommon, S = P.demoSenior, I = P.demoKd.internal, B = P.demoKd.board, MK = P.demoMgrKd, PHASE_OF = I.PHASE_OF;
   var WEEKS = [4, 8, 13], WEEKS_DEF = 8, SERIES_WEEKS = 8;
-  var CELL_OF = { relapse: 'relapse', open: 'open', early: 'open', extra: 'wait', week1: 'observe', week2: 'observe', quiet: 'observe' };
+  var CELL_OF = { relapse: 'relapse', open: 'open', early: 'open', analysis: 'open', extra: 'wait', week1: 'observe', week2: 'observe', quiet: 'observe' };
   var CELL_RANK = { relapse: 4, open: 3, wait: 2, observe: 1 };
 
   function M() { return P.demoMgr; }
@@ -43,7 +43,7 @@
     return o;
   }
   function closedOf(b, per) {
-    var o = { total: 0, helped: 0, held_types: 0, not_needed: 0, early: 0 };
+    var o = { total: 0, helped: 0, held_types: 0, not_needed: 0, self_closed: 0, early: 0 };
     MK.closedIn(b, per).forEach(function (a) { o[a.status]++; o.total++; if (a.closedEarly) o.early++; });
     return o;
   }
@@ -125,7 +125,7 @@
       return { departmentId: d.id, name: d.name,
         actives: B.activesOf(b, d.id).map(function (a) {
           var ph = phaseOf(b, a);
-          return { key: a.key, no: b.nos[a.key], phase: ph.phase, week: ph.week, waiting: ph.waiting, day: B.obsDay(a), extra: ph.waiting && !!a.extra,
+          return { key: a.key, no: b.nos[a.key], phase: ph.phase, week: ph.week, waiting: ph.waiting, day: B.obsDay(a), extra: ph.waiting && !!a.extra, analysis: B.anShort(b.cx, a),
             closedEarly: !!a.closedEarly, early: !!a.early, parallel: a.parallelWith.length > 0,
             repeat: !!a.repeatOf, openedAt: B.rootOf(b, a).openedAt, relapseDay: a.repeatOf ? a.openedAt : null, implementedAt: a.implementedAt || null };
         }),
@@ -157,6 +157,9 @@
       return { key: a.key, no: b.nos[a.key], departmentName: d ? d.name : '', openedAt: B.rootOf(b, a).openedAt, finishedOn: a.finishedOn,
         reason: a.notNeeded && typeof a.notNeeded.reason === 'string' ? a.notNeeded.reason : null };
     });
+  }
+  function selfClosedOf(b, per) {
+    return P.demoKd.selfClosed(b.cx.env, b.cx.loc.id, per.from, per.to).map(function (x) { return Object.assign({ no: b.nos[x.key] }, x); });
   }
   function outcomeOf(a) {
     return a.status === 'helped' || a.status === 'held_types' ? a.status : a.status === 'not_helped' ? 'relapse' : PHASE_OF[a.status] === 'observe' ? 'running' : null;
@@ -203,8 +206,8 @@
       });
       streaks.sort(function (x, y) { return y.no - x.no || (x.since < y.since ? -1 : x.since > y.since ? 1 : 0); });
       returning.sort(function (x, y) { return y.count - x.count; });
-      return { ok: true, today: env.day(), threshold: S.KD.THRESHOLD, weeks: per.weeks, from: per.from, to: per.to, rules: rulesOf(),
-        locations: locations, streaks: streaks, returning: returning, sameDepts: sameDeptsOf(env, preps, per) };
+      return P.demoKd.withKdFrom(env, { ok: true, today: env.day(), threshold: S.KD.THRESHOLD, weeks: per.weeks, from: per.from, to: per.to, rules: rulesOf(),
+        locations: locations, streaks: streaks, returning: returning, sameDepts: sameDeptsOf(env, preps, per) });
     },
 
     mgrKdLoc: function (p, me, env) {
@@ -212,12 +215,12 @@
       if (!X || !X.can(me)) return C.forbidden();
       var r = locArg(p, env); if (r.err) return r.err;
       var per = periodOf(env, weeksArg(p.weeks)), b = B.prep(env, r.loc), cx = b.cx, eff = B.efficiency(b, per.days), sm = summary(b, per, eff);
-      return { ok: true, today: cx.today, threshold: cx.T, weeks: per.weeks, from: per.from, to: per.to, rules: rulesOf(),
+      return P.demoKd.withKdFrom(env, { ok: true, today: cx.today, threshold: cx.T, weeks: per.weeks, from: per.from, to: per.to, rules: rulesOf(),
         location: short(r.loc), locations: env.db.locations.map(short),
         kpi: { now: sm.now, opened: sm.opened, openedDepts: sm.openedDepts, relapses: sm.relapses, closed: sm.closed, typesAvg: sm.typesAvg,
           daysToPlan: sm.daysToPlan, week: lastWeek(cx) },
-        timeline: B.timeline(b), exec: execOf(b, per), heat: heatOf(b), efficiency: eff, notNeeded: notNeededOf(b, per),
-        causes: causesOf(b, per), who: whoOf(b, per), plates: MK.plates(b, per, eff) };
+        timeline: B.timeline(b), exec: execOf(b, per), heat: heatOf(b), efficiency: eff, notNeeded: notNeededOf(b, per), selfClosed: selfClosedOf(b, per),
+        causes: causesOf(b, per), who: whoOf(b, per), plates: MK.plates(b, per, eff) });
     },
 
     mgrKdAction: function (p, me, env) {

@@ -41,7 +41,7 @@
   }
   function monthLabel(m, i) { return K.month(m.month) + (i === 0 ? ' (ще триває)' : '') + ' · ' + K.n(m.audits, 'аудит', 'аудити', 'аудитів'); }
 
-  P.cab.tab({ id: 'month', label: 'Звіт за місяць', ic: 'table', path: '/month', order: 40 });
+  P.cab.tab({ id: 'month', label: 'Звіт за місяць', ic: 'table', path: '/month', order: 40, real: 'mgrMonth' });
   P.cab.screen('/month', { tab: 'month', title: 'Звіт за місяць', render: function (ctx) {
     var req = 0, data = null;
     function load() {

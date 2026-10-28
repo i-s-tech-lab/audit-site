@@ -90,7 +90,7 @@
       '<span>Коригуючі дії цієї локації — на вкладці «Коригуючі дії» ›</span></a>';
   }
 
-  P.cab.tab({ id: 'overview', label: 'Огляд', ic: 'chart', path: '/overview', order: 10 });
+  P.cab.tab({ id: 'overview', label: 'Огляд', ic: 'chart', path: '/overview', order: 10, real: 'mgrOverview' });
   var last = '';   // остання обрана локація (повертаючись на вкладку без ?loc= — та сама)
   P.cab.screen('/overview', { tab: 'overview', title: 'Огляд', period: true, render: function (ctx) {
     var sel = (ctx.query && ctx.query.loc) || last;

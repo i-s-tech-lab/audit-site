@@ -24,6 +24,7 @@
   function isInt(n, min, max) { return typeof n === 'number' && Math.floor(n) === n && n >= min && n <= max; }
 
   var NORM_MAX = 10000, DEPTS_MAX = 12, WORKER_NAME_MAX = 40;
+  var UNKNOWN_DT = 'DT_UNKNOWN';
   var WORKER_NAME_MSG = 'Впишіть, як працівник підписаний у цеху — наприклад, q5.';
 
   function guard(p, me, env) {
@@ -40,7 +41,7 @@
   function save(env, key, val) { env.storage.set(key, val); env.reload(); }
   function locDeps(env, locId) { return env.db.departments.filter(function (d) { return d.locationId === locId; }); }
   function locTypes(env, locId) { var t = {}; locDeps(env, locId).forEach(function (d) { t[d.deptTypeId] = true; }); return t; }
-  function auditors(env, locId) { return env.db.users.filter(function (u) { return u.role === 'auditor' && u.locationIds.indexOf(locId) >= 0; }); }
+  function auditors(env, locId) { return env.db.users.filter(function (u) { return u.role === 'auditor' && !u.legacy && u.locationIds.indexOf(locId) >= 0; }); }
   function locAudits(env, locId) { return env.audits().filter(function (a) { return a.locationId === locId; }); }
   function locWorkers(env, locId) { return env.db.workers.filter(function (w) { return w.locationId === locId; }); }
   function depName(env, id) { var d = pick(env.ix.dep, id); return d ? d.name : '—'; }
@@ -53,7 +54,7 @@
 
   var J_SECTIONS = { team: 'Аудитори', workers: 'Виробничі працівники', depts: 'Відділи', products: 'Вироби', defects: 'Види браку',
     merge: 'Обʼєднання', blocks: 'Блоки замовлень', import: 'Виробництво', mailing: 'Розсилки' };
-  var JOURNAL_DAYS = 30, JOURNAL_MAX = 1500, JOURNAL_SHOW = 300;
+  var JOURNAL_DAYS = 183, JOURNAL_MAX = 5000, JOURNAL_SHOW = 300;   // v1.7: 6 місяців (рішення власника 26.10)
   var DAY_NAMES = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   var DAILY_LABELS = { all: 'усе', defects: 'тільки з браком', over5: 'тільки понад 5%' };
   function jv(v) { return v === true ? 'увімкнено' : v === false ? 'вимкнено' : v == null || v === '' ? '—' : String(v); }
@@ -195,24 +196,80 @@
   }
   function tableOf(t, i, loc) {
     t = t || {};
-    return { id: typeof t.id === 'string' && t.id ? t.id : 'T' + (i + 1), mark: isInt(t.mark, 0, MARKS.length - 1) ? t.mark : i % MARKS.length,
+    var out = { id: typeof t.id === 'string' && t.id ? t.id : 'T' + (i + 1), mark: isInt(t.mark, 0, MARKS.length - 1) ? t.mark : i % MARKS.length,
       title: t.title || 'Виробіток ' + loc.name, url: t.url || '', sheet: t.sheet || '', headerRow: +t.headerRow || 1, dataRow: +t.dataRow || 2,
       dateCol: t.dateCol || '', orderCol: t.orderCol || '',
       depts: arr(t.depts).filter(Boolean).map(function (x) { return { departmentId: x.departmentId, doneCol: x.doneCol, planCol: x.planCol || null }; }) };
+    if (Array.isArray(t.columns)) out.columns = t.columns;
+    return out;
   }
   function importState(env, loc) {
     var all = env.storage.get(K.imp, {}) || {}, s = all[loc.id] || {};
-    var raw = Array.isArray(s.tables) ? s.tables : s.config ? [s.config] : [defaultTable(env, loc)];
+    var raw = Array.isArray(s.tables) ? s.tables : s.config ? [s.config] : env.real ? [] : [defaultTable(env, loc)];
     var ws = s.weekStart || (s.config && s.config.weekStart);
     return { tables: raw.map(function (t, i) { return tableOf(t, i, loc); }), weekStart: ws === 'sun' ? 'sun' : 'mon',
-      updatedAt: s.updatedAt || P.demoDates.kyivToIso(env.day(), 6 * 60 + 2) };
+      updatedAt: s.updatedAt || (env.real ? null : P.demoDates.kyivToIso(env.day(), 6 * 60 + 2)) };
+  }
+  var SHEET_URL_MSG = 'Потрібне посилання на Google-таблицю.';
+  function cleanColumns(list) {
+    var seen = {};
+    return arr(list).filter(function (c) {
+      var ok = c && /^[A-Z]{1,2}$/.test(c.col) && !seen[c.col] && clean(c.name, 80);
+      if (ok) seen[c.col] = 1;
+      return ok;
+    }).slice(0, 200).map(function (c) { return { col: c.col, name: clean(c.name, 80) }; });
+  }
+  function sheetName(v) { return typeof v === 'string' ? v.slice(0, 100) : ''; }
+  function pickedCols(c) {
+    var out = [c.dateCol, c.orderCol];
+    arr(c.depts).forEach(function (x) { if (x) { out.push(x.doneCol); out.push(x.planCol); } });
+    return out.filter(function (x) { return typeof x === 'string' && x; });
+  }
+  function pickSig(c) {
+    return JSON.stringify([c.dateCol || '', c.orderCol || '', arr(c.depts).map(function (x) { return x ? [x.departmentId, x.doneCol || '', x.planCol || ''] : null; })]);
+  }
+  function usedElsewhere(env, locId, url) {
+    var all = env.storage.get(K.imp, {}) || {};
+    return Object.keys(all).some(function (id) {
+      return id !== locId && all[id] && arr(all[id].tables).some(function (t) { return t && t.url === url; });
+    });
+  }
+  function isAdmin(me) { return me.role === 'admin' || me.admin === true; }
+  var ADMIN_ONLY_MSG = 'Таблиці підключає адміністратор.';
+  var HEADER_CHANGED_MSG = 'Шапка таблиці змінилась — натисніть «Прочитати таблицю» і перевірте колонки.';
+  var READ_FIRST_MSG = 'Натисніть «Прочитати таблицю» — потрібні колонки справжньої таблиці.';
+  function realColumns(env, loc, c, i, cur, read) {
+    var sheet = sheetName(c.sheet), h = +c.headerRow, k = String(i), url;
+    if (read && read.urls && has(read.urls, k)) {
+      url = read.urls[k];
+      if (typeof url !== 'string' || !/^https:\/\/\S{1,300}$/.test(url)) return { error: ['url', SHEET_URL_MSG] };
+    } else {
+      url = squash(c.url);
+      if (!cur || cur.url !== url) return { error: ['url', READ_FIRST_MSG] };
+    }
+    if (usedElsewhere(env, loc.id, url)) return { url: url, error: ['url', 'Ця таблиця вже підключена в іншій локації.'] };
+    var e = read && read.errors && has(read.errors, k) ? read.errors[k] : null;
+    if (e) return { url: url, error: [e.field === 'sheet' ? 'sheet' : 'url', clean(e.message, 300)] };
+    if (read && read.columns && has(read.columns, k) && Array.isArray(read.columns[k])) {
+      var got = cleanColumns(read.columns[k]), names = {}, seen = c.seen && typeof c.seen === 'object' ? c.seen : {};
+      if (!got.length) return { url: url, error: ['headerRow', 'У рядку ' + h + ' немає назв колонок — вкажіть рядок заголовків.'] };
+      got.forEach(function (x) { names[x.col] = x.name; });
+      var moved = pickedCols(c).filter(function (col) { return has(names, col) && !(has(seen, col) && clean(seen[col], 80) === names[col]); });
+      return moved.length ? { url: url, error: ['url', HEADER_CHANGED_MSG] } : { url: url, columns: got };
+    }
+    if (cur && cur.url === url && cur.sheet === sheet && cur.headerRow === h && arr(cur.columns).length && pickSig(c) === pickSig(cur)) return { url: url, columns: cur.columns };
+    return { url: url, error: ['url', READ_FIRST_MSG] };
   }
   function saveImport(env, loc, st) {
     var all = env.storage.get(K.imp, {}) || {};
     all[loc.id] = { tables: st.tables, weekStart: st.weekStart, updatedAt: st.updatedAt };
     env.storage.set(K.imp, all);
   }
-  function tableView(env, loc, t) { return Object.assign({}, t, { label: MARKS[t.mark], columns: sheetColumns(env, loc.id, t.mark) }); }
+  function tableView(env, loc, t, reads) {
+    if (!env.real) return Object.assign({}, t, { label: MARKS[t.mark], columns: sheetColumns(env, loc.id, t.mark) });
+    var st = arr(reads).filter(function (x) { return x.tableId === t.id; })[0] || null;
+    return Object.assign({}, t, { label: MARKS[t.mark], columns: arr(t.columns), read: st });
+  }
   function overlaps(env, loc, tables) {
     var out = [];
     locDeps(env, loc.id).forEach(function (d) {
@@ -221,28 +278,30 @@
     });
     return out;
   }
-  function dayPlan(orders, depId, day) {
-    return orders.reduce(function (s, o) { return s + (o.firstDay <= day && day <= o.lastDay ? (o.daily[depId] || 0) : 0); }, 0);
-  }
   function weekRows(env, loc, st) {
     var today = env.day(), dow = P.demoDates.dow(today);
     var back = st.weekStart === 'sun' ? dow : (dow + 6) % 7, from = S.addDays(today, -back), yest = S.addDays(today, -1);
-    var orders = env.db.orders.filter(function (o) { return o.locationId === loc.id; });
-    var days = []; for (var i = 0; i < 7; i++) { var k = S.addDays(from, i); if (P.demoDates.dow(k) !== 0) days.push(k); }
+    var days = []; for (var i = 0; i < 7; i++) { var k = S.addDays(from, i); if (env.real || P.demoDates.dow(k) !== 0) days.push(k); }
+    var by = P.demoProd.byDay(env, loc.id, yest < from ? yest : from, S.addDays(from, 6));
+    function val(day, depId, f) { var x = by[day] && by[day][depId]; return x && x[f] != null ? x[f] : 0; }
+    function sum(list, depId, f) { return Math.round(list.reduce(function (s, k) { return s + val(k, depId, f); }, 0) * 1000) / 1000; }
     var rows = locDeps(env, loc.id).filter(function (d) { return d.active !== false; }).map(function (d) {
-      var src = [], nPlan = 0;
-      st.tables.forEach(function (t) {
-        var x = t.depts.filter(function (y) { return y.departmentId === d.id && y.doneCol; })[0];
-        if (x) { src.push({ id: t.id, mark: t.mark, label: MARKS[t.mark] }); if (x.planCol) nPlan++; }
-      });
+      var src = P.demoProd.sources(env, loc.id, d.id);
       var norm = env.db.norms.filter(function (n) { return n.departmentId === d.id; })[0];
-      var row = { departmentId: d.id, name: d.name, connected: src.length > 0, planKnown: nPlan > 0, sources: src,
+      var row = { departmentId: d.id, name: d.name, connected: src.length > 0, planKnown: src.some(function (s) { return s.plan; }),
+        sources: src.map(function (s) { return { id: s.tableId, mark: s.mark, label: s.label }; }),
         doneYesterday: null, planWeek: null, doneWeek: null, pct: null, sampleTarget: norm ? norm.sampleTarget : null };
       if (!row.connected) return row;
-      row.doneYesterday = (P.demoDates.dow(yest) === 0 ? 0 : dayPlan(orders, d.id, yest)) * src.length;
-      row.doneWeek = days.filter(function (k) { return k < today; }).reduce(function (s, k) { return s + dayPlan(orders, d.id, k); }, 0) * src.length;
+      if (env.real) {
+        row.waiting = !src.some(function (s) { return s.ready; });
+        if (row.waiting) return row;
+        var miss = src.filter(function (s) { return !s.ready || s.failed; }).map(function (s) { return s.label; });
+        if (miss.length) row.partial = miss;
+      }
+      row.doneYesterday = !env.real && P.demoDates.dow(yest) === 0 ? 0 : sum([yest], d.id, 'done');
+      row.doneWeek = sum(days.filter(function (k) { return k < today; }), d.id, 'done');
       if (row.planKnown) {
-        row.planWeek = days.reduce(function (s, k) { return s + dayPlan(orders, d.id, k); }, 0) * nPlan;
+        row.planWeek = sum(days, d.id, 'plan');
         row.pct = row.planWeek ? Math.round(row.doneWeek / row.planWeek * 100) : null;
       }
       return row;
@@ -253,18 +312,21 @@
     var m = /^https:\/\/([^\/?#:@\s]+)/i.exec(String(url || '')), host = m ? m[1].toLowerCase() : '';
     return /(^|\.)(google\.com|googleusercontent\.com|sharepoint\.com|onedrive\.live\.com|1drv\.ms|dropbox\.com|notion\.so|airtable\.com)$/.test(host);
   }
-  function checkTable(env, loc, c, i, mark) {
+  function checkTable(env, loc, c, i, mark, rc) {
     var errs = [], cols = {}, used = {}, pre = 'tables[' + i + '].';
-    sheetColumns(env, loc.id, mark).forEach(function (x) { cols[x.col] = x.name; });
+    (rc ? arr(rc.columns) : sheetColumns(env, loc.id, mark)).forEach(function (x) { cols[x.col] = x.name; });
     function add(f, m) { errs.push({ field: pre + f, message: m, table: i, label: MARKS[mark] }); }
-    var title = squash(c.title), url = squash(c.url), sheet = squash(c.sheet);
+    var title = squash(c.title), url = squash(c.url), sheet = rc ? sheetName(c.sheet) : squash(c.sheet);
     if (!title || title.length > 60) add('title', 'Назва таблиці — від 1 до 60 знаків.');
-    if (!/^https:\/\/\S+$/.test(url) || url.length > 400) add('url', 'Посилання має починатися з https://');
+    if (rc) { if (rc.error) add(rc.error[0], rc.error[1]); }
+    else if (!/^https:\/\/\S+$/.test(url) || url.length > 400) add('url', 'Посилання має починатися з https://');
     else if (realLinkHost(url)) add('url', 'У тестовій версії справжні посилання не приймаються. Вставте умовне, наприклад https://example.com/demo');
-    if (!sheet || sheet.length > 60) add('sheet', 'Впишіть назву аркуша.');
+    if (!sheet.trim() || sheet.length > (rc ? 100 : 60)) add('sheet', 'Впишіть назву аркуша.');
     var h = +c.headerRow, r = +c.dataRow;
-    if (!isInt(h, 1, 50)) add('headerRow', 'Рядок із заголовками колонок — число від 1 до 50.');
+    var hMax = rc ? 20 : 50;   // v1.9.1: справжня таблиця — шапка в рядках 1–20 (сервер читає не більше)
+    if (!isInt(h, 1, hMax)) add('headerRow', 'Рядок із заголовками колонок — число від 1 до ' + hMax + '.');
     else if (!(isInt(r, 1, 60) && r > h)) add('dataRow', 'Дані — нижче рядка із заголовками: з рядка ' + (h + 1) + '.');
+    if (rc && rc.error) return errs;
     if (!has(cols, c.dateCol)) add('dateCol', 'Оберіть колонку дати.'); else used[c.dateCol] = 'дати';
     if (!has(cols, c.orderCol)) add('orderCol', 'Оберіть колонку замовлення.');
     else if (c.dateCol === c.orderCol) add('orderCol', 'Дата й замовлення — у різних колонках.');
@@ -287,6 +349,56 @@
       }
     });
     return errs;
+  }
+
+  function saveTables(p, me, env, read) {
+    var r = guardW(p, me, env); if (r.err) return r.err;
+    if (env.real && arr(p.tables).length && !isAdmin(me)) return C.fail('forbidden', ADMIN_ONLY_MSG);
+    var s = importState(env, r.loc), list = arr(p.tables), errs = [], busy = {}, saved = [], before = {}, oldWeek = s.weekStart;
+    s.tables.forEach(function (t) { before[t.id] = tableFacts(env, t); });
+    if (p.weekStart !== undefined) {
+      if (p.weekStart !== 'mon' && p.weekStart !== 'sun') errs.push({ field: 'weekStart', message: 'Тиждень — з понеділка або з неділі.' }); else s.weekStart = p.weekStart;
+    }
+    if (!list.length && p.weekStart === undefined) return verr([{ field: 'tables', message: 'Немає таблиць для збереження.' }]);
+    s.tables.forEach(function (t) { busy[t.mark] = 1; });
+    var fresh = list.filter(function (c) { return !(c && c.id); }).length;
+    if (s.tables.length + fresh > MARKS.length) return verr([{ field: 'tables', message: 'На локацію — до ' + MARKS.length + ' таблиць.' }]);
+    list.forEach(function (c, i) {
+      c = c || {};
+      var cur = c.id ? s.tables.filter(function (t) { return t.id === c.id; })[0] : null, mark;
+      if (c.id && !cur) { errs.push({ field: 'tables[' + i + '].id', message: 'Цієї таблиці вже немає — оновіть сторінку.', table: i }); return; }
+      if (cur) mark = cur.mark;
+      else {
+        mark = isInt(c.mark, 0, MARKS.length - 1) && !busy[c.mark] ? c.mark : MARKS.map(function (l, m) { return m; }).filter(function (m) { return !busy[m]; })[0];
+        busy[mark] = 1;
+      }
+      var rc = env.real ? realColumns(env, r.loc, c, i, cur, read) : null;
+      var e = checkTable(env, r.loc, c, i, mark, rc);
+      if (e.length) { errs = errs.concat(e); return; }
+      var t = { id: cur ? cur.id : null, mark: mark, title: squash(c.title), url: rc ? rc.url : squash(c.url), sheet: rc ? sheetName(c.sheet) : squash(c.sheet), headerRow: +c.headerRow, dataRow: +c.dataRow,
+        dateCol: c.dateCol, orderCol: c.orderCol,
+        depts: arr(c.depts).map(function (x) { return { departmentId: x.departmentId, doneCol: x.doneCol, planCol: x.planCol || null }; }) };
+      if (rc) t.columns = rc.columns;
+      saved.push(t);
+    });
+    if (errs.length) return C.fail('validation', (errs[0].label ? 'Таблиця ' + errs[0].label + ': ' : '') + errs[0].message, errs);
+    var n = 0; s.tables.forEach(function (t) { n = Math.max(n, numOf(t.id)); });
+    saved.forEach(function (t) {
+      if (t.id) { s.tables = s.tables.map(function (x) { return x.id === t.id ? t : x; }); return; }
+      t.id = 'T' + (++n); s.tables.push(t);
+    });
+    s.tables.sort(function (a, b) { return a.mark - b.mark; });
+    if (saved.length) s.updatedAt = env.now().toISOString();   // сама зміна «тиждень з…» часу оновлення не чіпає
+    saveImport(env, r.loc, s);
+    saved.forEach(function (t) {
+      var a = has(before, t.id) ? before[t.id] : {}, b = tableFacts(env, t);
+      journal(env, me, r.loc.id, 'import', has(before, t.id) ? 'edit' : 'add', 'Таблиця ' + MARKS[t.mark] + ' · ' + t.title, diff([['Назва', a.title, b.title],
+        ['Аркуш', a.sheet, b.sheet], ['Рядки', a.rows, b.rows], ['Колонки', a.cols, b.cols], ['Відділи й колонки', a.depts, b.depts]]));
+    });
+    var wk = { mon: 'з понеділка', sun: 'з неділі' };
+    journal(env, me, r.loc.id, 'import', 'edit', 'Тиждень', diff([['Тиждень починається', wk[oldWeek], wk[s.weekStart]]]));
+    return { ok: true, updatedAt: s.updatedAt, weekStart: s.weekStart, warnings: overlaps(env, r.loc, s.tables),
+      saved: saved.map(function (t) { return { id: t.id, mark: t.mark, label: MARKS[t.mark], title: t.title, departments: t.depts.length }; }) };
   }
 
   var MAILS = [
@@ -576,6 +688,11 @@
         else patch.name = name;
       }
       if (!d && !pick(env.ix.dt, p.deptTypeId)) errs.push({ field: 'deptTypeId', message: 'Оберіть тип відділу.' });
+      if (d && p.deptTypeId !== undefined && p.deptTypeId !== d.deptTypeId) {
+        if (d.deptTypeId !== UNKNOWN_DT) errs.push({ field: 'deptTypeId', message: 'Тип відділу вже вказано — його не змінюють.' });
+        else if (p.deptTypeId === UNKNOWN_DT || !pick(env.ix.dt, p.deptTypeId)) errs.push({ field: 'deptTypeId', message: 'Оберіть тип відділу.' });
+        else patch.deptTypeId = p.deptTypeId;
+      }
       if (!d || p.sampleTarget !== undefined) {
         norm = typeof p.sampleTarget === 'string' && p.sampleTarget.trim() !== '' ? +p.sampleTarget : p.sampleTarget;
         if (!isInt(norm, 1, NORM_MAX)) errs.push({ field: 'sampleTarget', message: 'Норма вибірки — ціле число від 1 до ' + NORM_MAX + ' шт.' });
@@ -584,7 +701,7 @@
       if (d && !errs.length && norm === undefined && !Object.keys(patch).length) errs.push({ field: 'name', message: 'Немає змін.' });
       if (errs.length) return verr(errs);
       var st = deptStore(env.storage), id = d ? d.id : null, old = d ? env.db.norms.filter(function (q) { return q.departmentId === d.id; })[0] : null;
-      var was = d ? { name: d.name, active: d.active !== false, norm: old ? old.sampleTarget + ' шт' : null } : {};
+      var was = d ? { name: d.name, active: d.active !== false, norm: old ? old.sampleTarget + ' шт' : null, type: env.ix.dt[d.deptTypeId] ? env.ix.dt[d.deptTypeId].name : null } : {};
       if (!d) {
         var n = 0; env.db.departments.forEach(function (x) { var m = /_N(\d+)$/.exec(x.id); if (m) n = Math.max(n, +m[1]); });
         id = 'DEP_' + r.loc.id.slice(4) + '_N' + (n + 1);
@@ -593,7 +710,7 @@
       if (norm !== undefined) st.norms[id] = norm;
       save(env, K.depts, st);
       var x = env.ix.dep[id], row = env.db.norms.filter(function (q) { return q.departmentId === id; })[0];
-      journal(env, me, r.loc.id, 'depts', d ? 'edit' : 'add', x.name, diff([['Назва', was.name, x.name], ['Тип відділу', null, d ? null : env.ix.dt[x.deptTypeId].name],
+      journal(env, me, r.loc.id, 'depts', d ? 'edit' : 'add', x.name, diff([['Назва', was.name, x.name], ['Тип відділу', d ? was.type : null, env.ix.dt[x.deptTypeId].name],
         ['Норма вибірки на день', was.norm, row ? row.sampleTarget + ' шт' : null], ['Стан', was.active, x.active !== false]]));
       return { ok: true, id: id, name: x.name, active: x.active !== false, sampleTarget: row ? row.sampleTarget : null, created: !d };
     },
@@ -727,7 +844,11 @@
       var blocks = env.db.orderBlocks.filter(function (b) { return b.locationId === r.loc.id; }), inBlock = {};
       blocks.forEach(function (b) { b.orders.forEach(function (no) { inBlock[no] = b; }); });
       var on = byId(orders, 'no'), audits = locAudits(env, r.loc.id);
-      function prods(o) { return o ? o.garments.map(function (g) { return G[g]; }) : []; }
+      function prods(o) {
+        if (!o) return [];
+        if (Array.isArray(o.productIds)) return o.productIds.map(function (id) { return env.ix.prod[id] ? env.ix.prod[id].name : id; });
+        return (o.garments || []).map(function (g) { return G[g]; });
+      }
       return { ok: true, location: { id: r.loc.id, name: r.loc.name }, counts: counts(env, r.loc.id),
         items: blocks.map(function (b) {
           var n = 0, last = null, set = {}; b.orders.forEach(function (no) { set[no] = 1; });
@@ -785,13 +906,15 @@
 
     srMgImport: function (p, me, env) {
       var r = guard(p, me, env); if (r.err) return r.err;
-      var s = importState(env, r.loc), busy = {};
+      var s = importState(env, r.loc), busy = {}, reads = env.real ? P.demoProd.status(env, r.loc.id) : null;
       s.tables.forEach(function (t) { busy[t.mark] = 1; });
-      return { ok: true, location: { id: r.loc.id, name: r.loc.name }, counts: counts(env, r.loc.id), updatedAt: s.updatedAt,
-        nextAt: P.demoDates.kyivToIso(S.addDays(env.day(), 1), 6 * 60), weekStart: s.weekStart,
-        tables: s.tables.map(function (t) { return tableView(env, r.loc, t); }), week: weekRows(env, r.loc, s), warnings: overlaps(env, r.loc, s.tables),
+      return { ok: true, real: !!env.real, canEdit: !env.real || isAdmin(me), location: { id: r.loc.id, name: r.loc.name }, counts: counts(env, r.loc.id),
+        updatedAt: env.real ? P.demoProd.lastOkAt(env, r.loc.id) : s.updatedAt,
+        nextAt: env.real ? null : P.demoDates.kyivToIso(S.addDays(env.day(), 1), 6 * 60), weekStart: s.weekStart,
+        tables: s.tables.map(function (t) { return tableView(env, r.loc, t, reads); }), week: weekRows(env, r.loc, s), warnings: overlaps(env, r.loc, s.tables),
         maxTables: MARKS.length, freeMarks: MARKS.map(function (l, m) { return m; }).filter(function (m) { return !busy[m]; }),
         marks: MARKS.map(function (l, m) {
+          if (env.real) return { mark: m, label: l, columns: [], title: 'Таблиця ' + l, sheet: '', headerRow: 1 };
           var v = sheetOf(m);
           return { mark: m, label: l, columns: sheetColumns(env, r.loc.id, m), title: v.title + ' ' + r.loc.name, sheet: v.sheet, headerRow: v.headerRow };
         }),
@@ -800,64 +923,37 @@
 
     srMgImportRefresh: function (p, me, env) {
       var r = guard(p, me, env); if (r.err) return r.err;
+      if (env.real) return C.fail('not_ready', 'Читання таблиць на сервері ще не запущено — зверніться до адміністратора.');
       var s = importState(env, r.loc);
       s.updatedAt = env.now().toISOString(); saveImport(env, r.loc, s);
       return { ok: true, updatedAt: s.updatedAt };
     },
 
-    srMgImportSave: function (p, me, env) {
-      var r = guardW(p, me, env); if (r.err) return r.err;
-      var s = importState(env, r.loc), list = arr(p.tables), errs = [], busy = {}, saved = [], before = {}, oldWeek = s.weekStart;
-      s.tables.forEach(function (t) { before[t.id] = tableFacts(env, t); });
-      if (p.weekStart !== undefined) {
-        if (p.weekStart !== 'mon' && p.weekStart !== 'sun') errs.push({ field: 'weekStart', message: 'Тиждень — з понеділка або з неділі.' }); else s.weekStart = p.weekStart;
+    srMgImportSave: function (p, me, env) { return saveTables(p, me, env, null); },
+
+    srMgImportSaveRead: function (p, me, env) {
+      if (!env.real) return C.fail('not_found', 'Цієї дії немає.');
+      return saveTables(p, me, env, { urls: p.urls || {}, columns: p.columns || {}, errors: p.errors || {} });
+    },
+
+    srMgImportGate: function (p, me, env) {
+      if (!env.real) return C.fail('not_found', 'Цієї дії немає.');
+      var r = guard(p, me, env); if (r.err) return r.err;
+      if (p.purpose !== 'read' && !isAdmin(me)) return C.fail('forbidden', ADMIN_ONLY_MSG);
+      if (typeof p.url === 'string' && usedElsewhere(env, r.loc.id, p.url)) {
+        return C.fail('validation', 'Ця таблиця вже підключена в іншій локації.', [{ field: 'url', message: 'Ця таблиця вже підключена в іншій локації.' }]);
       }
-      if (!list.length && p.weekStart === undefined) return verr([{ field: 'tables', message: 'Немає таблиць для збереження.' }]);
-      s.tables.forEach(function (t) { busy[t.mark] = 1; });
-      var fresh = list.filter(function (c) { return !(c && c.id); }).length;
-      if (s.tables.length + fresh > MARKS.length) return verr([{ field: 'tables', message: 'На локацію — до ' + MARKS.length + ' таблиць.' }]);
-      list.forEach(function (c, i) {
-        c = c || {};
-        var cur = c.id ? s.tables.filter(function (t) { return t.id === c.id; })[0] : null, mark;
-        if (c.id && !cur) { errs.push({ field: 'tables[' + i + '].id', message: 'Цієї таблиці вже немає — оновіть сторінку.', table: i }); return; }
-        if (cur) mark = cur.mark;
-        else {
-          mark = isInt(c.mark, 0, MARKS.length - 1) && !busy[c.mark] ? c.mark : MARKS.map(function (l, m) { return m; }).filter(function (m) { return !busy[m]; })[0];
-          busy[mark] = 1;
-        }
-        var e = checkTable(env, r.loc, c, i, mark);
-        if (e.length) { errs = errs.concat(e); return; }
-        var t = { id: cur ? cur.id : null, mark: mark, title: squash(c.title), url: squash(c.url), sheet: squash(c.sheet), headerRow: +c.headerRow, dataRow: +c.dataRow,
-          dateCol: c.dateCol, orderCol: c.orderCol,
-          depts: arr(c.depts).map(function (x) { return { departmentId: x.departmentId, doneCol: x.doneCol, planCol: x.planCol || null }; }) };
-        saved.push(t);
-      });
-      if (errs.length) return C.fail('validation', (errs[0].label ? 'Таблиця ' + errs[0].label + ': ' : '') + errs[0].message, errs);
-      var n = 0; s.tables.forEach(function (t) { n = Math.max(n, numOf(t.id)); });
-      saved.forEach(function (t) {
-        if (t.id) { s.tables = s.tables.map(function (x) { return x.id === t.id ? t : x; }); return; }
-        t.id = 'T' + (++n); s.tables.push(t);
-      });
-      s.tables.sort(function (a, b) { return a.mark - b.mark; });
-      if (saved.length) s.updatedAt = env.now().toISOString();   // сама зміна «тиждень з…» часу оновлення не чіпає
-      saveImport(env, r.loc, s);
-      saved.forEach(function (t) {
-        var a = has(before, t.id) ? before[t.id] : {}, b = tableFacts(env, t);
-        journal(env, me, r.loc.id, 'import', has(before, t.id) ? 'edit' : 'add', 'Таблиця ' + MARKS[t.mark] + ' · ' + t.title, diff([['Назва', a.title, b.title],
-          ['Аркуш', a.sheet, b.sheet], ['Рядки', a.rows, b.rows], ['Колонки', a.cols, b.cols], ['Відділи й колонки', a.depts, b.depts]]));
-      });
-      var wk = { mon: 'з понеділка', sun: 'з неділі' };
-      journal(env, me, r.loc.id, 'import', 'edit', 'Тиждень', diff([['Тиждень починається', wk[oldWeek], wk[s.weekStart]]]));
-      return { ok: true, updatedAt: s.updatedAt, weekStart: s.weekStart, warnings: overlaps(env, r.loc, s.tables),
-        saved: saved.map(function (t) { return { id: t.id, mark: t.mark, label: MARKS[t.mark], title: t.title, departments: t.depts.length }; }) };
+      return { ok: true, locationId: r.loc.id, tables: P.demoProd.specs(env, r.loc.id) };
     },
 
     srMgImportTableDelete: function (p, me, env) {
       var r = guard(p, me, env); if (r.err) return r.err;
+      if (env.real && !isAdmin(me)) return C.fail('forbidden', ADMIN_ONLY_MSG);
       var s = importState(env, r.loc), t = s.tables.filter(function (x) { return x.id === p.id; })[0];
       if (!t) return C.fail('not_found', 'Цієї таблиці вже немає — оновіть сторінку.');
       s.tables = s.tables.filter(function (x) { return x !== t; });
       saveImport(env, r.loc, s);
+      if (env.real) P.demoProd.forget(env, r.loc.id, t.id);
       journal(env, me, r.loc.id, 'import', 'delete', 'Таблиця ' + MARKS[t.mark] + ' · ' + t.title, diff([['Відділи й колонки', tableFacts(env, t).depts, null]]));
       return { ok: true, id: t.id, label: MARKS[t.mark], title: t.title, left: s.tables.length };
     },
@@ -924,6 +1020,10 @@
   };
 
   P.demoApis.push(api);
-  P.demoManage = { KEYS: K, INCLUDE: INCLUDE };
+  P.demoManage = { KEYS: K, INCLUDE: INCLUDE,
+    prodTables: function (env, locId) {
+      var loc = pick(env.ix.loc, locId);
+      return loc ? importState(env, loc).tables.map(function (t) { return Object.assign({ label: MARKS[t.mark] }, t); }) : [];
+    } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

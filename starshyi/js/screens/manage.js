@@ -1,17 +1,21 @@
 (function (root) {
   'use strict';
   var P = root.P, H = P.sr.h, esc = P.esc;
+  var REAL = !!(P.authSlack && P.authSlack.real());
 
-  var SECTIONS = [
-    { id: 'team', label: 'Аудитори', count: 'team' },
-    { id: 'workers', label: 'Виробничі працівники', count: 'workers' },
-    { id: 'products', label: 'Відділи й вироби' },
-    { id: 'defects', label: 'Види браку', count: 'defects' },
-    { id: 'blocks', label: 'Блоки замовлень', count: 'blocks' },
-    { id: 'import', label: 'Виробництво: план і факт' },
+  var ALL_SECTIONS = [
+    { id: 'team', label: 'Аудитори', count: 'team', real: true },
+    { id: 'workers', label: 'Виробничі працівники', count: 'workers', real: 'srMgWorkers' },
+    { id: 'products', label: 'Відділи й вироби', real: 'srMgCatalog' },
+    { id: 'defects', label: 'Види браку', count: 'defects', real: 'srMgDefects' },
+    { id: 'blocks', label: 'Блоки замовлень', count: 'blocks', real: 'srMgBlocks' },
+    { id: 'import', label: 'Виробництво: план і факт', real: 'srMgImport' },
     { id: 'mailing', label: 'Розсилки', count: 'mailing' },
-    { id: 'journal', label: 'Журнал змін' }
+    { id: 'journal', label: 'Журнал змін', real: 'srMgJournal' }
   ];
+  var SECTIONS = REAL ? ALL_SECTIONS.filter(function (s) { return P.authSlack.realOk(s.real); }) : ALL_SECTIONS;
+  function secReal(id) { return ALL_SECTIONS.some(function (s) { return s.id === id && P.authSlack.realOk(s.real); }); }
+  function mergeOk() { return !REAL || P.authSlack.realOk(['srMgMergePreview', 'srMgMerge']); }
   var counts = {};   // останні лічильники меню зліва (щоб не блимали між розділами)
 
   function plural(n, f) { var a = n % 10, b = n % 100; return f[a === 1 && b !== 11 ? 0 : a >= 2 && a <= 4 && (b < 12 || b > 14) ? 1 : 2]; }
@@ -130,7 +134,7 @@
     qa(ctx.el, '[data-mg-count]').forEach(function (e) { var x = c[e.getAttribute('data-mg-count')]; e.textContent = x == null ? '' : x; });
   }
   function section(id, title, mount) {
-    P.sr.screen('/manage/' + id, { tab: 'manage', title: 'Керування · ' + title, period: false, render: function (ctx) {
+    P.sr.screen('/manage/' + id, { tab: 'manage', title: 'Керування · ' + title, period: false, real: secReal(id), render: function (ctx) {
       var v = { ctx: ctx, col: frame(ctx, id), loc: ctx.loc.id, wantNew: ctx.query && ctx.query.new === '1' };
       if (v.wantNew && root.history && root.history.replaceState) root.history.replaceState(null, '', '#/manage/' + id);
       v.call = function (fn, p) { return P.srv(fn, Object.assign({ locationId: v.loc }, p || {})); };
@@ -147,7 +151,7 @@
   }
   P.sr.screen('/manage', { tab: 'manage', title: 'Керування', period: false, render: function (ctx) { ctx.go('/manage/team'); } });
 
-  P.srMg = { section: section, plural: plural, cnt: cnt, inAudits: inAudits, W: W, today: today, daysBetween: daysBetween, dateLong: dateLong, ago: ago, added: added,
+  P.srMg = { section: section, mergeOk: mergeOk, plural: plural, cnt: cnt, inAudits: inAudits, W: W, today: today, daysBetween: daysBetween, dateLong: dateLong, ago: ago, added: added,
     da: da, q: q, qa: qa, hq: hq, sw: sw, ck: ck, pen: pen, more: more, rowMenu: rowMenu, head: head, btnNew: btnNew, banner: banner, field: field, input: input,
     locked: locked, seg: seg, levelOpts: levelOpts, val: val, modal: modal, cancelBtn: cancelBtn, showErrors: showErrors, failToast: failToast,
     enterSubmits: enterSubmits, ask: ask, LV_SHORT: { fix: 'неправильно зроблене', repair: 'пошкоджене', scrap: 'зламане' } };

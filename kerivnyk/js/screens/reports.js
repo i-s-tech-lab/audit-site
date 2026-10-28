@@ -40,7 +40,7 @@
     if (!shown) P.toast('danger', 'Не збережено', (r.errors && r.errors[0] ? r.errors[0].message : r.error) || '');
   }
 
-  P.cab.tab({ id: 'reports', label: 'Мої звіти', ic: 'notification', path: '/reports', order: 50 });
+  P.cab.tab({ id: 'reports', label: 'Мої звіти', ic: 'notification', path: '/reports', order: 50, real: 'mgrReports' });
   P.cab.screen('/reports', { tab: 'reports', title: 'Мої звіти', render: function (ctx) {
     var data = null;
     function load() {
@@ -54,7 +54,7 @@
       var s = data.settings;
       ctx.el.innerHTML = '<section class="mgr-page mgr-narrow"><div><h2 class="h2">Мої сповіщення в Slack</h2><p class="h2-sub">Про роботу людей і коригуючі дії — що надсилати вам особисто' +
         (s.updatedAt ? ' · збережено ' + esc(P.fmt.dateTime(s.updatedAt)) : '') + '</p></div>' +
-        '<div class="banner">' + P.ic('info', 'icon') + '<div class="banner__body"><p class="banner__text"><b>У тестовій версії сповіщення ще не надсилаються</b> — налаштування зберігаються й діятимуть у справжньому додатку.</p></div></div>' +
+        '<div class="banner">' + P.ic('info', 'icon') + '<div class="banner__body"><p class="banner__text"><b>' + (P.authSlack && P.authSlack.real() ? 'Сповіщення ще не надсилаються' : 'У тестовій версії сповіщення ще не надсилаються') + '</b> — налаштування зберігаються й почнуть діяти, коли розсилки запрацюють.</p></div></div>' +
         '<section class="card">' + KINDS.map(function (k) {
           var x = s[k.id], on = x.on, names = locNames(data, x.locations);
           return '<div class="entry mgr-entry"><div class="entry__head"><h3 class="entry__title' + (on ? '' : ' mgr-off') + '">' + esc(k.title) + K.help('mgr.rep.' + k.id) + '</h3>' +

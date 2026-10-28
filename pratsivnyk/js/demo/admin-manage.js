@@ -7,7 +7,7 @@
     requests: 'demo:adm:requests' };
   var ROLES = ['auditor', 'senior_auditor', 'manager', 'admin'];   // ролі, які адміністратор може дати людині
   var ALL_LOC = { manager: 1, admin: 1 };                           // ці ролі завжди мають усі локації
-  var LOC_MAX = 30, LOG_DAYS = 30, LOG_MAX = 300;
+  var LOC_MAX = 30, LOG_DAYS = 183, LOG_MAX = 3000;   // v1.10: журнал — 6 місяців (рішення власника 26.10)
 
   var RIGHTS = [
     { key: 'recordAudit', label: 'Записувати аудити' },

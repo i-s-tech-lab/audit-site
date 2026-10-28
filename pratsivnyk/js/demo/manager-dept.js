@@ -49,7 +49,7 @@
     });
     return Object.keys(by).map(function (id) {
       var u = env.ix.user[id];
-      return { id: id, name: u ? u.name : 'Невідомий аудитор', senior: !!u && u.role === 'senior_auditor', active: !u || u.active !== false,
+      return { id: id, name: u ? u.name : 'Невідомий аудитор', senior: !!u && u.role === 'senior_auditor', active: !u || u.active !== false, legacy: !!u && u.legacy === true,
         audits: by[id].audits, checked: by[id].checked };
     }).sort(function (a, b) { return b.audits - a.audits || b.checked - a.checked || (a.name < b.name ? -1 : 1); });
   }

@@ -6,8 +6,8 @@
   var CHANNEL_ID = /^(?:[CG][A-Z0-9]{8,10}|C-DEMO-[0-9]{3})$/;     // ID каналу Slack: справжній або вигаданий (демо)
   var NOT_LISTED_MSG = 'Вас ще немає в списку доступу. Ми передали запит — щойно вас додасть старший аудитор, керівник чи адміністратор, вам у Slack прийде кнопка входу.';
   var SEED_REQUESTS = [
-    { id: 1, slackId: 'U-DEMO-901', name: 'Марія Т.', agoMin: 95 },
-    { id: 2, slackId: 'U-DEMO-902', name: 'Ігор Б.', agoMin: 1560 },
+    { id: 1, slackId: 'U-DEMO-901', name: 'Марія Т.', agoMin: 95, source: { kind: 'channel', channel: 'tsekh-1' } },
+    { id: 2, slackId: 'U-DEMO-902', name: 'Ігор Б.', agoMin: 1560, source: { kind: 'home', channel: null } },
     { id: 3, slackId: 'U-DEMO-941', name: 'Олег Г.', agoMin: 40 }   // гість Slack-простору: його додає лише адмін (стан дає access-rules.js)
   ];
   var GUEST = { slackId: 'U-DEMO-950', name: 'Гість зі Slack' };   // «людина не зі списку» у демо-вході
@@ -20,7 +20,7 @@
     var s = obj(env.storage.get(A.K.requests, null));
     if (!Array.isArray(s.items)) {
       var t = env.now().getTime();
-      s = { items: SEED_REQUESTS.map(function (r) { return { id: r.id, slackId: r.slackId, name: r.name, createdAt: new Date(t - r.agoMin * 60000).toISOString(), status: 'pending' }; }) };
+      s = { items: SEED_REQUESTS.map(function (r) { return { id: r.id, slackId: r.slackId, name: r.name, createdAt: new Date(t - r.agoMin * 60000).toISOString(), status: 'pending', source: r.source || null }; }) };
     }
     s.items = s.items.filter(function (x) { return x && typeof x === 'object'; }).map(function (x) {
       var m = typeof x.id === 'string' ? /^rq_(\d+)$/.exec(x.id) : null, y = Object.assign({}, x);
@@ -48,15 +48,17 @@
       var items = reqStore(env).items.filter(function (x) { return x.status === 'pending' && (admin || P.demoAccess.slackStateOf(x.slackId) === 'active'); })
         .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0; })
         .map(function (x) {
-          return { id: x.id, slackId: admin ? x.slackId : C.maskSlackId(x.slackId), name: x.name, createdAt: x.createdAt, status: x.status, state: P.demoAccess.slackStateOf(x.slackId) };
+          return { id: x.id, slackId: admin ? x.slackId : C.maskSlackId(x.slackId), name: x.name, createdAt: x.createdAt, status: x.status, state: P.demoAccess.slackStateOf(x.slackId),
+            photo: '', source: x.source || null };
         });
       return { ok: true, requests: items };
     },
 
     admAccessResolve: function (p, me, env) {
-      if (!A.isAdmin(me)) return C.forbidden();
+      var admin = A.isAdmin(me);
+      if (!admin && (!(me && me.access && me.access.addPeople) || p.decision !== 'rejected')) return C.forbidden();
       var st = reqStore(env), r = typeof p.id === 'string' || typeof p.id === 'number' ? st.items.filter(function (x) { return String(x.id) === String(p.id); })[0] : null;
-      if (!r || r.status !== 'pending') return C.fail('not_found', 'Цього запиту вже немає — оновіть сторінку.');
+      if (!r || r.status !== 'pending' || (!admin && P.demoAccess.slackStateOf(r.slackId) !== 'active')) return C.fail('not_found', 'Цього запиту вже немає — оновіть сторінку.');
       if (p.decision !== 'added' && p.decision !== 'rejected') return verr([{ field: 'decision', message: 'Оберіть: додати чи відхилити.' }]);
       r.status = p.decision; r.doneAt = env.now().toISOString(); r.by = me.id;
       if (p.decision === 'added' && typeof p.userId === 'string') r.userId = p.userId;

@@ -6,7 +6,7 @@
   var C = P.demoCommon, S = P.demoSenior, I = P.demoKd.internal, B = P.demoKd.board;
   var WEEKS = [4, 8, 13, 26], WEEKS_DEF = 8, SCALE_MIN = 9;
   var ACTIVE_RANK = { relapse: 0, open: 1, observe: 2 };
-  var STATES = ['open', 'relapse', 'observe', 'helped', 'held_types', 'not_needed', 'not_helped'];
+  var STATES = ['open', 'relapse', 'observe', 'helped', 'held_types', 'not_needed', 'not_helped', 'self_closed'];
 
   function has(o, k) { return typeof k === 'string' && o != null && Object.prototype.hasOwnProperty.call(o, k); }
   function minDay(a, b) { return a < b ? a : b; }
@@ -51,6 +51,8 @@
         deptStart: dStart, deptNow: cw.rate, deptNowPartial: true };
     }
     var v = I.view(cx, a), e = has(eff, a.key) ? eff[a.key] : null, w2 = v.typesAfter2 != null, deptNow;
+    if (a.selfClose) return { typesStart: a.selfClose.typesBefore, typesNow: a.selfClose.check.typesRate, typesNowPartial: false, deptStart: dStart,
+      deptNow: a.selfClose.check.deptRate, deptNowPartial: false };
     if (a.status === 'not_needed') {
       var k = cx.nextData(dep, cx.of(a.finishedOn) + 1);
       deptNow = k == null ? null : cx.wk(dep, k).rate;
@@ -73,7 +75,7 @@
     if (a.repeatOf) relapseDay = a.openedAt;
     return Object.assign({ key: a.key, no: b.nos[r.key], departmentId: a.departmentId, departmentName: v.departmentName,
       group: I.isActive(a) ? 'active' : 'closed', state: st, week: st === 'observe' ? B.obsWeek(a) : null, day: B.obsDay(a), waiting: waitingOf(cx, a),
-      closedEarly: !!a.closedEarly,
+      closedEarly: !!a.closedEarly, analysis: B.anShort(cx, a),
       tags: { early: c.list.some(function (x) { return !!x.early; }), parallel: c.list.some(function (x) { return x.parallelWith.length > 0; }), repeat: c.list.length > 1 },
       openedAt: r.openedAt, relapseDay: relapseDay, finishedOn: I.isActive(a) ? null : a.finishedOn || null,
       types: { count: v.items.length, pieces: v.items.reduce(function (s, it) { return s + it.pieces; }, 0), names: v.items.map(function (it) { return it.name; }) },
@@ -131,6 +133,7 @@
       before: v.typesBefore, after1: v.typesAfter, after1Partial: partial(v.result, v.typesAfter), after2: v.typesAfter2, after2Partial: partial(v.hold, v.typesAfter2),
       deptBefore: deptStartOf(cx, a), deptAfter1: v.result && v.result.checked ? v.result.rate : null, deptAfter2: v.hold && v.hold.checked ? v.hold.rate : null,
       quiet: q ? q.typesRate : null, quietPartial: !!(q && q.running), deptQuiet: q ? q.deptRate : null,
+      selfClosed: a.status === 'self_closed', selfAfter: a.selfClose ? a.selfClose.check.typesRate : null,
       causes: causesOf(a, v, labels) };
   }
 
@@ -138,8 +141,8 @@
     srKdListBoard: function (p, me, env) {
       var top = boardTop(p, me, env); if (!top.ok) return top;
       var b = B.prep(env, S.loc(p, me, env).loc), cx = b.cx, per = periodOf(cx, weeksArg(p.weeks)), sc = scaleOf(cx, per.weeks), rows = listRows(b, per, sc);
-      return { ok: true, today: cx.today, threshold: cx.T, canWrite: top.canWrite, weeks: per.weeks, from: per.from, to: per.to, week: top.week,
-        tiles: top.tiles, counts: top.counts, scale: sc, rows: rows, stateCounts: stateCounts(rows) };
+      return P.demoKd.withKdFrom(env, { ok: true, today: cx.today, threshold: cx.T, canWrite: top.canWrite, weeks: per.weeks, from: per.from, to: per.to, week: top.week,
+        tiles: top.tiles, counts: top.counts, scale: sc, rows: rows, stateCounts: stateCounts(rows) });
     },
 
     srKdAfter: function (p, me, env) {
@@ -148,8 +151,8 @@
       top.tiles.forEach(function (t) { series[t.departmentId] = t.series.map(function (x) { return x.rate; }); });
       var items = chainsOf(b).filter(function (c) { return inPer(per, c.root.openedAt); }).map(function (c) { return afterItem(b, c, labels); })
         .sort(function (x, y) { return cmpDay(x.openedAt, y.openedAt) || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0); });
-      return { ok: true, today: cx.today, threshold: cx.T, weeks: per.weeks, from: per.from, to: per.to, week: top.week, tiles: top.tiles, counts: top.counts,
-        departments: cx.deps.map(function (d) { return { id: d.id, name: d.name }; }), items: items, series: series };
+      return P.demoKd.withKdFrom(env, { ok: true, today: cx.today, threshold: cx.T, weeks: per.weeks, from: per.from, to: per.to, week: top.week, tiles: top.tiles, counts: top.counts,
+        departments: cx.deps.map(function (d) { return { id: d.id, name: d.name }; }), items: items, series: series });
     }
   };
 

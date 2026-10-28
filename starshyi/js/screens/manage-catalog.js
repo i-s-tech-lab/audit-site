@@ -1,6 +1,7 @@
 (function (root) {
   'use strict';
   var P = root.P, H = P.sr.h, esc = P.esc, M = P.srMg;
+  var UNKNOWN_DT = 'DT_UNKNOWN';   // «Без типу» — відділ перенесено зі старої системи без типу (v1.6)
   var q = M.q, qa = M.qa, da = M.da, W = M.W;
 
   function selBar(n, words) {
@@ -38,12 +39,13 @@
         '<div class="mg-deps">' + data.departments.map(depRow).join('') + '</div></section>' +
         '<section class="card" style="flex:2 1 520px;min-width:0">' + (!d ? H.empty('Відділів немає', '') :
           '<div class="card-head" style="flex-wrap:wrap"><div style="flex:1;min-width:200px"><h3 class="card-title">Вироби · ' + esc(d.name) + '</h3><p class="hint">' + M.cnt(list.length, W.prod) + ' · ' + (d.active ? d.shown + ' у формі аудиту' : 'відділ вимкнено') + '</p></div>' +
-          '<div class="mg-actions">' + (list.length > 1 ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-merge">' + P.ic('merge', 'ui-icon--sm') + 'Обʼєднати…</button>' : '') +
+          '<div class="mg-actions">' + (list.length > 1 && M.mergeOk() ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-merge">' + P.ic('merge', 'ui-icon--sm') + 'Обʼєднати…</button>' : '') +
           '<button class="btn btn--primary btn--sm" type="button" data-act="mg-new">' + P.ic('add') + 'Новий виріб</button></div></div>' +
           (d.active ? '' : M.banner('warn', 'Відділ вимкнено — його виробів у формі аудиту зараз немає.', '')) +
+          (d.deptTypeId === UNKNOWN_DT ? M.banner('warn', 'Тип відділу не вказано — його перенесено зі старої системи без типу.', 'Вкажіть тип: меню «⋯» біля відділу → «Вказати тип відділу».') : '') +
           (list.length ? '<div class="tbl-box"><table class="tbl"><thead><tr><th>' + M.ck(allOn, 'mg-sel-all', '', 'Позначити всі') + '</th><th>Виріб</th><th class="n">В аудитах цеху' + M.hq('sr.mg.inAudits') + '</th><th><span class="mg-vh">Дії</span></th></tr></thead><tbody>' +
             list.map(prodRow).join('') + '</tbody></table></div>' : H.empty('Виробів ще немає', '')) +
-          (ids.length ? selBar(ids.length, W.prod) : '') +
+          (ids.length && M.mergeOk() ? selBar(ids.length, W.prod) : '') +
           '<p class="hint">Список виробів спільний для всіх цехів.</p>') + '</section></div>';
     }
 
@@ -53,6 +55,22 @@
       M.ask({ title: 'Перейменувати відділ', sub: d.name, name: 'name', label: 'Назва відділу', value: d.name, attrs: ' autocomplete="off" maxlength="40"',
         save: function (val) { return saveDept({ id: d.id, name: val }); },
         done: function (r) { P.toast('ok', 'Відділ перейменовано · ' + d.name + ' → ' + r.name); afterDept(); } });
+    }
+    function setType(d) {
+      var types = data.deptTypes.filter(function (t) { return t.id !== UNKNOWN_DT; });
+      M.modal({ size: 'sm', title: 'Вказати тип відділу', sub: esc(d.name),
+        body: '<div class="mg-form"><label class="field" data-f="deptTypeId"><span class="label">Тип відділу</span><select class="input" name="deptTypeId">' +
+          types.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>'; }).join('') + '</select>' +
+          '<span class="hint">Від типу залежить, які вироби й види браку будуть у формі аудиту цього відділу. Вказати можна один раз.</span></label></div>',
+        foot: M.cancelBtn() + '<button class="btn btn--primary" type="button" data-act="mg-save">' + P.ic('save') + 'Зберегти</button>',
+        on: { 'mg-save': function (t, e, layer) {
+          t.disabled = true;
+          saveDept({ id: d.id, deptTypeId: M.val(layer.el, 'deptTypeId') }).then(function (r) {
+            t.disabled = false;
+            if (!r.ok) { M.showErrors(layer.el, r); return; }
+            layer.close(); P.toast('ok', 'Тип відділу вказано · ' + r.name); afterDept();
+          });
+        } } });
     }
     function norm(d) {
       M.ask({ title: 'Норма вибірки на день', sub: d.name, name: 'sampleTarget', label: 'Скільки штук перевірити за день', value: d.sampleTarget || '', help: 'term.sample',
@@ -141,13 +159,14 @@
     v.ctx.on('mg-dep-menu', function (t) {
       var d = findD(t.getAttribute('data-id'));
       M.rowMenu(t, [{ act: 'rename', ic: 'edit', title: 'Перейменувати' },
+        d.deptTypeId === UNKNOWN_DT ? { act: 'type', ic: 'edit', title: 'Вказати тип відділу', sub: 'зараз — «' + d.deptTypeName + '»' } : null,
         { act: 'norm', ic: 'target', title: 'Норма вибірки на день', sub: d.sampleTarget ? H.num(d.sampleTarget) + ' шт' : 'не задано' }, 'sep',
         d.active ? { act: 'power', ic: 'power', title: 'Вимкнути', sub: 'прибрати з форми аудиту', danger: true } : { act: 'power', ic: 'power', title: 'Увімкнути', sub: 'повернути у форму аудиту' }],
-        { rename: function () { rename(d); }, norm: function () { norm(d); }, power: function () { power(d); } });
+        { rename: function () { rename(d); }, type: function () { setType(d); }, norm: function () { norm(d); }, power: function () { power(d); } });
     });
     v.ctx.on('mg-prod-menu', function (t) {
       var x = findP(t.getAttribute('data-id'));
-      M.rowMenu(t, [{ act: 'edit', ic: 'edit', title: 'Редагувати' }, prods().length > 1 ? { act: 'merge', ic: 'merge', title: 'Обʼєднати з іншим…' } : null, 'sep', showItem(x.active)],
+      M.rowMenu(t, [{ act: 'edit', ic: 'edit', title: 'Редагувати' }, prods().length > 1 && M.mergeOk() ? { act: 'merge', ic: 'merge', title: 'Обʼєднати з іншим…' } : null, 'sep', showItem(x.active)],
         { edit: function () { openEdit(x); }, merge: function () { merge([x.id]); }, show: function () { showProd(x); } });
     });
     v.ctx.on('mg-sel', function (t) { var id = t.getAttribute('data-id'); st.sel[id] = !st.sel[id]; draw(); });
@@ -186,10 +205,10 @@
       var list = shown();
       return list.length ? list.map(row).join('') : '<tr><td colspan="6">' + H.empty('Нічого не знайдено', '') + '</td></tr>';
     }
-    function bar() { var n = selIds().length; return n ? selBar(n, W.kind) : ''; }
+    function bar() { var n = selIds().length; return n && M.mergeOk() ? selBar(n, W.kind) : ''; }
     function draw() {
       v.col.innerHTML = M.head('Види браку', 'У кожного виду — рівень. Список спільний для всіх цехів.',
-        '<div class="mg-actions"><button class="btn btn--secondary" type="button" data-act="mg-merge">' + P.ic('merge') + 'Обʼєднати…</button>' + M.btnNew('Новий вид браку') + '</div>') +
+        '<div class="mg-actions">' + (M.mergeOk() ? '<button class="btn btn--secondary" type="button" data-act="mg-merge">' + P.ic('merge') + 'Обʼєднати…</button>' : '') + M.btnNew('Новий вид браку') + '</div>') +
         '<div class="kpis mg-kpis3" role="group" aria-label="Фільтр за рівнем браку">' + [['fix', 'Неправильно зроблене', 'можна виправити одразу'], ['repair', 'Пошкоджене', 'іде в ремонт'], ['scrap', 'Зламане', 'не ремонтується, виріб втрачено']].map(function (k) {
           var on = st.lvl === k[0], n = levelCount(k[0]);
           return '<button class="kpi mg-lvl' + (on ? ' mg-lvl--on' : '') + '" type="button" data-act="mg-lvl"' + da('v', k[0]) + ' aria-pressed="' + on + '">' +
@@ -252,7 +271,7 @@
     v.ctx.on('mg-new', function () { openEdit(null); });
     v.ctx.on('mg-menu', function (t) {
       var x = find(t.getAttribute('data-id'));
-      M.rowMenu(t, [{ act: 'edit', ic: 'edit', title: 'Редагувати' }, { act: 'merge', ic: 'merge', title: 'Обʼєднати з іншим…' }, 'sep', showItem(x.active)],
+      M.rowMenu(t, [{ act: 'edit', ic: 'edit', title: 'Редагувати' }, M.mergeOk() ? { act: 'merge', ic: 'merge', title: 'Обʼєднати з іншим…' } : null, 'sep', showItem(x.active)],
         { edit: function () { openEdit(x); }, merge: function () { merge([x.id]); }, show: function () { show(x); } });
     });
     v.ctx.on('mg-q', function (t) { st.q = t.value; redrawRows(); });

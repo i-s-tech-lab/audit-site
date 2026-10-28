@@ -37,7 +37,7 @@
     if (!shown) P.toast('warn', 'Не збережено', r.error);
   }
 
-  P.cab.tab({ id: 'team', label: 'Люди', ic: 'people', path: '/team', order: 60 });
+  P.cab.tab({ id: 'team', label: 'Люди', ic: 'people', path: '/team', order: 60, real: true });   // real — працює і на справжньому сервері
   P.cab.screen('/team', { tab: 'team', title: 'Люди й доступ', render: function (ctx) {
     var data = null, locs = [], TR = P.teamRequests;
     var reqs = TR.create({ box: function () { return q(ctx.el, '[data-tr-box]'); }, alive: ctx.alive });   // v1.1: картка «Хочуть увійти»
@@ -186,6 +186,7 @@
     ctx.on('tm-new', function () { openEdit(null); });
     ctx.on('tm-edit', function (t) { openEdit(find(t.getAttribute('data-id'))); });
     ctx.on('tr-add', function (t) { var rq = reqs.find(t.getAttribute('data-id')); if (rq && canAdd()) openEdit(null, rq); });   // v1.1: «Додати» в картці запитів
+    ctx.on('tr-reject', function (t) { P.teamRequests.reject(reqs.find(t.getAttribute('data-id'))).then(function (ok) { if (ok && ctx.alive()) reqs.refresh(); }); });   // v1.2
     ctx.on('tm-access', access);
     ctx.on('tm-q', function (t) { flt.q = t.value; list(); });
     ctx.on('tm-loc', function (t) { flt.loc = t.value; list(); });

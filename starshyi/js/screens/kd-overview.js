@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   var P = root.P, esc = P.esc, K = P.srKd, B = K.board;
-  var OUT = { helped: 'тримається', held_types: 'її види нижче', not_needed: 'не потрібна' };
+  var OUT = { helped: 'тримається', held_types: 'її види нижче', not_needed: 'не потрібна', self_closed: 'без участі старшого' };
 
   P.sr.screen('/kd', { tab: 'kd', title: 'Коригуючі дії', period: false, render: function (ctx) {
     var data = null;
@@ -13,7 +13,8 @@
       if (!ctx.alive()) return;
       if (!r.ok) { ctx.el.innerHTML = H().error(r); return; }
       data = r;
-      ctx.el.innerHTML = '<div class="kb">' + B.compactBar(r, null) + B.ruleLine(r.week && r.week.start, r.threshold, 'main') + B.tiles(r, null) + B.tilesLegend(r) +
+      if (B.kdWait(r)) { ctx.el.innerHTML = '<div class="kb">' + B.ruleLine(r.week && r.week.start, r.threshold, 'main') + B.kdFromNote(r) + '</div>'; return; }
+      ctx.el.innerHTML = '<div class="kb">' + B.compactBar(r, null) + B.ruleLine(r.week && r.week.start, r.threshold, 'main') + B.kdFromNote(r) + B.tiles(r, null) + B.tilesLegend(r) +
         counters(r) + timeline(r) +
         '<div class="kb-g2"><div class="kb-col">' + weekCard(r) + effCard(r) + '</div><div class="kb-col">' + queueCard(r) + causesCard(r) + '</div></div>' + workCard(r) + '</div>';
       B.mountCompact(ctx);
@@ -46,7 +47,8 @@
       card('rel', 'rel', 'Рецидив', c.relapse || 0, esc(rel.length ? names(rel) + ' — потрібен новий план' : 'рецидивів немає')) +
       card('obs', 'obs', 'На спостереженні', c.observe || 0, esc(obs.length ? names(obs) + (next ? ' · найближчий підсумок ≈ ' + B.wd(next) : '') : 'зараз немає')) +
       card('done', 'done', 'Закрито за 8 тижнів', tot,
-        '<b class="kb-dn">✓ ' + (cl.helped || 0) + '</b> тримається' + (cl.early ? ' (з них достроково ' + cl.early + ')' : '') + ' · <b class="kb-part">✓ ' + (cl.held_types || 0) + '</b> її види нижче · <b class="kb-zr">○ ' + (cl.not_needed || 0) + '</b> не потрібна',
+        '<b class="kb-dn">✓ ' + (cl.helped || 0) + '</b> тримається' + (cl.early ? ' (з них достроково ' + cl.early + ')' : '') + ' · <b class="kb-part">✓ ' + (cl.held_types || 0) + '</b> її види нижче · <b class="kb-zr">○ ' + (cl.not_needed || 0) + '</b> не потрібна' +
+          (cl.self_closed ? ' · <b class="kb-dn">✓ ' + cl.self_closed + '</b> без участі старшого' : ''),
         tot ? '<span class="kb-kc__bar" role="img" aria-label="' + esc(cl.helped + ' тримається, ' + cl.held_types + ' її види нижче, ' + cl.not_needed + ' не потрібна') + '"><i class="kb-kc__b1" style="--w:' + w(cl.helped || 0) + '%"></i>' +
           '<i class="kb-kc__b2" style="--w:' + w(cl.held_types || 0) + '%"></i><i class="kb-kc__b3" style="--w:' + w(cl.not_needed || 0) + '%"></i></span>' : '') + '</div>';
   }
@@ -64,6 +66,8 @@
       title = (v === 'open' ? 'Без плану · ' : 'Рецидив · ') + list.length;
       sub = v === 'open' ? 'дії, де ще немає впровадженого плану' : 'план не допоміг — потрібен новий';
       rows = list.map(function (x) { return lrow(B.href(x.departmentId, x.key), x.departmentName + ' №' + x.no, qTag(x, r.today), v === 'open' ? 'kb-t-open' : 'kb-t-rel', qChips(x), planBtn(x, v === 'open' ? 'Записати план ›' : 'Записати новий план ›')); }).join('');
+      var an = list.filter(function (x) { return x.analysis; }).length;
+      if (an) sub += ' · аналіз іде: ' + an;
     } else if (v === 'obs') {
       var obs = observing(r), up = r.upcoming || [];
       title = 'На спостереженні · ' + obs.length; sub = 'план впроваджено — дивимось 14 днів, коли у відділі були аудити';
@@ -78,7 +82,7 @@
       sub = e.from && e.to ? B.day(e.from) + ' — ' + B.day(e.to) : '';
       rows = e.items.map(function (x) {
         var dep = B.depOfKey(x.key);
-        return lrow(B.href(dep, x.key), x.departmentName + ' №' + x.no, B.day(x.openedAt) + ' → ' + B.day(x.finishedOn) + ' · ' + (x.early ? 'закрито достроково' : OUT[x.outcome] || ''), 'kb-t-' + x.outcome,
+        return lrow(B.href(dep, x.key), x.departmentName + ' №' + x.no, B.day(x.openedAt) + ' → ' + B.day(x.finishedOn) + ' · ' + (x.early ? 'закрито достроково' : x.outcome === 'self_closed' ? 'закрито без участі старшого' : OUT[x.outcome] || ''), 'kb-t-' + x.outcome,
           ['види браку в дії ' + B.arrow(x.before, x.after)], goBtn(B.href(dep, x.key)));
       }).join('');
     }
@@ -86,12 +90,13 @@
       on: { 'kb-plan': function (t) { m.close(); K.openPlan(ctx, B.refOf(t)); } } });
   }
 
-  var SEG = { early: 'kb-sg--early', open: 'kb-sg--open', wait: 'kb-sg--wait', extra: 'kb-sg--extra', week1: 'kb-sg--w1', week2: 'kb-sg--w2', quiet: 'kb-sg--quiet', relapse: 'kb-sg--rel' };
+  var SEG = { early: 'kb-sg--early', open: 'kb-sg--open', analysis: 'kb-sg--analysis', wait: 'kb-sg--wait', extra: 'kb-sg--extra', week1: 'kb-sg--w1', week2: 'kb-sg--w2', quiet: 'kb-sg--quiet', relapse: 'kb-sg--rel' };
   var MARK = { helped: ['✓', 'kb-mk--done', 'тримається'], held_types: ['✓', 'kb-mk--part', 'її види нижче'], relapse: ['✕', 'kb-mk--rel', ''], not_needed: ['○', 'kb-mk--skip', 'не потрібна'],
-    early: ['✓', 'kb-mk--done kb-mk--early', 'закрито достроково'] };
+    early: ['✓', 'kb-mk--done kb-mk--early', 'закрито достроково'], self_closed: ['✓', 'kb-mk--alone', 'без участі старшого'] };
   var TAG = { early: 'достроково', parallel: 'паралельна', repeat: 'повторна' };
   function segTexts(s, T) {
     if (s.kind === 'open') return ['без плану'];
+    if (s.kind === 'analysis') return ['аналіз · план ще не записано', 'аналіз', ''];
     if (s.kind === 'wait') return ['впроваджено ' + B.day(s.from), 'план ' + B.day(s.from)];
     if (s.kind === 'extra') return ['до розбору · дні не рахуються', 'до розбору', ''];
     if (s.kind === 'quiet') return s.running ? ['тихий нагляд · йде', 'тихий нагляд', 'нагляд'] : ['тихий нагляд', 'нагляд'];
@@ -146,7 +151,9 @@
       (rows || '<p class="kb-cs kb-tl__none">За ці тижні дій не було.</p>') + '</div></div>' +
       B.legend([['<i class="kb-sw kb-sg--early"></i>', 'відкрито достроково'], ['<i class="kb-sw kb-sg--open"></i>', 'без плану'], ['<i class="kb-sw kb-sg--extra"></i>', 'план є, до розбору — дні не рахуються'],
         ['<i class="kb-sw kb-sg--w1"></i>', 'дні 1–7 після плану'], ['<i class="kb-sw kb-sg--w2"></i>', 'дні 8–14'], ['<i class="kb-sw kb-sg--quiet"></i>', 'тихий нагляд після дострокового закриття'],
+        ['<i class="kb-sw kb-sg--analysis"></i>', 'аналіз — шукають причину'],
         ['<i class="kb-sw kb-sg--rel"></i>', 'рецидив — потрібен новий план'], ['<i class="kb-mk kb-mk--done kb-mk--lg">✓</i>', 'тримається'], ['<i class="kb-mk kb-mk--done kb-mk--early kb-mk--lg">✓</i>', 'закрито достроково'],
+        ['<i class="kb-mk kb-mk--alone kb-mk--lg">✓</i>', 'закрито без участі старшого'],
         ['<i class="kb-mk kb-mk--rel kb-mk--lg">✕</i>', 'рецидив'], ['<i class="kb-ln kb-ln--today"></i>', 'сьогодні']]);
     return B.card('Дії по тижнях · ' + K.range(tl.from, tl.to), 'kd.b.timeline', 'число на смузі — брак за ці дні · натисніть рядок — сторінка цієї дії', body);
   }
@@ -177,7 +184,7 @@
     return B.card('Брак відділів за тиждень ' + K.range(w.start, w.end), 'kd.b.week', 'різниця — у відсоткових пунктах', body);
   }
 
-  var ICO = { helped: ['✓', 'kb-mk--done'], held_types: ['✓', 'kb-mk--part'], not_needed: ['○', 'kb-mk--skip'] };
+  var ICO = { helped: ['✓', 'kb-mk--done'], held_types: ['✓', 'kb-mk--part'], not_needed: ['○', 'kb-mk--skip'], self_closed: ['✓', 'kb-mk--alone'] };
   function effCard(r) {
     var e = r.efficiency || { items: [] }, items = e.items || [];
     var vals = [];
@@ -188,7 +195,7 @@
     for (var i = 0; i <= max; i++) ticks.push('<span>' + i + '%</span>');
     var rows = items.map(function (it) {
       var k = ICO[it.outcome] || ICO.helped, lo = it.before != null && it.after != null ? Math.min(it.before, it.after) : null, hi = lo != null ? Math.max(it.before, it.after) : null;
-      return '<span class="kb-ef__n"><i class="kb-mk kb-mk--lg ' + k[1] + (it.early ? ' kb-mk--early' : '') + '">' + k[0] + '</i><span><b>' + esc(it.departmentName + ' №' + it.no) + '</b><span class="kb-cs">' + B.day(it.openedAt) + ' → ' + B.day(it.finishedOn) + ' · ' + (it.early ? 'закрито достроково' : OUT[it.outcome] || '') + '</span></span></span>' +
+      return '<span class="kb-ef__n"><i class="kb-mk kb-mk--lg ' + k[1] + (it.early ? ' kb-mk--early' : '') + '">' + k[0] + '</i><span><b>' + esc(it.departmentName + ' №' + it.no) + '</b><span class="kb-cs">' + B.day(it.openedAt) + ' → ' + B.day(it.finishedOn) + ' · ' + (it.early ? 'закрито достроково' : it.outcome === 'self_closed' ? 'закрито без участі старшого' : OUT[it.outcome] || '') + '</span></span></span>' +
         '<span class="kb-ef__trk">' + (lo != null ? '<i class="kb-ef__ln' + (it.outcome === 'not_needed' ? ' kb-ef__ln--skip' : it.after > it.before ? ' kb-ef__ln--up' : '') + '" style="--at:' + x(lo) + '%;--w:' + (x(hi) - x(lo)).toFixed(2) + '%"></i>' : '') +
         (it.before != null ? '<i class="kb-ef__b" style="--at:' + x(it.before) + '%"></i>' : '') + (it.after != null ? '<i class="kb-ef__a' + (it.outcome === 'not_needed' ? ' kb-ef__a--skip' : '') + '" style="--at:' + x(it.after) + '%"></i>' : '') + '</span>' +
         '<span class="kb-r">' + B.arrow(it.before, it.after) + '</span>';
@@ -196,14 +203,14 @@
     var avg = e.avg && e.avg.before != null ? '<b class="kb-ef__tot">У середньому</b><span class="kb-ef__tot"></span><span class="kb-r kb-ef__tot">' + B.arrow(e.avg.before, e.avg.after) + '</span>' : '';
     var body = items.length ? '<div class="kb-ef" role="table" aria-label="Види браку в дії до і після для закритих дій"><span class="kb-cs">Дія · відкрито → закрито</span><span class="kb-ef__ax">' + ticks.join('') + '</span>' +
       '<span class="kb-cs kb-r">види браку в дії: до → після</span>' + rows + avg + '</div>' +
-      B.legend([['<i class="kb-ef__kb"></i>', 'до дії'], ['<i class="kb-ef__ka"></i>', 'після'], ['<i class="kb-ln kb-ln--less"></i>', 'менше'], ['<i class="kb-mk kb-mk--done kb-mk--early kb-mk--lg">✓</i>', 'закрито достроково'], ['<i class="kb-mk kb-mk--skip kb-mk--lg">○</i>', 'дія не потрібна']])
+      B.legend([['<i class="kb-ef__kb"></i>', 'до дії'], ['<i class="kb-ef__ka"></i>', 'після'], ['<i class="kb-ln kb-ln--less"></i>', 'менше'], ['<i class="kb-mk kb-mk--done kb-mk--early kb-mk--lg">✓</i>', 'закрито достроково'], ['<i class="kb-mk kb-mk--alone kb-mk--lg">✓</i>', 'без участі старшого'], ['<i class="kb-mk kb-mk--skip kb-mk--lg">○</i>', 'дія не потрібна']])
       : '<p class="kb-cs">За 8 тижнів закритих дій немає.</p>';
     return B.card('Ефективність закритих дій · 8 тижнів', 'kd.b.eff', e.from && e.to ? B.day(e.from) + ' — ' + B.day(e.to) : '', body);
   }
 
   function qTag(x, today) {
-    if (x.kind === 'relapse') return 'рецидив · потрібен новий план';
-    var tags = [x.early ? 'достроково' : '', x.parallel ? 'паралельна' : ''].filter(Boolean);
+    if (x.kind === 'relapse') return 'рецидив · потрібен новий план' + (x.analysis ? ' · ' + B.anText(x) : '');
+    var tags = [x.early ? 'достроково' : '', x.parallel ? 'паралельна' : '', B.anText(x)].filter(Boolean);
     return tags.concat([x.openedAt === today ? 'сьогодні' : 'відкрито ' + B.day(x.openedAt)]).join(' · ');
   }
   function qChips(x) {
@@ -225,7 +232,8 @@
     var rows = q.map(function (x) {
       var href = B.href(x.departmentId, x.key);
       return '<div class="kb-q kb-q--' + (x.kind === 'relapse' ? 'rel' : 'open') + '"><a class="kb-q__a" href="' + href + '"><b>' + esc(x.departmentName + ' №' + x.no) + '</b><span class="kb-cs">' + esc(qTag(x, r.today)) + '</span></a>' +
-        (r.canWrite ? '<button type="button" class="kb-go" data-act="kb-plan"' + B.ref(x) + '>Записати план ›</button>' : '<span></span>') +
+        (r.canWrite ? '<span class="kb-q__b"><button type="button" class="kb-out kb-out--sm" data-act="kb-an"' + B.ref(x) + '>' + (x.analysis ? 'Нотатка аналізу' : 'Почати аналіз') + '</button>' +
+          '<button type="button" class="kb-go" data-act="kb-plan"' + B.ref(x) + '>Записати план ›</button></span>' : '<span></span>') +
         '<span class="kb-mchips">' + qChips(x).map(function (c) { return '<span class="kb-mchip">' + c + '</span>'; }).join('') + '</span></div>';
     }).join('');
     var up = (r.upcoming || []).map(function (u) {
@@ -236,8 +244,8 @@
         closeChip(u).map(function (x) { return '<span class="kb-mchip kb-mchip--q">' + x + '</span>'; }).join('') + '</span></a>';
     }).join('');
     var closed = (r.recentClosed || []).map(function (c) {
-      var k = c.outcome === 'helped' ? 'done' : c.outcome === 'held_types' ? 'part' : 'skip';
-      return '<a class="kb-chipl" href="' + B.href(B.depOfKey(c.key), c.key) + '">' + B.chip(k, (k === 'skip' ? '○ ' : '✓ ') + esc(c.departmentName + ' №' + c.no + ' · ' + (c.early ? 'закрито достроково' : OUT[c.outcome] || '') + ' · ' + B.day(c.day))) + '</a>';
+      var k = c.outcome === 'helped' || c.outcome === 'self_closed' ? 'done' : c.outcome === 'held_types' ? 'part' : 'skip';
+      return '<a class="kb-chipl" href="' + B.href(B.depOfKey(c.key), c.key) + '">' + B.chip(k, (k === 'skip' ? '○ ' : '✓ ') + esc(c.departmentName + ' №' + c.no + ' · ' + (c.early ? 'закрито достроково' : c.outcome === 'self_closed' ? 'закрито без участі старшого' : OUT[c.outcome] || '') + ' · ' + B.day(c.day))) + '</a>';
     }).join('');
     var body = (rows || '<p class="kb-cs">Дій без плану немає.</p>') +
       (up ? '<span class="kb-sub">НАЙБЛИЖЧІ РЕЗУЛЬТАТИ</span>' + up : '') +
@@ -274,8 +282,8 @@
   function kdLabel(kd, today) {
     var op = kd.openedAt === today ? 'відкрито сьогодні' : 'відкрито ' + B.day(kd.openedAt);
     if (kd.phase === 'observe') return op + ' · на спостереженні · ' + B.obsText(kd);
-    if (kd.phase === 'relapse') return op + (kd.relapseDay ? ' · рецидив ' + B.day(kd.relapseDay) : ' · рецидив');
-    return [op, 'без плану', kd.parallel ? 'паралельна' : '', kd.early ? 'достроково' : ''].filter(Boolean).join(' · ');
+    if (kd.phase === 'relapse') return op + (kd.relapseDay ? ' · рецидив ' + B.day(kd.relapseDay) : ' · рецидив') + (kd.analysis ? ' · ' + B.anText(kd) : '');
+    return [op, kd.analysis ? B.anText(kd) : 'без плану', kd.parallel ? 'паралельна' : '', kd.early ? 'достроково' : ''].filter(Boolean).join(' · ');
   }
   function kdBlock(d, kd, today) {
     var kind = B.kindOf(kd.phase), types = kd.types || [], late = kd.startIdx != null && kd.startIdx >= (kd.weeks || []).length - 1;

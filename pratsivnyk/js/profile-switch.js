@@ -31,10 +31,11 @@
       return r.ok;
     });
   }
-  function open(role, locationId) {
+  function open(role, locationId, hash) {
     var p = byRole(role);
     if (!p) return Promise.resolve(false);
-    return (locationId ? setLoc(locationId) : Promise.resolve(true)).then(function (ok) { if (ok) root.location.href = p.path; return ok; });
+    var to = p.path + (hash ? '#' + String(hash).replace(/^#/, '') : '');
+    return (locationId ? setLoc(locationId) : Promise.resolve(true)).then(function (ok) { if (ok) root.location.href = to; return ok; });
   }
 
   function bind(el) {
@@ -57,7 +58,7 @@
   P.profileSwitch = { PROFILES: PROFILES, html: html, bind: bind, open: open, busy: null };
 
   if (root.addEventListener && !P.embed) root.addEventListener('storage', function (e) {
-    if (e.key !== 'audit-demo:demo:admin') return;
+    if (e.key !== 'audit-demo:demo:admin' && e.key !== 'audit:view-loc') return;   // v1.4: у справжньому режимі локацію «як профіль» тримає 'audit:view-loc'
     if (P.profileSwitch.busy && P.profileSwitch.busy()) { P.toast('warn', 'Вхід змінили в іншій вкладці', 'Закрийте це вікно й оновіть сторінку — інакше дані запишуться від іншого імені.'); return; }
     root.location.hash = ''; root.location.reload();
   });

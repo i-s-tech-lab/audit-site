@@ -19,11 +19,11 @@
         '<button class="ui-seg__btn" type="button" data-theme-set="dark" aria-pressed="' + dark + '">' + P.ic('theme-dark') + 'Темна</button>' +
         '<button class="ui-seg__btn" type="button" data-theme-set="light" aria-pressed="' + !dark + '">' + P.ic('theme-light') + 'Світла</button></div></section>' +
         '<button class="ui-btn ui-btn--secondary home-cta" type="button" data-act="logout">' + P.ic('logout') + 'Вийти</button>' +
-        '<section class="ui-card"><h2 class="card-title">Тестова версія</h2><p class="card-sub">Записані аудити лежать лише в цьому браузері.</p>' +
+        (P.authSlack.real() ? '' : '<section class="ui-card"><h2 class="card-title">Тестова версія</h2><p class="card-sub">Записані аудити лежать лише в цьому браузері.</p>' +
         (P.offline && P.offline.canSimulate() ? '<div class="row"><label class="ui-switch"><input type="checkbox" role="switch" data-act="sim-offline"' + (P.offline.simulated() ? ' checked' : '') + '>' +
           '<span class="ui-switch__track"></span>Тест: ніби немає звʼязку</label>' + P.help.btn('w.profile.sim') + '</div>' +
           '<p class="card-sub">Увімкнено — аудити лишаються на телефоні, ніби немає інтернету. Коли вимкнете, вони надішлються самі.</p>' : '') +
-        '<button class="ui-btn ui-btn--quiet" type="button" data-act="reset">' + P.ic('refresh') + 'Скинути тестові дані</button></section></div>';
+        '<button class="ui-btn ui-btn--quiet" type="button" data-act="reset">' + P.ic('refresh') + 'Скинути тестові дані</button></section>') + '</div>';
     },
     mount: function (el) {
       P.profileSwitch.bind(el);

@@ -86,7 +86,7 @@
       select('product', 'Виріб', 'Усі вироби', o.products.map(function (x) { return [x, x]; })) +
       select('defect', 'Вид браку', 'Усі види браку', o.defects.map(function (x) { return [x, x]; })) +
       select('worker', 'Працівник', 'Усі працівники', o.workers.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'uk'); }).map(function (w) { return [w.code, w.name]; })) +
-      select('auditor', 'Аудитор', 'Усі аудитори', o.auditors.map(function (u) { return [u.id, u.name]; })) +
+      select('auditor', 'Аудитор', 'Усі аудитори', o.auditors.map(function (u) { return [u.id, u.name + (u.legacy ? ' · ще не в новій системі' : '')]; })) +
       '<label class="field hs-f hs-f--q' + (hf.q ? ' hs-f--on' : '') + '"><span class="label">Пошук' + MARK + '</span><span class="search">' + h.ic('search', 'icon') +
       '<input class="input" data-input="hs-q" value="' + esc(hf.q) + '" placeholder="AUD-…, виріб, № замовлення, працівник"></span></label></div>' +
       '<div class="hs-modes" role="group" aria-label="Лише аудити"><span class="label">Лише аудити:' + A.q('sr.hs.modes') + '</span>' +
@@ -142,7 +142,7 @@
       }
       var it = a.items, first = it[0] || { productName: '—' };
       rows += '<tr data-act="hs-open" data-id="' + esc(a.id) + '"' + (a.over ? ' class="exceed"' : '') + '><td><b>' + P.fmt.time(a.createdAt) + '</b><span class="sub">' +
-        (a.auditorRole === 'senior_auditor' ? 'старший: ' : a.auditorRole === 'admin' ? 'адміністратор: ' : 'аудитор: ') + esc(a.auditorName) + '</span></td><td>' + esc(a.departmentName) + '</td>' +
+        (a.auditorRole === 'senior_auditor' ? 'старший: ' : a.auditorRole === 'admin' ? 'адміністратор: ' : 'аудитор: ') + esc(a.auditorName) + (a.auditorLegacy ? ' (ще не в новій системі)' : '') + '</span></td><td>' + esc(a.departmentName) + '</td>' +
         '<td>' + esc(first.productName + (first.orderNo ? ' · ' + first.orderNo : '')) + it.slice(1).map(function (x) { return '<span class="sub">' + esc(x.productName + (x.orderNo ? ' · ' + x.orderNo : '')) + '</span>'; }).join('') + '</td>' +
         '<td class="n">' + h.num(a.checked) + '</td>' + (df ? '<td class="n"><b>' + h.num(a.defectPieces) + '</b></td>' : '') +
         '<td class="n"><' + (df ? 'span' : 'b') + (a.over ? ' style="color:var(--danger)"' : '') + '>' + a.rejected + '</' + (df ? 'span' : 'b') + '><span class="sub">' + h.pct(a.pct) + (a.over ? ' · понад норму' : '') + '</span></td>' +

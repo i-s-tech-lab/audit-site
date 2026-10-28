@@ -53,7 +53,7 @@
   function row(env, a, defect) {
     var ix = env.ix, checked = C.checkedOf(a), rejected = C.rejectedOf(a), au = ix.user[a.auditorId];
     var o = { id: a.id, createdAt: a.createdAt, day: a.day, departmentId: a.departmentId, departmentName: nm(ix.dep, a.departmentId, a.departmentId),
-      auditorName: au ? au.name : a.auditorId, auditorRole: au ? au.role : null,
+      auditorName: au ? au.name : a.auditorId, auditorRole: au ? au.role : null, auditorLegacy: !!(au && au.legacy),
       items: a.items.map(function (i) { return { productName: nm(ix.prod, i.productId, 'Невідомий виріб'), orderNo: i.orderNo || null }; }),
       checked: checked, rejected: rejected, pct: C.pct(rejected, checked), over: C.pct(rejected, checked) > env.db.settings.criticalPct,
       photos: a.defects.reduce(function (n, d) { return n + (Array.isArray(d.photos) && d.photos.length ? d.photos.length : d.photo ? 1 : 0); }, 0), hasComment: !!a.comment, edited: !!a.updatedAt };
@@ -145,7 +145,7 @@
           workers: env.db.workers.filter(function (w) { return w.locationId === loc.id; }).map(function (w) { return { code: w.code, name: w.name }; })
             .sort(function (a, b) { return a.code < b.code ? -1 : 1; }),
           auditors: env.db.users.filter(function (u) { return auditorIds[u.id] || ((u.role === 'auditor' || u.role === 'senior_auditor') && u.locationIds.indexOf(loc.id) >= 0); })
-            .map(function (u) { return { id: u.id, name: u.name }; }) },
+            .map(function (u) { return { id: u.id, name: u.name, legacy: u.legacy === true }; }) },
         trash: trashLive(env).filter(function (t) { return t.locationId === loc.id; }).sort(function (a, b) { return a.deletedAt < b.deletedAt ? 1 : -1; })
           .map(function (t) { return { id: t.id, deletedAt: t.deletedAt, reason: t.reason, byName: nm(ix.user, t.by, t.by), audit: t.audit }; }) };
     },
@@ -169,7 +169,7 @@
       return { ok: true, id: a.id, deletedAt: entry.deletedAt, trashCount: trashLive(env).filter(function (t) { return t.locationId === a.locationId; }).length };
     },
 
-    srHistReload: function (p, me, env) { env.reload(); return { ok: true }; },
+    srHistReload: function (p, me, env) { if (!env.real) env.reload(); return { ok: true }; },
 
     srAuditRestore: function (p, me, env) {
       if (!S.canManage(me)) return C.forbidden();

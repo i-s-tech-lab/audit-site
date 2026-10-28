@@ -110,7 +110,7 @@
   }
   function loadPlate(b) {
     var cx = b.cx, segs = b.all.map(function (a) { return B.segsOf(cx, a); }), weeks = [];
-    var KIND = { open: 'open', early: 'open', relapse: 'relapse', extra: 'observe', week1: 'observe', week2: 'observe' };
+    var KIND = { open: 'open', early: 'open', analysis: 'open', relapse: 'relapse', extra: 'observe', week1: 'observe', week2: 'observe' };   // v1.3: аналіз — без плану
     for (var n = cx.L + 2 - LOAD_WEEKS; n <= cx.L + 1; n++) {
       var s = cx.start(n), e = cx.end(n), w = { start: s, end: e, current: n > cx.L, open: 0, relapse: 0, observe: 0, total: 0 };
       segs.forEach(function (list) {

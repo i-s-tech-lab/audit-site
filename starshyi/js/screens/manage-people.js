@@ -100,6 +100,7 @@
     v.ctx.on('mg-new', function () { if (canAdd()) openEdit(null); });
     v.ctx.on('mg-edit', function (t) { openEdit(find(t.getAttribute('data-id'))); });
     v.ctx.on('tr-add', function (t) { var rq = reqs.find(t.getAttribute('data-id')); if (rq && canAdd()) openEdit(null, rq); });   // v1.7: «Додати» в картці запитів
+    v.ctx.on('tr-reject', function (t) { P.teamRequests.reject(reqs.find(t.getAttribute('data-id'))).then(function (ok) { if (ok && v.ctx.alive()) reqs.refresh(); }); });   // v1.8
     v.ctx.on('mg-access', function (t) {
       var u = find(t.getAttribute('data-id'));
       function go() {

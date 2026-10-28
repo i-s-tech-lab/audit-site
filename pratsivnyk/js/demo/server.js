@@ -11,6 +11,7 @@
   var SCHEMA = '1';
   P.demoGenHooks = P.demoGenHooks || []; P.demoLoadHooks = P.demoLoadHooks || [];
   P.demoApis = P.demoApis || []; P.demoResetKeys = P.demoResetKeys || [];
+  P.demoSysApi = P.demoSysApi || {};
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
 
   function memoryStore() {
@@ -52,7 +53,9 @@
     var seed = opts.seed == null ? 20261007 : opts.seed;
     var today = opts.today || P.fmt.dayKey(now());
     var failQueue = Object.create(null);
-    var env = { db: null, ix: null, storage: storage, now: now, today: today, reload: function () { load(); }, day: function () { return P.fmt.dayKey(now()); },
+    var REAL = opts.real === true;   // v1.11: справжній сервер (двигун) — дані з бази, жодних вигаданих доповнень
+    var generate = typeof opts.generate === 'function' ? opts.generate : P.demoGenerate;
+    var env = { db: null, ix: null, storage: storage, now: now, today: today, real: REAL, reload: function () { load(); }, day: function () { return P.fmt.dayKey(now()); },
       audits: function () { var t = now().toISOString(); return env.db.audits.filter(function (a) { return a.createdAt <= t; }); } };
     var meId = null, loggedAt = null; // loggedAt — ISO-час входу; сесія старша за SESSION_DAYS = вихід
     var KEY_ME = opts.sessionKey || P.demoSessionKey || 'demo:me';
@@ -61,19 +64,20 @@
     var adminS = null;
 
     function load() {
-      if (storage.get('demo:schema', null) !== SCHEMA) {
+      if (!REAL && storage.get('demo:schema', null) !== SCHEMA) {
         storage.del('demo:audits:new'); storage.del('demo:wishes:done');
         storage.set('demo:schema', SCHEMA);
       }
-      var db = P.demoGenerate({ today: today, seed: seed });
-      P.demoGenHooks.forEach(function (h) { h(db, { today: today, seed: seed }); });
+      var db = generate({ today: today, seed: seed });
+      if (!REAL) P.demoGenHooks.forEach(function (h) { h(db, { today: today, seed: seed }); });   // v1.11: вигадані історії — лише в демо
       var fresh = storage.get('demo:audits:new', []), freshIds = {};
+      if (REAL) { if (!P.demoLinkLegacy) throw new Error('legacy-people.js не завантажено'); P.demoLinkLegacy(db, db.audits, fresh); }
       fresh.forEach(function (a) { freshIds[a.id] = 1; });
       db.audits = db.audits.filter(function (a) { return !freshIds[a.id]; }).concat(fresh);
       var done = storage.get('demo:wishes:done', {});
       db.wishes.forEach(function (w) { if (done[w.id]) { w.status = 'done'; w.doneAuditId = done[w.id]; } });
       P.demoLoadHooks.forEach(function (h) { h(db, { storage: storage, today: today, now: now }); });
-      migrateOldPeople(db.users);
+      if (!REAL) migrateOldPeople(db.users);
       env.db = db; env.ix = C.index(db);
       meId = storage.get(KEY_ME, null);
       if (meId && (!has(env.ix.user, meId) || env.ix.user[meId].accessOff)) meId = null;
@@ -167,6 +171,27 @@
       return h(payload || {}, me, env);
     }
 
+    function handlerOf(fn) {
+      var h = has(P.demoReadApi, fn) ? P.demoReadApi[fn] : has(P.demoSubmitApi, fn) ? P.demoSubmitApi[fn] : null;
+      for (var i = 0; !h && i < P.demoApis.length; i++) if (has(P.demoApis[i], fn)) h = P.demoApis[i][fn];
+      return h;
+    }
+    function meOfUser(userId, view) {
+      var u = typeof userId === 'string' && has(env.ix.user, userId) ? env.ix.user[userId] : null;
+      if (!u || u.accessOff) return null;
+      var asRole = u.role === 'admin' && view && typeof view.role === 'string' && has(P.demoDict.roleLabels, view.role) ? view.role : null;
+      return asRole ? C.viewAs(u, env.ix, asRole, view.locationId) : C.buildMe(u, env.ix);
+    }
+    function handleAs(userId, view, fn, payload) {
+      if (typeof fn !== 'string' || has(own, fn)) return C.fail('not_found', 'Цієї дії немає. Оновіть сторінку.');
+      var me = meOfUser(userId, view);
+      if (!me) return C.auth();
+      if (fn === 'meAs') return { ok: true, me: me };
+      var h = handlerOf(fn);
+      if (!h) return C.fail('not_found', 'Цієї дії немає. Оновіть сторінку.');
+      return h(payload || {}, me, env);
+    }
+
     return {
       call: function (fn, payload) {
         var res;
@@ -186,7 +211,25 @@
         return new Promise(function (resolve) { setTimeout(function () { resolve(res); }, ms); });
       },
       reset: reset,
-      failNext: function (fn) { failQueue[fn] = true; }
+      failNext: function (fn) { failQueue[fn] = true; },
+      callAs: function (userId, view, fn, payload) {
+        try { return JSON.parse(JSON.stringify(handleAs(userId, view, fn, payload))); }
+        catch (e) {
+          if (root.console) root.console.error('[engine]', fn, (e && e.stack) || e);
+          return C.fail('server', 'Щось пішло не так. Оновіть сторінку й спробуйте ще раз.');
+        }
+      },
+      sysCall: function (fn, payload) {
+        if (typeof fn !== 'string' || !has(P.demoSysApi, fn)) return C.fail('not_found', 'Цієї дії немає.');
+        try { var out = P.demoSysApi[fn](payload || {}, env); return JSON.parse(JSON.stringify(out === undefined ? { ok: true } : out)); }
+        catch (e) {
+          if (root.console) root.console.error('[engine:sys]', fn, (e && e.stack) || e);
+          return C.fail('server', 'Щось пішло не так.');
+        }
+      },
+      reload: function () { load(); },
+      setToday: function (day) { if (typeof day === 'string' && day !== today) { today = day; env.today = day; load(); } },
+      peek: function () { return env; }
     };
   };
 

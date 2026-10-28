@@ -28,7 +28,9 @@
   }
 
   function request(x) {
-    return { id: Number(x.id), slackId: String(x.slackId == null ? '' : x.slackId), name: x.name || '', createdAt: x.createdAt || null, status: x.status || 'pending', state: x.state || null };
+    var src = x.source && typeof x.source === 'object' && typeof x.source.kind === 'string' ? { kind: x.source.kind, channel: x.source.channel ? String(x.source.channel) : null } : null;
+    return { id: Number(x.id), slackId: String(x.slackId == null ? '' : x.slackId), name: x.name || '', createdAt: x.createdAt || null, status: x.status || 'pending', state: x.state || null,
+      photo: typeof x.photo === 'string' ? x.photo : '', source: src };
   }
 
   var T = P.authTeam = {

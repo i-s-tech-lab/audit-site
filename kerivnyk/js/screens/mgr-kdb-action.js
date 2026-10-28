@@ -2,7 +2,8 @@
   'use strict';
   var P = root.P, esc = P.esc, X = P.mgrKdb;
   var PHASE = { open: ['open', 'Без плану'], relapse: ['rel', 'Рецидив · новий план ще не записано'], observe: ['obs', 'На спостереженні'] };
-  var FINAL = { helped: ['done', '✓ Закрито: тримається'], held_types: ['part', '✓ Закрито: її види браку нижче, ніж до дії'], not_needed: ['skip', '○ Старший позначив «не потрібно»'], not_helped: ['rel', '✕ Закрито: рецидив'] };
+  var FINAL = { helped: ['done', '✓ Закрито: тримається'], held_types: ['part', '✓ Закрито: її види браку нижче, ніж до дії'], not_needed: ['skip', '○ Старший позначив «не потрібно»'], not_helped: ['rel', '✕ Закрито: рецидив'],
+    self_closed: ['done', '✓ Закрито без участі старшого: брак упав, аналізу й плану не було'] };
   var FINAL_EARLY = ['done', '✓ Закрито достроково: брак видів дії впав щонайменше вдвічі'];
   var VERD = { norm: ['done', '✓ брак відділу не вище норми'], types_lower: ['part', 'відділ понад норму, види дії нижче, ніж до дії'], relapse: ['rel', '✕ рецидив'] };
   var STAGE = { early: 'відкрито достроково', open: 'без плану', week1: 'дні 1–7 після плану', week2: 'дні 8–14 після плану', quiet: 'тихий нагляд', relapse: 'рецидив' };
@@ -20,7 +21,39 @@
       return X.chip('obs', esc(w ? (kd.obsDay ? 'На спостереженні · день ' + kd.obsDay + ' з 14' : 'На спостереженні · днів з аудитами ще немає') : 'План є · спостереження з ' + X.day(w0 && w0.start)));
     }
     var p = PHASE[kd.phaseUi] || PHASE.open;
+    if (kd.analysis) return X.chip(p[0], esc((kd.phaseUi === 'relapse' ? 'Рецидив · ' : '') + 'Аналіз · ' + kd.analysis.days + '-й день · плану ще немає'));   // v1.2
     return X.chip(p[0], esc(p[1]));
+  }
+  var STAGE_NAME = { open: 'Відкрито', analysis: 'Аналіз', plan: 'План і впровадження', week1: 'Дні 1–7', week2: 'Дні 8–14', closed: 'Закрито' };
+  function stages(kd) {
+    var list = kd.stages || [];
+    if (!list.length) return '';
+    return '<ol class="kb-stp" aria-label="Етапи дії">' + list.map(function (s) {
+      var name = s.id === 'closed' && s.state === 'done' ? (kd.selfClosed ? 'Закрито без участі старшого' : kd.closedEarly ? 'Закрито достроково' : X.OUT[kd.status] ? 'Закрито: ' + X.OUT[kd.status] : STAGE_NAME.closed) : STAGE_NAME[s.id] || s.id;
+      if (s.id === 'analysis' && s.state === 'now' && kd.analysis) name += ' · ' + kd.analysis.days + '-й день';
+      var when = s.state === 'skip' ? 'не було' : s.state === 'next' ? 'попереду' : s.from && s.to && s.to !== s.from ? X.rng(s.from, s.to) : s.from ? (s.state === 'now' ? 'з ' : '') + X.day(s.from) : '';
+      return '<li class="kb-stp__i kb-stp__i--' + s.state + '"><i class="kb-stp__m">' + (s.state === 'done' ? '✓' : '') + '</i><span><b>' + esc(name) + '</b><span class="kb-cs">' + esc(when) + '</span></span></li>';
+    }).join('') + '</ol>';
+  }
+  function anLine(kd) {
+    var a = kd.analysis;
+    if (!a) return '';
+    return '<p class="kb-an"><b>Аналіз ' + (a.to ? esc(X.rng(a.from, a.to)) : 'з ' + esc(X.day(a.from)) + ' · ' + a.days + '-й день') + '</b>' + (a.byName ? ' · почав(ла) ' + esc(a.byName) : '') +
+      (a.note ? ' · що перевіряють: «' + esc(a.note) + '»' : '') + '</p>';
+  }
+  function selfBlock(kd, T) {
+    var s = kd.selfClose;
+    if (!s) return '';
+    var ok = function (v) { return v ? '<b class="kb-dn">✓</b>' : '<b class="kb-up">✕</b>'; };
+    return '<section class="mkd-act__s"><h3 class="kb-ct">Закрито без участі старшого · ' + esc(X.day(s.day)) + '</h3>' +
+      '<p class="mkd-act__p">Аналізу й плану не було. За ' + esc(X.rng(s.from, s.to)) + ' (після дня відкриття) брак упав — дія закрилась сама.</p>' + X.table(
+      [['Умова'], ['зараз', 'kb-r'], ['потрібно', 'kb-r'], ['', 'kb-r']],
+      [{ cells: [['минуло днів після дня відкриття'], [String(s.days), 'kb-r'], [s.needDays + '–' + (s.maxDays || 7), 'kb-r kb-nw'], [ok(s.daysOk), 'kb-r']] },
+        { cells: [['перевірено за ці дні'], [X.num(s.checked) + ' шт', 'kb-r kb-nw'], ['щонайменше ' + X.num(s.min) + ' шт', 'kb-r kb-nw'], [ok(s.minOk), 'kb-r']] },
+        { cells: [['брак відділу за ці дні'], [X.p(s.deptRate), 'kb-r'], ['не вище ' + esc(String(T)) + '%', 'kb-r kb-nw'], [ok(s.deptOk), 'kb-r']] },
+        { cells: [['види браку дії: верхній край смуги точності <span class="kb-cs mkd-block">брак видів дії ' + X.arrow(s.typesBefore, s.typesRate) + '</span>'], [X.p(s.hi), 'kb-r'],
+          ['не вище ½ «до» = ' + X.p(s.half), 'kb-r kb-nw'], [ok(s.typesOk), 'kb-r']] }], 'mkd-t--sm', 'Умови закриття без участі старшого') +
+      X.foot('«До» — види браку дії разом за ' + esc(X.rng(s.baseFrom, s.baseTo)) + ', коли дію відкрили.') + '</section>';
   }
   function quietPill(kd) {
     var q = (kd.weeks || []).filter(function (x) { return x.kind === 'quiet'; })[0];
@@ -60,10 +93,11 @@
       return perRng(w) + (w.status === 'running' ? ' · поки, днів з аудитами ' + w.days + ' з 7' : '') + ' · види браку дії ' + X.p(w.typesRate);
     };
     var w2l = w2 && w2.kind === 'quiet' ? 'Брак відділу, тихий нагляд' : 'Брак відділу, дні 8–14 після плану';
-    var out = '<div class="kb mkd-act"><div class="kb-chips">' + phasePill(kd) + quietPill(kd) + tags(kd) + '</div>' +
+    var out = '<div class="kb mkd-act"><div class="kb-chips">' + phasePill(kd) + quietPill(kd) + tags(kd) + '</div>' + stages(kd) + anLine(kd) +
       '<div class="kb-kpis mkd-act__k">' +
       kpi('Відкрито', esc(X.day(kd.openedAt)), esc('тиждень ' + X.rng(kd.periodStart, kd.periodEnd) + ' · брак відділу ' + X.p(kd.openRate))) +
-      kpi('Впроваджено', esc(kd.implementedAt ? X.day(kd.implementedAt) : '—'), esc(kd.implementedAt ? (kd.daysToImplement != null ? X.days(kd.daysToImplement) + ' від відкриття' : '') : 'плану ще немає')) +
+      (kd.selfClose ? kpi('Закрито без участі старшого', esc(X.day(kd.finishedOn)), esc('плану не було · брак упав за ' + X.rng(kd.selfClose.from, kd.selfClose.to)))
+        : kpi('Впроваджено', esc(kd.implementedAt ? X.day(kd.implementedAt) : '—'), esc(kd.implementedAt ? (kd.daysToImplement != null ? X.days(kd.daysToImplement) + ' від відкриття' : '') : 'плану ще немає'))) +
       kpi(kd.implementedAt ? 'Види браку дії до дії (на день плану)' : 'Види браку дії на початку', esc(X.p(start)),
         esc(kd.startFrom ? X.rng(kd.startFrom, kd.startTo) + ' · ' + X.num(kd.startPieces) + ' шт з ' + X.num(kd.startChecked) : '')) +
       kpi('Брак відділу, дні 1–7 після плану', esc(wv(w1)), esc(ws(w1))) +
@@ -73,6 +107,7 @@
         '<p class="mkd-act__p"><b>Що зроблено:</b> ' + esc(kd.plan || '—') + '</p>' + (kd.causeNote ? '<p class="mkd-act__p"><b>Примітка:</b> ' + esc(kd.causeNote) + '</p>' : '') + '</section>';
     }
     if (kd.status === 'not_needed' && kd.notNeededReason) out += '<section class="mkd-act__s"><h3 class="kb-ct">Чому «не потрібно»</h3><p class="mkd-act__p">' + esc(kd.notNeededReason) + '</p></section>';
+    out += selfBlock(kd, T);
     if ((kd.weeks || []).length) {
       var rows = kd.extra ? [{ cells: [[X.nm('дострокова: до звичайного розбору', X.rng(kd.extra.from, kd.extra.to))], ['—', 'kb-r kb-hide-m'], ['—', 'kb-r'], ['—', 'kb-r'],
         ['', 'kb-r kb-hide-m'], [X.chip('none', 'не рахуються')]] }] : [];

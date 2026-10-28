@@ -7,7 +7,7 @@
   Object.keys(K).forEach(function (k) { P.demoResetKeys.push(K[k]); });
 
   var MIN = 60000, HOUR = 3600000, DAY = 86400000;
-  var LOGINS_MAX = 300, LOG_DAYS = 90, LIMIT_MAX = 200, LIMIT_DEF = 50;
+  var LOGINS_MAX = 3000, LOG_DAYS = 183, LIMIT_MAX = 200, LIMIT_DEF = 50;   // v1.2: журнал входів — 6 місяців
   var VIA = ['button', 'home', 'oidc'];
   var KINDS = {
     login: ['button_press', 'token_issued', 'exchange_ok', 'logout'],

@@ -29,7 +29,7 @@
       '<p class="hint">У журналі (вкладка «Стан») зʼявився рядок «Кнопку входу надіслано».</p>';
   }
 
-  P.cab.tab({ id: 'slack', label: 'Вхід через Slack', ic: 'slack', path: '/slack-login', order: 25 });
+  P.cab.tab({ id: 'slack', label: 'Вхід через Slack', ic: 'slack', path: '/slack-login', order: 25, real: true });   // real — працює і на справжньому сервері
   P.cab.screen('/slack-login', { tab: 'slack', title: 'Вхід через Slack', render: function (ctx) {
     var items = [], real = P.authSlack.real();
 
@@ -40,24 +40,26 @@
       return !x.state || x.state === 'not_found' ? H.badge('стан у Slack невідомий', '') : '';
     }
     function reqRow(x) {
-      var nm = x.name || 'Імʼя зі Slack не отримано', off = x.state === 'deleted';
-      return '<div class="adm-person"><span class="avatar" aria-hidden="true">' + esc(x.name ? P.initials(x.name) : '?') + '</span>' +
+      var nm = x.name || 'Імʼя зі Slack не отримано', off = x.state === 'deleted', TR = P.teamRequests;
+      var where = TR ? TR.sourceText(x) : '';
+      return '<div class="adm-person">' + (TR ? TR.avatar(x) : '<span class="avatar" aria-hidden="true">' + esc(x.name ? P.initials(x.name) : '?') + '</span>') +
         '<div class="adm-person__main" style="min-width:min(100%,220px)"><div class="adm-person__name"><b>' + esc(nm) + '</b>' + stateBadge(x) + '</div>' +
-        '<span class="adm-person__meta">Slack ' + esc(P.authSlack.maskId(x.slackId)) + ' · просить увійти · ' + esc(A.ago(x.createdAt)) + '</span></div>' +
-        '<div class="adm-person__acts"><button class="btn btn--primary btn--sm" type="button" data-act="sl-add"' + da('id', x.id) + (off ? ' disabled title="Акаунт цієї людини у Slack вимкнено"' : '') + '>' + P.ic('add', 'ui-icon--sm') + 'Додати</button>' +
-          '<button class="btn btn--quiet btn--sm" type="button" data-act="sl-reject"' + da('id', x.id) + '>Відхилити</button></div></div>';
+        '<span class="adm-person__meta">Slack ' + esc(P.authSlack.maskId(x.slackId)) + ' · ' + esc(where || 'просить увійти') + ' · ' + esc(A.ago(x.createdAt)) + '</span></div>' +
+        '<div class="adm-person__acts"><button class="btn btn--primary btn--sm" type="button" data-act="sl-add"' + da('id', x.id) + (off ? ' disabled title="Акаунт цієї людини у Slack вимкнено"' : '') + '>' + P.ic('check', 'ui-icon--sm') + 'Додати</button>' +
+          '<button class="btn btn--quiet btn--sm" type="button" data-act="sl-reject"' + da('id', x.id) + '>' + P.ic('close', 'ui-icon--sm') + 'Відхилити</button></div></div>';
     }
     function draw() {
       ctx.el.innerHTML = '<section class="adm-col">' +
         A.head('Вхід через Slack', real ? 'Slack підключено · ' + A.asOf() : 'Тестова версія — Slack не підключено', '', 'admin.slack.setup') + subnav('main') +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('slack', 'ui-icon--sm') + 'Стан підключення</h3>' +
-          (real ? '<p class="hint">Slack підключено: люди входять кнопкою «Увійти в Аудит» або кнопкою «Увійти через Slack» на сайті.</p>'
+          (real ? '<p class="hint">Slack підключено: люди входять кнопкою «Увійти в Аудит» у Slack' +
+              (P.authSlack.siteButton() ? ' або кнопкою «Увійти через Slack» на сайті' : ' (кнопку на сайті вимкнено — у Slack-додатка немає дозволів openid і profile)') + '.</p>'
             : '<p class="hint">Тестова версія — Slack не підключено. Вхід на цьому сайті показано на вигаданих людях; кнопки нижче лише показують, як усе виглядатиме.</p>') +
           '<details' + (real ? '' : ' open') + '><summary class="hint" style="cursor:pointer">Що має зробити власник — шість кроків</summary>' +
             '<ol style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px">' + STEPS.map(function (s) {
               return '<li><b>' + esc(s[0]) + '.</b> <span class="hint">' + esc(s[1]) + '</span></li>'; }).join('') + '</ol></details></section>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('access', 'ui-icon--sm') + 'Перевірка справжнього входу</h3>' +
-          '<p class="hint">Окрема сторінка показує, чи працює справжній вхід: натисніть «Увійти в Аудит» у Slack — посилання відкриє її вже зі входом, і там буде видно ваше імʼя, роль і локації. Кабінети це не змінює.</p>' +
+          '<p class="hint">Окрема сторінка показує, чи працює справжній вхід: натисніть «Увійти в Аудит» у Slack — посилання відкриє її вже зі входом, і там буде видно ваше імʼя, роль і локації.</p>' +
           '<div><a class="btn btn--secondary" href="../vhid/" target="_blank" rel="noopener">' + P.ic('login', 'ui-icon--sm') + 'Відкрити сторінку перевірки</a></div></section>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('login', 'ui-icon--sm') + 'Кнопка входу' + A.help('admin.slack.button') + '</h3>' +
           '<p class="hint">Одна кнопка «Увійти в Аудит» для всіх. Вона вже є в додатку «Аудит якості» у Slack (вкладка «Головна»). Тут можна надіслати ще одну її копію — щоб закріпити в каналі або показати окремій людині.</p>' +

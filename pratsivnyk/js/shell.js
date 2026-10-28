@@ -2,6 +2,9 @@
   'use strict';
   var P = root.P, doc = root.document, esc = P.esc;
   var S = P.S = P.S || { me: null, loc: null };
+  var REAL = !!(P.authSlack && P.authSlack.real());
+  var APP_FNS = ['homeAuditor', 'auditFormContext', 'auditSubmit'];
+  function placeholderOnly() { return REAL && !P.authSlack.realOk(APP_FNS); }
 
   P.screen = function (pattern, def) { P.router.add(pattern, def); };
 
@@ -29,7 +32,19 @@
   function adminHere() { return !!P.store.get('demo:admin', null); }
 
   function strip() {
+    if (REAL) return '';
     return '<div class="app-demo" role="note">' + P.ic('info') + '<span class="app-demo__text">Тестова версія · усі імена й цифри вигадані</span></div>';
+  }
+  var CABINET = { senior_auditor: ['../starshyi/', 'Кабінет старшого'], manager: ['../kerivnyk/', 'Кабінет керівника'], admin: ['../admin/', 'Кабінет адміністратора'] };
+  function renderRealHome() {
+    var me = S.me || {}, cab = Object.prototype.hasOwnProperty.call(CABINET, me.role) ? CABINET[me.role] : null;
+    app().innerHTML = '<main class="login"><span class="login__logo">' + P.ic('audit') + '</span>' +
+      '<h1 class="login__title">Аудит якості</h1><p class="login__lead">' + esc(me.name || '') + (me.roleLabel ? ' · ' + esc(me.roleLabel) : '') + '</p>' +
+      '<p class="login__note" role="status"><b>Ви увійшли ✓</b></p>' +
+      (cab ? '<a class="ui-btn ui-btn--primary" href="' + cab[0] + '">' + P.ic('arrow-right') + esc(cab[1]) + '</a>'
+        : '<p class="login__note">Запис аудитів у новій системі ще не підключено. Поки записуйте брак, як раніше, — у Slack.</p>') +
+      '<button class="ui-btn ui-btn--secondary" type="button" data-act="real-out">' + P.ic('logout') + 'Вийти</button></main>';
+    doc.title = 'Аудит якості';
   }
   function app() { return doc.getElementById('app'); }
 
@@ -69,11 +84,13 @@
     });
     P.delegate(el, 'click', '[data-act="back"]', function (e, t) { P.router.go(t.getAttribute('data-to') || '/home'); });
     P.delegate(el, 'click', '[data-act="profile"]', function () { P.router.go('/profile'); });
+    P.delegate(el, 'click', '[data-act="real-out"]', function () { P.srv('authLogout').then(function () { S.me = null; boot(); }); });
   }
 
   var seq = 0;
   function render() {
     if (!S.me) return;
+    if (placeholderOnly()) { renderRealHome(); return; }   // справжній режим без двигуна: екранів на вигаданих даних не показуємо (v2.5, v2.6)
     var my = ++seq;                     // будь-яка відповідь попереднього показу тепер «застаріла»
     P.sheet.close();
     var main = doc.getElementById('main');
@@ -107,7 +124,7 @@
     var a = doc.getElementById('top-title'), b = doc.getElementById('top-sub');
     if (a) a.textContent = o.title || 'Аудит';
     if (b) { b.textContent = o.sub || ''; b.hidden = !o.sub; }
-    doc.title = (o.title || 'Аудит') + ' — Аудит якості (тест)';
+    doc.title = (o.title || 'Аудит') + ' — Аудит якості' + (REAL ? '' : ' (тест)');
   }
   P.shell.setTitle = setTitle;
   P.shell.rerender = render;
@@ -128,7 +145,7 @@
     P.on('route', render);
     P.on('auth:required', function () { S.me = null; renderLogin(); });
     P.on('auth:forbidden', function (r) { P.toast('warn', 'Немає прав на цю дію', r && r.error); });
-    if (isDesktop() && !pcAllowed() && !P.embed && !adminHere()) return renderGate();   // у вікні старшого й для адміністратора заставки немає
+    if (!REAL && isDesktop() && !pcAllowed() && !P.embed && !adminHere()) return renderGate();   // у вікні старшого й для адміністратора заставки немає
     boot();
   };
 })(window);

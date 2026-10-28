@@ -3,9 +3,17 @@
   var P = root.P, doc = root.document, esc = P.esc, S = P.sr;
   var CFG = P.cabinet || {}, ROLE = CFG.role === 'manager' ? 'manager' : 'admin';
   var TITLE = CFG.title || (ROLE === 'admin' ? 'Кабінет адміністратора' : 'Кабінет керівника');
-  var HOME = CFG.home || '/overview';
   var C = P.cab = {};
   var app, main, me = null, cur = null, tabs = [], gen = 0, lastPath = null;
+  var REAL = !!(P.authSlack && P.authSlack.real());
+  function shown() { return REAL ? tabs.filter(function (t) { return P.authSlack.realOk(t.real); }) : tabs; }
+  function home() { var s = shown(); return REAL ? (s[0] ? s[0].path : '/') : (CFG.home || '/overview'); }
+  function screenReal(def) {
+    if (def.real !== undefined) return P.authSlack.realOk(def.real);
+    var t = tabs.filter(function (x) { return x.id === def.tab; })[0];
+    return !!(t && P.authSlack.realOk(t.real));
+  }
+  C.real = function () { return REAL; };
 
   C.tab = function (t) { tabs.push(t); tabs.sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); };
   C.screen = function (pattern, def) { P.router.add(pattern, def); };
@@ -27,7 +35,13 @@
         return '<button class="pill' + (period.preset === n ? ' pill--on' : '') + '" type="button" data-act="cab-preset" data-n="' + n + '">' + n + ' днів</button>'; }).join('') + '</span></div>';
   }
 
-  function strip() { return '<div class="sr-demo" role="note">' + P.ic('info', 'ui-icon--sm') + 'Тестова версія · усі імена й цифри вигадані · дані живуть лише в цьому браузері</div>'; }
+  function strip() { return REAL ? '' : '<div class="sr-demo" role="note">' + P.ic('info', 'ui-icon--sm') + 'Тестова версія · усі імена й цифри вигадані · дані живуть лише в цьому браузері</div>'; }
+  function testMark() { return REAL ? '' : ' (тест)'; }
+  function notReadyCard() {
+    var s = shown();
+    return P.state.empty('info', 'Цей розділ ще не підключено',
+      'Він запрацює, коли дані перенесуть зі старої системи.' + (s.length ? ' Зараз працюють: ' + s.map(function (t) { return '«' + t.label + '»'; }).join(', ') + '.' : ''));
+  }
   function frame(tab, showPeriod) {
     var now = new Date(), hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
     return strip() +
@@ -35,7 +49,7 @@
       '<p class="hdr__sub">Усі локації · ' + esc(S.h.dayLong(today())) + '</p></div>' +
       '<div class="hdr__tools"><button class="tool" type="button" data-act="cab-refresh" title="Оновити дані" aria-label="Оновлено о ' + hhmm + ' — оновити дані"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="cab-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials(me.name)) + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>' +
-      '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + tabs.map(function (t) {
+      '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + shown().map(function (t) {
         return '<a class="tab' + (t.id === tab ? ' tab--on' : '') + '" href="#' + t.path + '">' + P.ic(t.ic) + esc(t.label) + '</a>'; }).join('') + '</nav></div>' +
       (showPeriod ? periodBar() : '') + '<main class="wrap content" id="cab-main" style="padding-top:' + (showPeriod ? 0 : 20) + 'px"></main>';
   }
@@ -43,21 +57,26 @@
   function render() {
     if (!me) return;
     var r = P.router.current(), m = P.router.match(r.path);
-    if (!m) { P.router.go(HOME); return; }
+    if (!m) {
+      if (REAL && !shown().length) { app.innerHTML = '<main class="wrap content" style="padding-top:20px">' + notReadyCard() + '</main>'; return; }
+      P.router.go(home()); return;
+    }
     var def = m.screen, my = ++gen, handlers = {};
+    var live = !REAL || screenReal(def);
     S.closeAll();
-    app.innerHTML = frame(def.tab, !!def.period);
+    app.innerHTML = frame(def.tab, live && !!def.period);
     main = app.querySelector('#cab-main');
     if (r.path !== lastPath) { lastPath = r.path; root.scrollTo(0, 0); }
     var onTab = app.querySelector('.tab--on'), tabsEl = onTab && onTab.parentNode;
     if (tabsEl) tabsEl.scrollLeft = Math.max(0, onTab.offsetLeft - (tabsEl.clientWidth - onTab.offsetWidth) / 2);
-    doc.title = (def.title || TITLE) + ' — ' + (ROLE === 'admin' ? 'адміністратор' : 'керівник') + ' (тест)';
+    doc.title = (def.title || TITLE) + ' — ' + (ROLE === 'admin' ? 'адміністратор' : 'керівник') + testMark();
     cur = { el: main, me: me, params: m.params, query: r.query, period: C.period(),
       alive: function () { return my === gen; },
       on: function (act, fn) { handlers[act] = fn; },
       go: function (path, query) { P.router.go(path, query); },
       reload: function () { render(); },
       handlers: handlers };
+    if (!live) { main.innerHTML = notReadyCard(); return; }
     main.innerHTML = S.h.loading();
     try { def.render(cur); } catch (e) { main.innerHTML = P.state.error('Помилка на екрані', String((e && e.message) || e)); if (root.console) console.error(e); }
   }
@@ -91,7 +110,7 @@
       '<button class="seg__btn' + (dark ? '' : ' seg__btn--on') + '" type="button" data-act="th" data-v="light">' + P.ic('theme-light', 'ui-icon--sm') + 'Світла</button>' +
       '<button class="seg__btn' + (dark ? ' seg__btn--on' : '') + '" type="button" data-act="th" data-v="dark">' + P.ic('theme-dark', 'ui-icon--sm') + 'Темна</button></div></div>' +
       '<div class="menu__sep"></div>' +
-      menuItem('pf-reset', 'refresh', 'Скинути тестові дані', 'Усе, що ви змінили в тестовій версії, зникне') +
+      (REAL ? '' : menuItem('pf-reset', 'refresh', 'Скинути тестові дані', 'Усе, що ви змінили в тестовій версії, зникне')) +
       menuItem('pf-out', 'logout', 'Вийти', ''),
       on: {
         th: function (t, e, layer) { var v = t.getAttribute('data-v'); doc.documentElement.setAttribute('data-theme', v); P.store.set('theme:sr', v); layer.close(); },
@@ -102,7 +121,7 @@
   }
 
   function loginScreen(note) {
-    doc.title = TITLE + ' — вхід (тест)';
+    doc.title = TITLE + ' — вхід' + testMark();
     app.innerHTML = strip() + '<main class="wrap" style="max-width:520px;padding-top:72px;display:flex;flex-direction:column;gap:14px;text-align:center;align-items:center">' +
       '<div class="hero__logo">' + P.ic('audit') + '</div><h1 class="hero__title">Аудит якості</h1><p class="hero__lead">' + esc(TITLE) + '</p>' +
       (note ? '<div class="banner banner--warn" style="text-align:left">' + P.ic('warning') + '<div class="banner__body"><p class="banner__text">' + esc(note) + '</p></div></div>' : '') +

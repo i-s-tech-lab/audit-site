@@ -130,7 +130,7 @@
       return has(by, u.id) || ((u.role === 'auditor' || u.role === 'senior_auditor') && u.active !== false && (!locId || u.locationIds.indexOf(locId) >= 0));
     }).map(function (u) {
       var x = has(by, u.id) ? by[u.id] : { audits: 0, checked: 0, pieces: 0, days: {}, lastAt: null };
-      return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], active: u.active !== false, senior: u.role === 'senior_auditor',
+      return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], active: u.active !== false, legacy: u.legacy === true, senior: u.role === 'senior_auditor',
         locations: u.locationIds.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : ''; }).filter(Boolean),
         audits: x.audits, checked: x.checked, pieces: x.pieces, pct: C.pct(x.pieces, x.checked), share: C.pct(x.pieces, total),
         days: Object.keys(x.days).length, norm: norm(x.days), lastAt: x.lastAt };

@@ -3,6 +3,9 @@
   var P = root.P, doc = root.document, esc = P.esc;
   var S = P.sr;   // помічники (S.h) і вікна (S.modal / drawer / menu) — у sr-kit.js (v1.3)
   var app, main, me = null, loc = null, cur = null, kdNew = 0;
+  var REAL = !!(P.authSlack && P.authSlack.real());
+  function testMark() { return REAL ? '' : ' (тест)'; }
+  function demoStrip(text) { return REAL ? '' : '<div class="sr-demo" role="note">' + P.ic('info', 'ui-icon--sm') + text + '</div>'; }
 
   function today() { return P.fmt.dayKey(new Date()); }
   function addDays(k, n) { var p = k.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]) + n * 86400000).toISOString().slice(0, 10); }
@@ -33,21 +36,31 @@
   }
 
   var TABS = [
-    { id: 'analytics', label: 'Аналітика', ic: 'chart', path: '/analytics' },
-    { id: 'people', label: 'Люди', ic: 'people', path: '/people' },
-    { id: 'kd', label: 'Коригуючі дії', ic: 'corrective', path: '/kd' },
-    { id: 'history', label: 'Історія аудитів', ic: 'audit', path: '/history' },
-    { id: 'manage', label: 'Керування', ic: 'settings', path: '/manage/team' }
+    { id: 'analytics', label: 'Аналітика', ic: 'chart', path: '/analytics', real: 'srAnalytics' },
+    { id: 'people', label: 'Люди', ic: 'people', path: '/people', real: 'srPeopleWorkers' },
+    { id: 'kd', label: 'Коригуючі дії', ic: 'corrective', path: '/kd', real: 'srKdBoard' },
+    { id: 'history', label: 'Історія аудитів', ic: 'audit', path: '/history', real: 'srHistory' },
+    { id: 'manage', label: 'Керування', ic: 'settings', path: '/manage/team', real: true }
   ];
+  function shownTabs() { return REAL ? TABS.filter(function (t) { return P.authSlack.realOk(t.real); }) : TABS; }
+  function homePath() { return REAL ? shownTabs()[0].path : '/analytics'; }
+  function screenReal(def) {
+    if (def.real !== undefined) return P.authSlack.realOk(def.real);
+    var t = TABS.filter(function (x) { return x.id === def.tab; })[0];
+    return !!(t && P.authSlack.realOk(t.real));
+  }
+  function notReadyCard() {
+    return P.state.empty('info', 'Цей розділ ще не підключено', 'Він запрацює пізніше — розділи підключаємо по черзі.');
+  }
   function frame(tab, showPeriod) {
     var now = new Date(), hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
-    return '<div class="sr-demo" role="note">' + P.ic('info', 'ui-icon--sm') + 'Тестова версія · усі імена й цифри вигадані · дані живуть лише в цьому браузері</div>' +
+    return demoStrip('Тестова версія · усі імена й цифри вигадані · дані живуть лише в цьому браузері') +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(loc ? loc.name : '') + '</h1>' +
       '<p class="hdr__sub">Сторінка старшого аудитора · ' + esc(S.h.dayLong(today())) + '</p></div>' +
-      '<div class="hdr__tools"><button class="plus" type="button" data-act="sr-plus" aria-label="Додати">' + P.ic('add') + '<span class="sr-hide-phone">Додати</span></button>' +
+      '<div class="hdr__tools">' + (REAL ? '' : '<button class="plus" type="button" data-act="sr-plus" aria-label="Додати">' + P.ic('add') + '<span class="sr-hide-phone">Додати</span></button>') +
       '<button class="tool" type="button" data-act="sr-refresh" title="Перечитати дані" aria-label="Оновлено о ' + hhmm + ' — перечитати"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="sr-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials ? P.initials(me.name) : '') + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>' +
-      '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + TABS.map(function (t) {
+      '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + shownTabs().map(function (t) {
         return '<a class="tab' + (t.id === tab ? ' tab--on' : '') + '" href="#' + t.path + '">' + P.ic(t.ic) + esc(t.label) +
           (t.id === 'kd' && kdNew ? '<span class="count count--danger">' + kdNew + '</span>' : '') + '</a>'; }).join('') + '</nav></div>' +
       (showPeriod ? periodBar() : '') + '<main class="wrap content" id="sr-main" style="padding-top:' + (showPeriod ? 0 : 20) + 'px"></main>';
@@ -56,6 +69,7 @@
   var screens = [], gen = 0, lastPath = null;
   S.screen = function (pattern, def) { P.router.add(pattern, def); screens.push(pattern); };
   function refreshKdCount() {
+    if (!loc || (REAL && !P.authSlack.realOk('srKdOverview'))) return;   // справжній режим — лише коли КД є на двигуні сервера (v1.15)
     P.srv('srKdOverview', { locationId: loc.id }).then(function (r) {
       var tt = r && r.ok && r.totals ? r.totals : null, n = tt ? (tt.new || 0) + (tt.pre || 0) : 0;
       if (n !== kdNew) { kdNew = n; var t = app.querySelector('.tab[href="#/kd"]'); if (t) { var c = t.querySelector('.count'); if (c) c.remove(); if (n) t.insertAdjacentHTML('beforeend', '<span class="count count--danger">' + n + '</span>'); } }
@@ -66,22 +80,24 @@
   function render() {
     if (!me) return;
     var r = P.router.current(), m = P.router.match(r.path);
-    if (!m) { P.router.go('/analytics'); return; }
+    if (!m) { P.router.go(homePath()); return; }
     var def = m.screen, my = ++gen, handlers = {};
-    if (def.period !== false) periodFromUrl(r);   // П-14: до малювання шапки — поля «Період» одразу з новими датами
+    var live = !REAL || screenReal(def);
+    if (live && def.period !== false) periodFromUrl(r);   // П-14: до малювання шапки — поля «Період» одразу з новими датами
     S.closeAll();
-    app.innerHTML = frame(def.tab, def.period !== false);
+    app.innerHTML = frame(def.tab, live && def.period !== false);
     main = app.querySelector('#sr-main');
     if (r.path !== lastPath) { lastPath = r.path; root.scrollTo(0, 0); }
     var onTab = app.querySelector('.tab--on'), tabsEl = onTab && onTab.parentNode;
     if (tabsEl) tabsEl.scrollLeft = Math.max(0, onTab.offsetLeft - (tabsEl.clientWidth - onTab.offsetWidth) / 2);
-    doc.title = (def.title || 'Кабінет') + ' — ' + (loc ? loc.name : '') + ' · старший (тест)';
+    doc.title = (def.title || 'Кабінет') + ' — ' + (loc ? loc.name : '') + ' · старший' + testMark();
     cur = { el: main, me: me, loc: loc, params: m.params, query: r.query, period: S.period(),
       alive: function () { return my === gen; },
       on: function (act, fn) { handlers[act] = fn; },
       go: function (path, query) { P.router.go(path, query); },
       reload: function () { render(); },
       handlers: handlers };
+    if (!live) { main.innerHTML = notReadyCard(); return; }
     main.innerHTML = S.h.loading();
     try { def.render(cur); } catch (e) { main.innerHTML = P.state.error('Помилка на екрані', String((e && e.message) || e)); if (root.console) console.error(e); }
   }
@@ -118,7 +134,7 @@
       '<button class="seg__btn' + (dark ? '' : ' seg__btn--on') + '" type="button" data-act="th" data-v="light">' + P.ic('theme-light', 'ui-icon--sm') + 'Світла</button>' +
       '<button class="seg__btn' + (dark ? ' seg__btn--on' : '') + '" type="button" data-act="th" data-v="dark">' + P.ic('theme-dark', 'ui-icon--sm') + 'Темна</button></div></div>' +
       '<div class="menu__sep"></div>' +
-      menuItem('pf-reset', 'refresh', 'Скинути тестові дані', 'Усе, що ви змінили в тестовій версії, зникне') +
+      (REAL ? '' : menuItem('pf-reset', 'refresh', 'Скинути тестові дані', 'Усе, що ви змінили в тестовій версії, зникне')) +
       menuItem('pf-out', 'logout', 'Вийти', ''),
       on: {
         th: function (t, e, layer) { var v = t.getAttribute('data-v'); doc.documentElement.setAttribute('data-theme', v); P.store.set('theme:sr', v); layer.close(); },
@@ -156,7 +172,7 @@
   });
 
   function loginScreen(note) {
-    app.innerHTML = '<div class="sr-demo" role="note">' + P.ic('info', 'ui-icon--sm') + 'Тестова версія · усі імена й цифри вигадані</div>' +
+    app.innerHTML = demoStrip('Тестова версія · усі імена й цифри вигадані') +
       '<main class="wrap" style="max-width:520px;padding-top:72px;display:flex;flex-direction:column;gap:14px;text-align:center;align-items:center">' +
       '<div class="hero__logo">' + P.ic('audit') + '</div><h1 class="hero__title">Аудит якості</h1><p class="hero__lead">Кабінет старшого аудитора</p>' +
       (note ? '<div class="banner banner--warn" style="text-align:left">' + P.ic('warning') + '<div class="banner__body"><p class="banner__text">' + esc(note) + '</p></div></div>' : '') +
@@ -166,6 +182,13 @@
       users: function (all) { return all.filter(function (x) { return x.role === 'senior_auditor'; }); },
       onDone: function () { boot(); }, onNotListed: loginScreen });
   }
+  function noLocScreen(m) {
+    app.innerHTML = '<main class="wrap" style="max-width:520px;padding-top:72px;display:flex;flex-direction:column;gap:14px;text-align:center;align-items:center">' +
+      '<div class="hero__logo">' + P.ic('audit') + '</div><h1 class="hero__title">Аудит якості</h1><p class="hero__lead">Кабінет старшого аудитора</p>' +
+      '<div class="banner banner--warn" style="text-align:left">' + P.ic('warning') + '<div class="banner__body"><p class="banner__text">' +
+      '<b>' + esc(m.name || m.roleLabel) + ', вам ще не призначили жодної локації.</b> Попросіть адміністратора додати її у «Люди й доступи».</p></div></div>' +
+      '<button class="btn" type="button" data-act="sr-logout">' + P.ic('logout') + 'Вийти</button></main>';
+  }
   function boot() {
     S.closeAll();
     var as = /[?&]as=([^&#]+)/.exec(root.location.search || '');
@@ -174,6 +197,7 @@
       var m = r && r.ok ? r.me : null;
       if (m && (m.role === 'senior_auditor' || m.role === 'admin')) {
         me = m; loc = me.locations.filter(function (l) { return l.id === me.defaultLocationId; })[0] || me.locations[0];
+        if (!loc) { me = null; noLocScreen(m); return; }
         render(); refreshKdCount(); return;
       }
       loginScreen(m ? 'Ви увійшли як «' + m.roleLabel + '». Кабінет старшого — для старших аудиторів.' : (r && !r.ok && r.code !== 'auth' ? 'Не вдалося перевірити вхід — перевірте звʼязок і спробуйте ще раз.' : P.authSlack.takeError()));
@@ -190,6 +214,7 @@
       var t = e.target.closest('[data-act]');
       if (!t || !app.contains(t)) return;
       var act = t.getAttribute('data-act');
+      if (act === 'sr-logout') { e.preventDefault(); P.srv('authLogout', {}).then(function () { me = null; boot(); }); return; }
       if (act === 'sr-plus') { e.preventDefault(); openPlus(t); return; }
       if (act === 'sr-profile') { e.preventDefault(); openProfile(t); return; }
       if (act === 'sr-refresh') { e.preventDefault(); reloadData().then(function () { P.toast('ok', 'Дані оновлено'); }); return; }

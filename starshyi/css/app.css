@@ -314,6 +314,9 @@ mark.hl { padding: 0; border-radius: 2px; background: var(--brand-soft); color: 
 .kdm--pre { background: var(--kd-pre); border: 2px dashed var(--kd-over); }
 .kdm--part { background: var(--kd-part); }
 
+.kds--alone::before { background: none; border: 2px solid var(--kd-done); width: 6px; height: 6px; } .kds--alone { color: var(--ok); }
+.kdm--alone { background: none; border: 2px solid var(--kd-done); }
+
 
 .ba { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ba__b { color: var(--text-2); }

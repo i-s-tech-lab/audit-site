@@ -10,11 +10,19 @@
   var DM_FAIL_MSG = 'Slack відповів помилкою: cannot_dm_user';
   var DM_FAIL_PUBLIC = 'Повідомлення в Slack не вдалося надіслати.';   // не-адміну технічну причину не показуємо (як на сервері)
   var REQ_GONE = 'Цей запит уже оброблено — оновіть сторінку.';
+  var EMAIL_MSG = 'Перевірте пошту: чи немає пробілів і чи є @ та крапка після неї.';   // той самий текст, що на сервері входу
 
   function has(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
   function arr(v) { return Array.isArray(v) ? v : []; }
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
   function squash(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+  function cleanEmail(raw) {
+    if (raw === null || raw === undefined) return { v: '' };
+    if (typeof raw !== 'string') return { err: EMAIL_MSG };
+    var e = raw.trim().toLowerCase();
+    if (e === '') return { v: '' };
+    return e.length > 254 || !/^[^\s@\u0000-\u001F\u007F]+@[^\s@\u0000-\u001F\u007F]+\.[^\s@\u0000-\u001F\u007F]+$/.test(e) ? { err: EMAIL_MSG } : { v: e };
+  }
   function verr(errs) { return C.fail('validation', errs[0].message, errs); }
   function locNames(env, ids) { return ids.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : id; }).join(', '); }
   function srStore(env) { var s = obj(env.storage.get(K_SR_USERS, null)); s.add = arr(s.add); s.edit = obj(s.edit); return s; }
@@ -106,6 +114,8 @@
       if (typeof given !== 'boolean') errs.push({ field: 'canAddPeople', message: 'Оберіть: право є чи немає.' });
       else { var gd = X.grantDecision({ actorRole: 'admin', targetRole: role, value: given }); if (!gd.ok) errs.push({ field: gd.field, message: gd.error }); }
     }
+    var emailNext;
+    if (!delegate && has(p, 'email')) { var em = cleanEmail(p.email); if (em.err) errs.push({ field: 'email', message: em.err }); else emailNext = em.v; }
     if (errs.length) return verr(errs);
     if (!delegate && !u) { var lim = X.addLimitDecision(addedToday(env, me.id)); if (!lim.ok) return failOf(lim); }
     if (delegate) {
@@ -124,6 +134,7 @@
       rec.canAddPeople = grant;   // v1.2: записуємо завжди — явне «Ні» адміна для старшого / керівника не губиться
       st.add.push(rec);
       rows.push(['Нова людина', null, L[role] + ' · ' + locNames(env, locIds)]);
+      if (emailNext) { st.edit[id] = { email: emailNext }; rows.push(['Пошта', null, 'змінена']); }   // v1.4: без значення в журналі
       if (grant) rows.push(['Право «Додавати людей»', 'немає', 'є']);
     } else {
       var prof = {};
@@ -131,6 +142,8 @@
       if (has(v, 'slackId') && v.slackId !== u.slackId) { prof.slackId = v.slackId; rows.push(['Slack ID', C.maskSlackId(u.slackId), C.maskSlackId(v.slackId)]); }
       if (Object.keys(prof).length) { sr.edit[id] = Object.assign(obj(sr.edit[id]), prof); srDirty = true; }
       var e = obj(st.edit[id]);
+      var emailWas = has(e, 'email') ? e.email : '';   // v1.4: пошта лежить лише в правках людини
+      if (emailNext !== undefined && emailNext !== emailWas) { e.email = emailNext; rows.push(['Пошта', null, emailNext ? 'змінена' : 'прибрана']); }
       if (role !== u.role) { e.role = role; rows.push(['Роль', L[u.role], L[role]]); }
       if (locIds.join() !== u.locationIds.join()) { e.locationIds = locIds; rows.push(['Локації', locNames(env, u.locationIds), locNames(env, locIds)]); }
       if (grant !== (u.canAddPeople === true) || role !== u.role) e.canAddPeople = grant;   // v1.2: зміна ролі фіксує право (явне «Ні» теж)

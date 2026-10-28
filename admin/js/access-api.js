@@ -3,7 +3,7 @@
   var P = root.P = root.P || {};
 
   var ROLE = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', manager: 'Керівник', admin: 'Адмін' };
-  var VIA = { button: 'кнопка в каналі', home: 'вкладка «Головна»', oidc: 'вхід на сайті' };
+  var VIA = { button: 'кнопка в каналі', home: 'вкладка «Головна»', oidc: 'вхід на сайті', cli: 'посилання з сервера' };
   var SLACK = { deleted: 'акаунт вимкнено', guest: 'гість простору', other_team: 'інший простір', bot: 'бот', not_found: 'не знайдено' };
 
   var EVENT_TEXT = {

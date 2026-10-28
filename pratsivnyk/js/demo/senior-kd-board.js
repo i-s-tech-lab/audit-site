@@ -5,7 +5,7 @@
   var C = P.demoCommon, S = P.demoSenior, RU = P.demoKdRules, I = P.demoKd.internal, PHASE_OF = I.PHASE_OF;
   var TILE_BARS = 7, TL_WEEKS = 5, WORK_WEEKS = 6, COMP_WEEKS = 7;
   var CLOSED_DAYS = 56, RECENT_DAYS = 14, DAILY_MAX = 182;
-  var CLOSED = { helped: 1, held_types: 1, not_needed: 1 };
+  var CLOSED = { helped: 1, held_types: 1, not_needed: 1, self_closed: 1 };
 
   function has(o, k) { return typeof k === 'string' && o != null && Object.prototype.hasOwnProperty.call(o, k); }
   function r1(x) { return Math.round(x * 10) / 10; }
@@ -53,6 +53,11 @@
   }
   function obsWeek(a) { return a.status === 'check' ? 1 : a.status === 'hold' ? 2 : null; }
   function obsDay(a) { return a.status === 'check' && a.p1 ? a.p1.days : a.status === 'hold' && a.p2 ? 7 + a.p2.days : null; }
+  function anShort(cx, a) {
+    if (!a.analysisAt || PHASE_OF[a.status] !== 'open') return null;
+    return { from: a.analysisAt, days: Math.round((S.parseDay(cx.today) - S.parseDay(a.analysisAt)) / 864e5) + 1,
+      note: typeof a.analysisNote === 'string' ? a.analysisNote : '' };
+  }
   function inExtra(cx, a) { return !!(a.extra && a.status === 'check' && cx.today >= a.extra.from && cx.today <= a.extra.to); }
   function activesOf(b, depId) {
     return b.cx.kds(depId).filter(I.isActive).sort(function (x, y) { return b.nos[x.key] - b.nos[y.key] || (x.openedAt < y.openedAt ? -1 : 1); });
@@ -70,14 +75,15 @@
       return { departmentId: d.id, name: d.name, rate: w.rate, rejected: w.rejected, checked: w.checked, over: w.over, prevRate: cx.wk(d.id, cx.L - 1).rate,
         series: series, actives: activesOf(b, d.id).map(function (a) {
           return { key: a.key, id: a.id || null, no: b.nos[a.key], phase: phaseUi(a), early: !!a.early, parallel: a.parallelWith.length > 0, repeat: !!a.repeatOf, week: obsWeek(a),
-            obsDay: obsDay(a), extra: inExtra(cx, a) };
+            obsDay: obsDay(a), extra: inExtra(cx, a), analysis: anShort(cx, a) };
         }), quiet: quietList(b, d.id) };
     });
   }
   function counts(b) {
-    var cx = b.cx, from = since(cx, CLOSED_DAYS), c = { open: 0, relapse: 0, observe: 0, activeAll: 0, closed: { total: 0, helped: 0, held_types: 0, not_needed: 0, early: 0 } };
+    var cx = b.cx, from = since(cx, CLOSED_DAYS), c = { open: 0, relapse: 0, observe: 0, activeAll: 0, analysis: 0,
+      closed: { total: 0, helped: 0, held_types: 0, not_needed: 0, self_closed: 0, early: 0 } };
     b.all.forEach(function (a) {
-      if (I.isActive(a)) { c[phaseUi(a)]++; c.activeAll++; } else if (CLOSED[a.status] && a.finishedOn >= from && a.finishedOn <= cx.today) {
+      if (I.isActive(a)) { c[phaseUi(a)]++; c.activeAll++; if (anShort(cx, a)) c.analysis++; } else if (CLOSED[a.status] && a.finishedOn >= from && a.finishedOn <= cx.today) {
         c.closed[a.status]++; c.closed.total++;
         if (a.closedEarly) c.closed.early++;   // v2.0: з «тримається» — скільки закрито достроково (після 7 днів)
       }
@@ -97,10 +103,11 @@
   }
 
 
-  function stopOf(a) { return a.implementedAt || (a.status === 'not_needed' ? a.finishedOn : null) || null; }
+  function stopOf(a) { return a.implementedAt || (a.status === 'not_needed' || a.status === 'self_closed' ? a.finishedOn : null) || null; }
   function openEndOf(cx, a) {
     if (a.implementedAt) return a.implementedAt;
     if (a.status === 'not_needed') return maxDay(a.finishedOn, a.openedAt);
+    if (a.status === 'self_closed') return maxDay(S.addDays(a.finishedOn, -1), a.openedAt);   // v2.1: закрито зранку — останній день відкритої дії напередодні
     return cx.today;
   }
   function segsOf(cx, a) {
@@ -109,11 +116,19 @@
       if (!from || !to || from > to) return;
       out.push({ kind: kind, from: from, to: to, running: !!running, deptRate: I.rangeRate(cx, dep, from, to).rate, typesRate: typesRate(cx, dep, ids, from, to) });
     };
+    var at = a.analysisAt, noPlanSeg = function (kind, from, to, running) {
+      if (!from || !to || from > to) return;
+      if (!at || to < at) { add(kind, from, to, at && to < at ? false : running); return; }
+      if (from < at) add(kind, from, S.addDays(at, -1), false);
+      var f = maxDay(from, at), p = out[out.length - 1];
+      if (p && p.kind === 'analysis' && S.addDays(p.to, 1) === f) { out.pop(); f = p.from; }
+      add('analysis', f, to, running);
+    };
     var openEnd = openEndOf(cx, a), noPlan = a.repeatOf ? 'relapse' : 'open';
     if (a.early) {
-      add('early', a.openedAt, minDay(openEnd, a.weekEnd), !stop && a.weekEnd >= today);
-      add(noPlan, S.addDays(a.weekEnd, 1), openEnd, !stop);
-    } else add(noPlan, a.openedAt, openEnd, !stop);
+      noPlanSeg('early', a.openedAt, minDay(openEnd, a.weekEnd), !stop && a.weekEnd >= today);
+      noPlanSeg(noPlan, S.addDays(a.weekEnd, 1), openEnd, !stop);
+    } else noPlanSeg(noPlan, a.openedAt, openEnd, !stop);
     if (!a.implementedAt || !a.p1) return out;
     if (a.extra) add('extra', a.extra.from, minDay(a.extra.to, today), a.extra.to >= today);
     var per = function (kind, p) { if (p && p.from <= today) add(kind, p.from, p.done ? p.to : today, !p.done); };
@@ -124,7 +139,7 @@
   function markOf(a) {
     if (!a.finishedOn) return null;
     var kind = a.status === 'not_helped' ? 'relapse' : a.status;
-    if (!/^(helped|held_types|relapse|not_needed)$/.test(kind)) return null;
+    if (!/^(helped|held_types|relapse|not_needed|self_closed)$/.test(kind)) return null;
     return a.closedEarly ? { day: a.finishedOn, kind: kind, early: true } : { day: a.finishedOn, kind: kind };
   }
   function marksOf(a) {
@@ -174,7 +189,7 @@
       activesOf(b, d.id).filter(function (a) { return PHASE_OF[a.status] === 'open'; }).forEach(function (a) {
         var v = I.view(cx, a), o = a.repeatOf && has(b.byKey, a.repeatOf) ? b.byKey[a.repeatOf] : null, ov = o ? I.view(cx, o) : null;
         out.push({ key: a.key, id: a.id || null, no: b.nos[a.key], departmentId: d.id, departmentName: d.name, kind: a.repeatOf ? 'relapse' : 'open',
-          early: !!a.early, parallel: a.parallelWith.length > 0, openedAt: a.openedAt, typesCount: v.items.length,
+          early: !!a.early, parallel: a.parallelWith.length > 0, openedAt: a.openedAt, typesCount: v.items.length, analysis: anShort(cx, a),
           pieces: v.items.reduce(function (s, it) { return s + it.pieces; }, 0), deptShare: v.itemsShare, deptRate: v.nowRate,
           typesBefore: ov ? ov.typesBefore : null, typesAfter: ov ? (o.relapseStage === 2 ? ov.typesAfter2 : ov.typesAfter) : null,
           earlyChecked: v.earlySplit ? v.earlySplit.before.checked : null, earlyRate: v.earlySplit ? v.earlySplit.before.rate : null });
@@ -206,6 +221,7 @@
       .sort(function (x, y) { return x.finishedOn < y.finishedOn ? 1 : x.finishedOn > y.finishedOn ? -1 : 0; });
   }
   function startSpan(cx, a) {
+    if (a.selfClose) return { from: a.selfClose.baseFrom, to: minDay(a.selfClose.baseTo, cx.today) };
     if (!a.implementedAt && a.onRelapse && a.status !== 'not_needed' && a.baseStart) return { from: a.baseStart, to: minDay(S.addDays(a.openedAt, -1), cx.today) };
     var to = a.implementedAt && a.baseFrom ? a.baseTo : a.status === 'not_needed' ? a.finishedOn : a.weekEnd;
     return { from: a.implementedAt && a.baseFrom ? a.baseFrom : I.baseStartOf(a), to: minDay(to, cx.today) };
@@ -217,7 +233,7 @@
     var pos = function (day) { var k = cx.of(day); return clamp(k - n0 + (S.parseDay(day) - S.parseDay(cx.start(k))) / 86400000 / 7, 0, WORK_WEEKS - 1 / 7); };
     var st0 = startRange(cx, a), cw = cx.wk(dep, cx.L + 1), cur = cx.range(dep, cw.start, cw.end);
     return { key: a.key, no: b.nos[a.key], phase: phaseUi(a), early: !!a.early, parallel: a.parallelWith.length > 0, repeat: !!a.repeatOf,
-      obsDay: obsDay(a), extra: inExtra(cx, a), implementedAt: a.implementedAt || null, openedAt: r.openedAt, relapseDay: a.repeatOf ? a.openedAt : null, weeks: ns.map(function (k) { return cx.start(k); }),
+      obsDay: obsDay(a), extra: inExtra(cx, a), analysis: anShort(cx, a), implementedAt: a.implementedAt || null, openedAt: r.openedAt, relapseDay: a.repeatOf ? a.openedAt : null, weeks: ns.map(function (k) { return cx.start(k); }),
       openPos: r2(pos(r.openedAt)), relapsePos: a.repeatOf ? r2(pos(a.openedAt)) : null, startIdx: clamp(a.n - n0, 0, WORK_WEEKS - 1),
       startFrom: startSpan(cx, a).from, startTo: startSpan(cx, a).to,
       types: ids.map(function (t) {
@@ -241,6 +257,7 @@
         before = typesRate(cx, a.departmentId, ids, a.weekStart, minDay(a.finishedOn, cx.today));
         after = k == null ? null : typesRate(cx, a.departmentId, ids, cx.start(k), cx.end(k));
       }
+      if (a.selfClose) { before = a.selfClose.typesBefore; after = a.selfClose.check.typesRate; }
       return { key: a.key, no: b.nos[a.key], departmentName: v.departmentName, openedAt: rootOf(b, a).openedAt, finishedOn: a.finishedOn, outcome: a.status, early: !!a.closedEarly, before: before, after: after };
     });
     var both = items.filter(function (x) { return x.before != null && x.after != null; });
@@ -262,7 +279,7 @@
     return { from: from, to: null, days: 0, done: false, end: I.projectDay(cx, a.departmentId, from, I.OBS), est: true, list: [] };
   }
   function endDay(cx, a) {
-    if (a.status === 'not_needed') return maxDay(a.weekEnd, a.finishedOn);
+    if (a.status === 'not_needed' || a.status === 'self_closed') return maxDay(a.weekEnd, a.finishedOn);
     if (a.implementedAt && a.p1) {
       if (a.status === 'not_helped' && a.relapseStage === 1) return a.p1.to;
       var p2 = p2Of(cx, a);
@@ -296,8 +313,16 @@
     var add = function (kind, f, t) { f = maxDay(f, from); t = minDay(t, to); if (f <= t) stages.push({ from: f, to: t, kind: kind }); };
     var openEnd = openEndOf(cx, a), p2 = a.status === 'not_helped' && a.relapseStage === 1 ? null : p2Of(cx, a);
     add('before', from, S.addDays(a.openedAt, -1));
-    if (a.early) { add('early', a.openedAt, minDay(openEnd, a.weekEnd)); add('open', S.addDays(a.weekEnd, 1), openEnd); } else add('open', a.openedAt, openEnd);
+    var noPlan = function (kind, f, t) {
+      var at = a.analysisAt;
+      if (!at || t < at) { add(kind, f, t); return; }
+      if (f < at) add(kind, f, S.addDays(at, -1));
+      var last = stages[stages.length - 1], ff = maxDay(maxDay(f, at), from);
+      if (last && last.kind === 'analysis' && S.addDays(last.to, 1) === ff) last.to = minDay(t, to); else add('analysis', maxDay(f, at), t);
+    };
+    if (a.early) { noPlan('early', a.openedAt, minDay(openEnd, a.weekEnd)); noPlan('open', S.addDays(a.weekEnd, 1), openEnd); } else noPlan('open', a.openedAt, openEnd);
     var photo = null, obs = [], checks = [];
+    if (a.selfClose) checks.push({ day: a.selfClose.to, kind: 'self', done: true, est: false });
     if (a.implementedAt && a.p1) {
       if (a.extra) add('extra', a.extra.from, a.extra.to);
       add('week1', a.p1.from, a.p1.done ? a.p1.to : a.p1.end);
@@ -348,6 +373,24 @@
     }
     return { days: days };
   }
+  function stagesOf(cx, a) {
+    var ph = PHASE_OF[a.status], open = ph === 'open', fin = ph === 'final', an = a.analysisAt, impl = a.implementedAt, p1 = a.p1, p2 = a.p2;
+    var st = function (id, state, from, to) { return { id: id, state: state, from: from || null, to: to || null }; };
+    var noPlanEnd = impl || (fin && a.finishedOn ? (a.status === 'self_closed' ? S.addDays(a.finishedOn, -1) : a.finishedOn) : null);
+    if (noPlanEnd && !impl) noPlanEnd = maxDay(noPlanEnd, an || a.openedAt);
+    var out = [st('open', open && !an ? 'now' : 'done', a.openedAt, an ? maxDay(a.openedAt, S.addDays(an, -1)) : noPlanEnd)];
+    out.push(an ? st('analysis', open ? 'now' : 'done', an, open ? null : noPlanEnd) : st('analysis', open ? 'next' : 'skip'));
+    out.push(impl ? st('plan', 'done', impl, impl) : st('plan', open ? 'next' : 'skip'));
+    if (!impl) { out.push(st('week1', open ? 'next' : 'skip'), st('week2', open ? 'next' : 'skip')); }
+    else {
+      var w1done = !!(p1 && p1.done);
+      out.push(st('week1', w1done ? 'done' : a.status === 'check' ? 'now' : 'next', a.obsStart || (p1 && p1.from), w1done ? p1.to : null));
+      if (a.closedEarly || a.relapseStage === 1) out.push(st('week2', 'skip'));
+      else out.push(st('week2', p2 && p2.done ? 'done' : a.status === 'hold' ? 'now' : 'next', p2 ? p2.from : null, p2 && p2.done ? p2.to : null));
+    }
+    out.push(st('closed', fin ? 'done' : 'next', fin ? a.finishedOn : null, fin ? a.finishedOn : null));
+    return out;
+  }
   function pageKd(b, a, canWrite) {
     var cx = b.cx, v = I.view(cx, a), ids = I.itemIds(cx, a), open = PHASE_OF[a.status] === 'open';
     var sp = startSpan(cx, a), st0 = startRange(cx, a), cw = cx.wk(a.departmentId, cx.L + 1), cur = cx.range(a.departmentId, cw.start, cw.end);
@@ -355,6 +398,7 @@
     if (run) { cur = cx.range(a.departmentId, run.from, cx.today); cw = { checked: cur.checked }; }
     var rows = weekRows(cx, a, ids);
     return Object.assign(v, { no: b.nos[a.key], phaseUi: phaseUi(a), canNotNeeded: canWrite && open, canPlan: canWrite && open,
+      canAnalysis: canWrite && open, stages: stagesOf(cx, a),
       startFrom: sp.from, startTo: sp.to, startPieces: I.sumOf(st0.byType, ids), startChecked: st0.checked,
       daily: daily(cx, a, ids), weeks: resultWeeks(cx, a, ids),
       composition: rows.map(function (x) { return { start: x.start, end: x.end, rate: x.rate, typesRate: x.typesRate, current: x.current, stage: x.stage }; }),
@@ -377,16 +421,17 @@
     counts: counts, timeline: timeline, segsOf: segsOf, markOf: markOf, startSpan: startSpan, startRange: startRange,
     typesRate: typesRate, closedSince: closedSince, efficiency: efficiency, causes: causes, week2Of: week2Of, pageKd: pageKd,
     CLOSED: CLOSED, CLOSED_DAYS: CLOSED_DAYS,
-    obsDay: obsDay, inExtra: inExtra, marksOf: marksOf, p2Of: p2Of, endDay: endDay, quietList: quietList, closeSoFar: closeSoFar };
+    obsDay: obsDay, inExtra: inExtra, marksOf: marksOf, p2Of: p2Of, endDay: endDay, quietList: quietList, closeSoFar: closeSoFar,
+    anShort: anShort, stagesOf: stagesOf };
 
   P.demoApis.push({
     srKdBoard: function (p, me, env) {
       var r = S.loc(p, me, env); if (r.err) return r.err;
       var b = prep(env, r.loc), cx = b.cx;
-      return { ok: true, today: cx.today, threshold: cx.T, canWrite: S.canManage(me), week: { start: cx.start(cx.L), end: cx.end(cx.L) },
+      return P.demoKd.withKdFrom(env, { ok: true, today: cx.today, threshold: cx.T, canWrite: S.canManage(me), week: { start: cx.start(cx.L), end: cx.end(cx.L) },
         tiles: tiles(b), counts: counts(b), timeline: timeline(b), weekTable: weekTable(b), queue: queue(b), upcoming: upcoming(b),
         recentClosed: closedSince(b, RECENT_DAYS).map(function (a) { return { key: a.key, no: b.nos[a.key], departmentName: cx.env.ix.dep[a.departmentId].name, outcome: a.status, early: !!a.closedEarly, day: a.finishedOn }; }),
-        work: work(b), efficiency: efficiency(b), causes: causes(b) };
+        work: work(b), efficiency: efficiency(b), causes: causes(b) });
     },
 
     srKdPage: function (p, me, env) {
@@ -402,9 +447,9 @@
           return x.finishedOn < y.finishedOn ? -1 : x.finishedOn > y.finishedOn ? 1 : x.openedAt < y.openedAt ? -1 : x.openedAt > y.openedAt ? 1 : 0;
         }).pop() || null;
       }
-      return { ok: true, today: cx.today, threshold: cx.T, canWrite: canWrite, dept: { id: dep.id, name: dep.name }, tiles: tiles(b), counts: counts(b),
-        actives: act.map(function (x) { return { key: x.key, id: x.id || null, no: b.nos[x.key], phase: phaseUi(x), week: obsWeek(x), early: !!x.early, obsDay: obsDay(x), extra: inExtra(cx, x) }; }),
-        quiet: quietList(b, dep.id), kd: a ? pageKd(b, a, canWrite) : null, pareto: act.length ? null : paretoOf(cx, dep.id) };
+      return P.demoKd.withKdFrom(env, { ok: true, today: cx.today, threshold: cx.T, canWrite: canWrite, dept: { id: dep.id, name: dep.name }, tiles: tiles(b), counts: counts(b),
+        actives: act.map(function (x) { return { key: x.key, id: x.id || null, no: b.nos[x.key], phase: phaseUi(x), week: obsWeek(x), early: !!x.early, obsDay: obsDay(x), extra: inExtra(cx, x), analysis: anShort(cx, x) }; }),
+        quiet: quietList(b, dep.id), kd: a ? pageKd(b, a, canWrite) : null, pareto: act.length ? null : paretoOf(cx, dep.id) });
     }
   });
 })(typeof window !== 'undefined' ? window : globalThis);

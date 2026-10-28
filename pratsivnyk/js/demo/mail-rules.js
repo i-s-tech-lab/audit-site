@@ -73,6 +73,7 @@
   function load(env) {
     var st = env.storage.get(KEY, null);
     if (st && Array.isArray(st.items)) { if (upgrade(st, env)) env.storage.set(KEY, st); return st; }
+    if (env.real) return { items: [], seq: 0 };
     var at = env.now().toISOString(), seq = 0;
     st = { items: presets(env).map(function (x) { var r = clone(x); delete r.key; r.id = 'ml_' + pad(++seq); r.createdAt = at; r.updatedAt = at; return r; }) };
     st.seq = seq;
@@ -104,6 +105,7 @@
       });
       return st;
     }
+    if (env.real) return { items: [], seq: 0 };   // v2.3: на справжньому сервері вигаданих тімлідів не засіваємо
     st = seedAddr(env);
     env.storage.set(KEY_ADDR, st);
     return st;

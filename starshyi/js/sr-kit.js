@@ -13,11 +13,12 @@
     done: { label: 'закрито: тримається', short: '✓ тримається', help: 'kd.state.done' },
     part: { label: 'закрито: її види браку нижче, ніж до дії', short: '✓ види нижче', help: 'kd.state.part' },
     relapse: { label: 'рецидив', short: '✕ рецидив', help: 'kd.state.relapse' },
-    skip: { label: 'дія не потрібна', short: 'не потрібна', help: 'kd.state.skip' }
+    skip: { label: 'дія не потрібна', short: 'не потрібна', help: 'kd.state.skip' },
+    alone: { label: 'закрито без участі старшого', short: '✓ без участі старшого', help: 'kd.state.alone' }   // v1.6: брак упав сам
   };
   S.kdStateOf = function (status) {
     return { pre: 'pre', 'new': 'over', started: 'work', check: 'watch', hold: 'hold', helped: 'done', held_types: 'part',
-      not_helped: 'relapse', not_needed: 'skip', none: 'ok' }[status] || 'ok';
+      not_helped: 'relapse', not_needed: 'skip', self_closed: 'alone', none: 'ok' }[status] || 'ok';
   };
 
 

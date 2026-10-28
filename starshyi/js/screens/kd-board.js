@@ -54,7 +54,70 @@
   B.bind = function (ctx, find) {
     ctx.on('kb-plan', function (t) { K.openPlan(ctx, B.refOf(t)); });
     ctx.on('kb-nn', function (t) { K.openNotNeeded(ctx, B.refOf(t), find ? find(t) : null); });
+    ctx.on('kb-an', function (t) { B.openAnalysis(ctx, B.refOf(t), find ? find(t) : null); });   // v1.4
     ctx.on('kb-how', function () { B.openHow(ctx); });
+  };
+
+  B.kdWait = function (r) { return !!r && r.kdFrom === null; };
+  B.kdFromNote = function (r) {
+    if (!r || r.kdFrom === undefined) return '';
+    return r.kdFrom ? '<p class="kb-kdfrom">Коригуючі дії рахуються з ' + esc(B.wd(r.kdFrom)) + '.</p>'
+      : '<p class="kb-kdfrom kb-kdfrom--wait">Коригуючі дії почнуть відкриватися з дня переходу на новий Аудит.</p>';
+  };
+
+  B.anText = function (a) { return a && a.analysis ? 'аналіз · ' + a.analysis.days + '-й день' : ''; };
+  B.openAnalysis = function (ctx, ref, a) {
+    var an = a && a.analysis, editing = !!an, name = a ? (a.departmentName || '') + (a.no ? ' №' + a.no : '') : '';
+    var m = P.sr.modal({ size: 'sm', title: (editing ? 'Нотатка аналізу' : 'Почати аналіз') + (name ? ' · ' + name : ''),
+      sub: editing ? esc('аналіз з ' + B.wd(an.from) + ' · ' + an.days + '-й день') : '',
+      body: '<p class="kd-text">' + (editing ? 'Нотатку видно на сторінці дії і в кабінеті керівника.'
+        : '<b>Аналіз — це коли ви шукаєте причину.</b> Він може тривати кілька днів, строку немає. Поки йде аналіз, дія сама не закривається, навіть якщо брак упав.') + '</p>' +
+        '<label class="field"><span class="label">Що перевіряємо (можна не писати)</span><textarea class="textarea" data-f="note" maxlength="300" style="min-height:80px" placeholder="Наприклад: перевіряємо голки на машинах 3 і 5 і партію тканини.">' +
+          esc(an ? an.note || '' : '') + '</textarea>' + K.errSlot('note') + '</label>',
+      foot: '<button class="btn btn--quiet" type="button" data-ov-close>Скасувати</button><button class="btn btn--primary" type="button" data-act="ok" style="margin-left:auto">' + (editing ? 'Зберегти нотатку' : 'Почати аналіз') + '</button>',
+      on: { ok: function (t) {
+        t.disabled = true;
+        P.srv('srKdAnalysis', Object.assign({ locationId: ctx.loc.id, note: m.el.querySelector('[data-f="note"]').value, edit: editing }, ref)).then(function (res) {
+          t.disabled = false;
+          if (!res.ok) { if (!K.showErrors(m.el, res)) P.toast('danger', 'Не вдалося зберегти', res.error); return; }
+          m.close();
+          var x = res.action;
+          K.done(ctx, 'ok', (editing ? 'Нотатку змінено · ' : 'Аналіз почато · ') + x.departmentName, x.analysis && x.analysis.note ? '«' + x.analysis.note + '»' : 'з ' + B.wd(x.analysis ? x.analysis.from : null));
+        });
+      } } });
+  };
+
+  var STAGE_NAME = { open: 'Відкрито', analysis: 'Аналіз', plan: 'План і впровадження', week1: 'Дні 1–7', week2: 'Дні 8–14', closed: 'Закрито' };
+  function closedName(kd) {
+    if (kd.selfClosed) return 'Закрито без участі старшого';
+    if (kd.closedEarly) return 'Закрито достроково';
+    return { helped: 'Закрито: тримається', held_types: 'Закрито: її види нижче', not_needed: 'Дія не потрібна', not_helped: 'Рецидив' }[kd.status] || STAGE_NAME.closed;
+  }
+  B.stages = function (kd) {
+    var list = kd.stages || [];
+    if (!list.length) return '';
+    var today = kd.daily && kd.daily.todayDay;
+    return '<ol class="kb-stp" aria-label="Етапи дії">' + list.map(function (s) {
+      var name = s.id === 'closed' && s.state === 'done' ? closedName(kd) : STAGE_NAME[s.id] || s.id;
+      if (s.id === 'analysis' && s.state === 'now' && kd.analysis) name += ' · ' + kd.analysis.days + '-й день';
+      var when = s.state === 'skip' ? 'не було' : s.state === 'next' ? 'попереду'
+        : s.from && s.to && s.to !== s.from ? B.rng(s.from, s.to) : s.from ? (s.state === 'now' ? 'з ' : '') + B.day(s.from) + (s.from === today && s.state === 'now' ? ' · сьогодні' : '') : '';
+      return '<li class="kb-stp__i kb-stp__i--' + s.state + '"><i class="kb-stp__m">' + (s.state === 'done' ? '✓' : '') + '</i><span><b>' + esc(name) + '</b><span class="kb-cs">' + esc(when) + '</span></span></li>';
+    }).join('') + '</ol>';
+  };
+
+  B.selfBlock = function (kd, T) {
+    var s = kd.selfClose;
+    if (!s) return '';
+    var ok = function (v) { return '<b class="kb-ec__ok kb-ec__ok--' + (v ? 'y' : 'n') + '">' + (v ? '✓' : '✕') + '</b>'; };
+    return '<div class="kb-ecb kb-self"><div class="kb-ch"><b>Закрито без участі старшого · ' + esc(B.wd(s.day)) + B.help('kd.p.self') + '</b></div>' +
+      '<p class="kb-cs">Аналізу й плану не було. Дні ' + esc(B.rng(s.from, s.to)) + ' (після дня відкриття) — брак упав, і дія закрилась сама зранку ' + esc(B.wd(s.day)) + '.</p>' +
+      '<div class="kb-ec">' +
+      ok(s.daysOk) + '<span>минуло щонайменше ' + s.needDays + ' (не більше ' + (s.maxDays || 7) + ') повні дні після дня відкриття</span><b class="kb-r">' + K.plural(s.days, 'день', 'дні', 'днів') + '</b>' +
+      ok(s.minOk) + '<span>перевірено щонайменше ' + B.num(s.min) + ' шт</span><b class="kb-r">' + B.num(s.checked) + ' шт</b>' +
+      ok(s.deptOk) + '<span>брак відділу не вище ' + T + '%</span><b class="kb-r">' + B.p(s.deptRate) + '</b>' +
+      ok(s.typesOk) + '<span>види браку в дії впали щонайменше вдвічі — навіть верхній край рамки</span><b class="kb-r">' + B.p(s.hi) + ' ≤ ' + B.p(s.half) + '</b></div>' +
+      '<div class="kb-mchips"><span class="kb-mchip">види браку в дії ' + B.arrow(s.typesBefore, s.typesRate) + '</span><span class="kb-mchip">«до» — ' + esc(B.rng(s.baseFrom, s.baseTo)) + ', коли дію відкрили</span></div></div>';
   };
 
   var GEN = ['неділі', 'понеділка', 'вівторка', 'середи', 'четверга', 'пʼятниці', 'суботи'];
@@ -93,7 +156,7 @@
   function tileActs(acts) {
     if (acts.length > 3) return groupChips(acts);
     return acts.map(function (a) {
-      var t = a.phase === 'observe' ? B.obsText(a) : a.phase === 'relapse' ? 'рецидив · новий план' : 'без плану' + (a.early ? ' · достроково' : '');
+      var t = a.phase === 'observe' ? B.obsText(a) : a.analysis ? B.anText(a) : a.phase === 'relapse' ? 'рецидив · новий план' : 'без плану' + (a.early ? ' · достроково' : '');
       return B.chip(B.kindOf(a.phase), '№' + a.no + ' · ' + t);
     }).join('');
   }

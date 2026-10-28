@@ -1,0 +1,49 @@
+
+
+
+.adm-sys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 16px; align-items: start; }
+.adm-sys-wide { grid-column: 1 / -1; }
+.adm-sys-t { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.adm-sys-kv { grid-template-columns: minmax(0, auto) minmax(0, 1fr); }
+.adm-sys-kv dd { overflow-wrap: anywhere; }
+.adm-sys-kv .badge { vertical-align: middle; }
+.adm-sys-big { margin: 0; font-size: 32px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.adm-sys-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+
+
+.adm-bk__group { margin: 12px 0 0; font-size: var(--fs-sm); font-weight: 700; color: var(--text-2); }
+.adm-bk__list { display: flex; flex-direction: column; }
+.adm-bk { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
+.adm-bk:first-child { border-top: 0; }
+.adm-bk__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.adm-bk__top { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.adm-bk__top .badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; }
+.adm-bk__meta { font-size: var(--fs-xs); color: var(--text-3); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.adm-bk > .icon-btn { flex: none; }
+.adm-bk__tables { margin-top: 4px; }
+.adm-bk__tables tr:last-child th { border-top: 2px solid var(--line-strong); color: var(--text); }
+
+
+.adm-sys-cmds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 12px; }
+.adm-cmd { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.adm-cmd--wide { grid-column: 1 / -1; }
+.adm-cmd__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sm); }
+.adm-cmd__text { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--fs-xs); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+
+
+.adm-sys-rows { display: flex; flex-direction: column; }
+.adm-sys-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.adm-sys-row:first-child { border-top: 0; padding-top: 0; }
+.adm-sys-row__main { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.adm-sys-row__main .adm-dim { font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.adm-sys-row__side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: var(--fs-xs); }
+.adm-sys-ports { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+
+
+@media (max-width: 720px) {
+  .adm-sys-kv { grid-template-columns: 1fr; gap: 2px 0; }
+  .adm-sys-kv dt:not(:first-child) { margin-top: 8px; }
+  .adm-sys-row__side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .adm-sys-big { font-size: 28px; }
+}

@@ -34,7 +34,8 @@
     return '<div class="kb-kpis">' +
       kpi('Відкрито зараз', String(n.total || 0), (n.open || 0) + ' без плану · ' + (n.relapse || 0) + ' рецидив · ' + (n.observe || 0) + ' на спостереженні', 'mkd.k.now', n.open || n.relapse ? 'kb-kpi--open' : '') +
       kpi('Відкрилось дій ' + wl, String(k.opened || 0), 'у ' + (k.openedDepts || 0) + ' ' + P.plural(k.openedDepts || 0, 'відділі', 'відділах', 'відділах') + ' · з них рецидивів ' + (k.relapses || 0), 'mkd.k.opened') +
-      kpi('Закрилось дій ' + wl, String(c.total || 0), '<b class="kb-dn">✓ ' + (c.helped || 0) + '</b> тримається · <b class="kb-part">✓ ' + (c.held_types || 0) + '</b> види нижче · <b class="kb-zr">○ ' + (c.not_needed || 0) + '</b> не потрібно', 'mkd.k.closed') +
+      kpi('Закрилось дій ' + wl, String(c.total || 0), '<b class="kb-dn">✓ ' + (c.helped || 0) + '</b> тримається · <b class="kb-part">✓ ' + (c.held_types || 0) + '</b> види нижче · <b class="kb-zr">○ ' + (c.not_needed || 0) + '</b> не потрібно' +
+        (c.self_closed ? ' · <b class="kb-dn">✓ ' + c.self_closed + '</b> без участі старшого' : ''), 'mkd.k.closed') +
       kpi('Брак видів дії: до дії → після', ta.before != null ? X.arrow(ta.before, ta.after) : '—',
         ta.n ? (d != null ? '<b class="' + X.dcls(d) + '">(' + X.signed(d) + ' в. п.)</b> ' : '') + 'середнє по ' + ta.n + ' ' + P.plural(ta.n, 'закритій дії', 'закритих діях', 'закритих діях') : 'закритих дій немає', 'mkd.k.types') +
       kpi('Від відкриття до впровадженого плану', esc(X.days(k.daysToPlan)), 'середнє по діях, де план записано', 'mkd.k.days') +
@@ -48,7 +49,8 @@
         : a.waiting ? 'план є, спостереження з завтра' : a.day ? 'спостереження, день ' + a.day + ' з 14' : 'спостереження почалось, днів з аудитами ще немає';
       return X.chip('obs', '№' + a.no + ' · ' + t);
     }
-    if (a.phase === 'relapse') return X.chip('rel', '№' + a.no + ' · рецидив' + (a.relapseDay ? ' ' + X.day(a.relapseDay) : '') + ', новий план не записано');
+    if (a.phase === 'relapse') return X.chip('rel', '№' + a.no + ' · рецидив' + (a.relapseDay ? ' ' + X.day(a.relapseDay) : '') + (a.analysis ? ' · аналіз · ' + a.analysis.days + '-й день' : ', новий план не записано'));
+    if (a.analysis) return X.chip('open', '№' + a.no + ' · аналіз · ' + a.analysis.days + '-й день' + (a.early ? ' · достроково' : ''));
     return X.chip('open', '№' + a.no + ' · без плану з ' + X.day(a.openedAt) + (a.early ? ' · достроково' : ''));
   }
   function execCard(r) {
@@ -92,6 +94,16 @@
     return X.card('Дії, закриті без впровадженого плану', 'mkd.notNeeded', '', body, '', 'старший позначив «не потрібно» і написав причину');
   }
 
+  function selfClosedCard(r) {
+    var list = r.selfClosed || [], wl = X.wl(r.weeks);
+    var body = list.length ? '<div class="mkd-nn">' + list.map(function (a) {
+      return '<div class="mkd-nn__i"><span class="mkd-nn__h"><b>' + esc(a.departmentName + ' №' + a.no + ' · дія від ' + X.day(a.openedAt)) + '</b>' + X.chip('done', '✓ без участі старшого · ' + X.day(a.finishedOn)) + '</span>' +
+        '<span class="kb-cs">Види браку в дії: ' + X.arrow(a.typesBefore, a.typesAfter) + ' · брак відділу ' + X.p(a.deptRate) + ' · перевірено ' + X.num(a.checked) + ' шт за ' + esc(X.rng(a.from, a.to)) + '</span>' +
+        (a.types && a.types.length ? '<span class="kb-cs">' + esc(a.types.join(' · ')) + '</span>' : '') + '</div>';
+    }).join('') + '</div>' : '<div class="mkd-nn__i mkd-nn__i--none"><b>Без участі старшого</b> <span class="kb-cs">— ' + wl + ' не закривалось.</span></div>';
+    return X.card('Закрито без участі старшого', 'mkd.selfClosed', '', body, '', 'старший не почав аналіз і не записав план, а брак упав — дія закрилась сама');
+  }
+
   var CZ = [['helped', 'mkd-o1', 'тримається'], ['held_types', 'mkd-o2', 'її види нижче'], ['relapse', 'mkd-cz--rel', 'рецидив'], ['running', 'mkd-cz--run', 'ще йде']];
   function causesCard(r) {
     var c = r.causes || { items: [] }, items = c.items || [], max = Math.max.apply(null, items.map(function (x) { return x.count; }).concat([1]));
@@ -117,7 +129,7 @@
 
   function mainView(r) {
     return kpis(r) + X.timeline(r.timeline, r.threshold) +
-      '<div class="kb-g2"><div class="kb-col">' + execCard(r) + heatCard(r) + '</div><div class="kb-col">' + X.effCard(r.efficiency, r.weeks) + notNeededCard(r) + '</div></div>' +
+      '<div class="kb-g2"><div class="kb-col">' + execCard(r) + heatCard(r) + '</div><div class="kb-col">' + X.effCard(r.efficiency, r.weeks) + notNeededCard(r) + selfClosedCard(r) + '</div></div>' +
       '<div class="kb-g2 mkd-g2e">' + causesCard(r) + whoCard(r) + '</div>';
   }
   function platesView(r, list) { return '<div class="mkd-plates">' + list.map(function (f) { return f(r); }).join('') + '</div>'; }
@@ -136,7 +148,8 @@
       }
       var X2 = X.plates;
       var inner = v === 'effect' ? platesView(r, [X2.p1, X2.p2, X2.p3, X2.p4]) : v === 'work' ? platesView(r, [X2.p5, X2.p6, X2.p7, X2.p8, X2.p9]) : mainView(r);
-      ctx.el.innerHTML = '<div class="kb mkd">' + locBar(r, v) + X.periodBar(r, function (n) { return href(id, n, v); }) +
+      if (X.kdWait(r)) { ctx.el.innerHTML = '<div class="kb mkd">' + locBar(r, v) + X.kdFromNote(r) + '</div>'; return; }
+      ctx.el.innerHTML = '<div class="kb mkd">' + locBar(r, v) + X.periodBar(r, function (n) { return href(id, n, v); }) + X.kdFromNote(r) +
         '<h1 class="mkd-h1">' + esc(r.location.name) + ' · коригуючі дії</h1>' + views(r, v) + inner + '</div>';
       X.fitSegs(ctx.el);
     });

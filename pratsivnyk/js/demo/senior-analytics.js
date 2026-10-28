@@ -124,6 +124,7 @@
 
       var rowsBy = {}, rowsAll = dayRows(env, dayKeys, map, null, normSum);
       deps.forEach(function (d) { rowsBy[d.id] = dayRows(env, dayKeys, map, d.id, norms[d.id]); });
+      if (dep && !rowsBy[depId]) { norms[depId] = normOf(env, depId); rowsBy[depId] = dayRows(env, dayKeys, map, depId, norms[depId]); }
 
       var tday = all.filter(function (a) { return a.day === today; }), cnt = { none: 0, part: 0, done: 0, nonorm: 0 };
       var tdeps = deps.map(function (d) {
@@ -167,8 +168,9 @@
 
       var nos = {};
       list.forEach(function (a) { a.orders.forEach(function (no) { if (no) nos[no] = nos[no] && nos[no] > a.day ? nos[no] : a.day; }); });
+      var prodMap = env.real && P.demoProd ? P.demoProd.byOrders(env, loc.id, Object.keys(nos), '0000-01-01', '9999-12-31') : null;
       var orders = env.db.orders.filter(function (o) { return o.locationId === loc.id && nos[o.no]; }).map(function (o) {
-        var v = orderViews(env, loc, o, all, deps), cells = {};
+        var v = orderViews(env, loc, o, all, deps, prodMap), cells = {};
         deps.forEach(function (d) { var x = v.views[d.id]; cells[d.id] = x.audits ? { checked: x.checked, plan: x.plan, planPct: x.planPct, rejected: x.rejected, pct: x.pct } : null; });
         return { no: o.no, customer: o.customer, products: v.products, lastAuditDay: nos[o.no], cells: cells };
       }).sort(function (a, b) { return a.lastAuditDay < b.lastAuditDay ? 1 : a.lastAuditDay > b.lastAuditDay ? -1 : a.no < b.no ? 1 : -1; });
@@ -268,8 +270,8 @@
       if (!o) return C.fail('not_found', 'Замовлення не знайдено.');
       var deps = depsOf(env, r.loc.id), v = orderViews(env, r.loc, o, locAudits(env, r.loc.id), deps);
       var block = env.db.orderBlocks.filter(function (b) { return b.locationId === r.loc.id && b.orders.indexOf(o.no) >= 0; })[0];
-      return { ok: true, order: { no: o.no, customer: o.customer, products: v.products, firstDay: o.firstDay, lastDay: o.lastDay,
-        active: o.lastDay >= env.day(), blockName: block ? block.name : null, plan: v.views.all.plan, firstAuditDay: v.firstDay, lastAuditDay: v.lastDay },
+      return { ok: true, order: { no: o.no, customer: o.customer, products: v.products, firstDay: v.start, lastDay: v.end,
+        active: v.end >= env.day() || (env.real && o.active === true), blockName: block ? block.name : null, plan: v.views.all.plan, firstAuditDay: v.firstDay, lastAuditDay: v.lastDay },
         departments: deps.map(function (d) { return { id: d.id, name: d.name, audits: v.views[d.id].audits }; }), views: v.views, criticalPct: env.db.settings.criticalPct };
     },
 
@@ -333,7 +335,7 @@
         var ratio = expected > 0 ? pieces / expected : null;
         var last = all.filter(function (a) { return a.auditorId === u.id; }).pop();
         var peersClean = others.length ? Math.round(others.filter(function (a) { return !pcsOf(a); }).length / others.length * 100) : null;
-        return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], active: u.active !== false,
+        return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], active: u.active !== false, legacy: u.legacy === true,
           audits: mine.length, perDay: workDays ? Math.round(mine.length / workDays * 10) / 10 : null,
           checked: checked, perAudit: mine.length ? Math.round(checked / mine.length) : null,
           normPerAudit: mine.length && normKnown ? Math.round(norm / mine.length) : null,
@@ -388,14 +390,22 @@
     });
   }
 
-  function orderViews(env, loc, o, all, deps) {
-    var len = daysOf(o.firstDay, o.lastDay).length, today = env.day(), lastDay = o.lastDay < today ? o.lastDay : today;
+  function orderViews(env, loc, o, all, deps, prodMap) {   // prodMap — P.demoProd.byOrders для списку замовлень (v1.6)
     var mine = all.filter(function (a) { return a.orders.indexOf(o.no) >= 0; });
-    var products = (o.garments || []).map(function (gi) { return P.demoDict.garments[gi]; });
-    var shop = totalsOf(all.filter(function (a) { return a.day >= o.firstDay && a.day <= lastDay; }));
+    var first = o.firstDay, end = o.lastDay;
+    if (env.real) mine.forEach(function (a) { if (!first || a.day < first) first = a.day; if (!end || a.day > end) end = a.day; });
+    var len = daysOf(first, end).length, today = env.day(), lastDay = end < today ? end : today;
+    var products = Array.isArray(o.productIds) ? o.productIds.map(function (id) { return env.ix.prod[id] ? env.ix.prod[id].name : id; })
+      : (o.garments || []).map(function (gi) { return P.demoDict.garments[gi]; });
+    var shop = totalsOf(all.filter(function (a) { return a.day >= first && a.day <= lastDay; }));
+    var po = !env.real || !P.demoProd ? null : prodMap ? prodMap[o.no] || {} : P.demoProd.byOrder(env, loc.id, o.no, '0000-01-01', '9999-12-31');
+    function planOf(depId) {
+      if (!po) return ((o.daily || {})[depId] || 0) * len;
+      return Object.keys(po).reduce(function (s, day) { var x = po[day][depId]; return s + (x && x.plan ? x.plan : 0); }, 0);
+    }
     function view(depId) {
       var v = { audits: 0, checked: 0, rejected: 0, plan: 0, levels: lv0(), days: {}, types: {}, rows: [] };
-      deps.forEach(function (d) { if (!depId || d.id === depId) v.plan += (o.daily[d.id] || 0) * len; });
+      deps.forEach(function (d) { if (!depId || d.id === depId) v.plan += planOf(d.id); });
       mine.forEach(function (a) {
         var c = a.departmentId === depId || !depId ? a.items.reduce(function (s, i) { return s + (i.orderNo === o.no ? i.qty : 0); }, 0) : 0, q = 0, al = lv0();
         a.defects.forEach(function (d) {
@@ -414,7 +424,7 @@
         v.rows.push({ id: a.id, createdAt: a.createdAt, day: a.day, departmentName: nm(env.ix.dep, a.departmentId, a.departmentId),
           auditorName: nm(env.ix.user, a.auditorId, a.auditorId), checked: c, rejected: q, pct: C.pct(q, c) });
       });
-      var daysList = daysOf(o.firstDay, lastDay).map(function (d) {
+      var daysList = daysOf(first, lastDay).map(function (d) {
         var x = v.days[d];
         return { day: d, audited: !!x, audits: x ? x.audits : 0, checked: x ? x.checked : 0, rejected: x ? x.rejected : 0, pct: x ? C.pct(x.rejected, x.checked) : null, levels: x ? x.levels : lv0() };
       });
@@ -427,7 +437,7 @@
     }
     var views = { all: view(null) };
     deps.forEach(function (d) { views[d.id] = view(d.id); });
-    return { products: products, views: views, firstDay: mine.length ? mine[0].day : null, lastDay: mine.length ? mine[mine.length - 1].day : null };
+    return { products: products, views: views, firstDay: mine.length ? mine[0].day : null, lastDay: mine.length ? mine[mine.length - 1].day : null, start: first, end: end };
   }
 
   P.demoApis.push(api);

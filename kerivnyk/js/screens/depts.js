@@ -203,7 +203,7 @@
     var top = '<div><h4 class="mgr-dp__st">Хто перевіряв · ' + H.num(r.auditors.length) + K.help('term.auditor') + '</h4><p class="hint">Аудитів і перевірено, шт — лише в цьому відділі за період</p></div>';
     if (!r.auditors.length) return '<section class="mgr-dp__sec">' + top + '<p class="hint">За період у відділі ніхто не записував аудитів.</p></section>';
     return '<section class="mgr-dp__sec">' + top + '<ul class="mgr-dp__list">' + r.auditors.map(function (a) {
-      return '<li><span><b>' + esc(a.name) + '</b>' + (a.senior ? ' <span class="badge mgr-senior">старший</span>' : '') + (a.active ? '' : ' ' + H.badge('вимкнено')) + '</span>' +
+      return '<li><span><b>' + esc(a.name) + '</b>' + (a.senior ? ' <span class="badge mgr-senior">старший</span>' : '') + (a.legacy ? ' ' + H.badge('ще не в новій системі') : a.active ? '' : ' ' + H.badge('вимкнено')) + '</span>' +
         '<span class="mgr-dp__nums">' + K.n(a.audits, 'аудит', 'аудити', 'аудитів') + ' · ' + H.num(a.checked) + ' шт</span></li>';
     }).join('') + '</ul></section>';
   }
@@ -213,7 +213,7 @@
       '<div class="mgr-dp__grid">' + chartSec(r) + productsSec(r, allP) + defectsSec(r, allD) + kdSec(r) + peopleSec(r) + '</div>';
   }
 
-  P.cab.tab({ id: 'depts', label: 'Відділи', ic: 'department', path: '/depts', order: 20 });
+  P.cab.tab({ id: 'depts', label: 'Відділи', ic: 'department', path: '/depts', order: 20, real: 'mgrDepts' });
   P.cab.screen('/depts', { tab: 'depts', title: 'Відділи', period: true, render: function (ctx) {
     var req = 0, last = null;
     var dp = { id: null, row: null, data: null, err: null, req: 0, allP: false, allD: false };

@@ -4,6 +4,7 @@
   var esc = P.esc || function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
   var KEY = 'audit:session';   // справжня сесія в localStorage (не P.store: той додає префікс тестових даних)
+  var VIEW_KEY = 'audit:view-loc';   // локація, яку адмін дивиться «як профіль» (справжній режим; у тестовому це сесія адміна на демо-сервері). v1.9
   var MSG = {
     not_listed: 'Вас ще немає в списку доступу. Адміністратор уже бачить ваш запит — коли він вас додасть, натисніть «Увійти в Аудит» у Slack ще раз.',
     denied: 'Вхід скасовано. Коли будете готові — натисніть «Увійти через Slack» ще раз.',
@@ -11,9 +12,13 @@
     expired: 'Посилання для входу вже не діє (воно живе 10 хвилин і спрацьовує один раз) — натисніть «Увійти в Аудит» у Slack ще раз.',
     team: 'Цей Slack-простір не підключено до Аудиту. Відкрийте Slack своєї компанії й натисніть «Увійти в Аудит» там.',
     rate: 'Забагато спроб. Спробуйте за кілька хвилин.',
-    server: 'Не вдалося увійти — щось пішло не так на сервері. Спробуйте ще раз за хвилину.'
+    server: 'Не вдалося увійти — щось пішло не так на сервері. Спробуйте ще раз за хвилину.',
+    oidc_off: 'Вхід кнопкою на сайті вимкнено. Відкрийте Slack і натисніть «Увійти в Аудит» — у бота Аудиту на вкладці «Home».'
   };
-  var HINT = 'Або натисніть «Увійти в Аудит» у Slack — у додатку «Аудит якості», вкладка «Головна».';
+  var HINT = 'Або натисніть «Увійти в Аудит» у Slack — у бота Аудиту, вкладка «Home».';
+  var SLACK_ONLY = 'Увійдіть кнопкою в Slack.';
+  var SLACK_ONLY_HOW = 'Відкрийте Slack → бот Аудиту → вкладка «Home» → «Увійти в Аудит» (або та сама кнопка в закріпленому повідомленні каналу). ' +
+    'Slack надішле особисте посилання на 10 хвилин.';
   var TEST_NOTE = 'Тестова версія: вхід без пароля, ніби Slack підтвердив вигаданого користувача.';
   var BUTTON_MESSAGE = 'Натисніть кнопку, щоб увійти в Аудит. Вона одна для всіх: Slack сам підтвердить, хто ви, а Аудит надішле вам особисте посилання на 10 хвилин.';
   var BUTTON_LABEL = 'Увійти в Аудит';
@@ -23,6 +28,7 @@
   var ASSIGNABLE = ['auditor', 'senior_auditor', 'manager', 'admin'];
   var DEMO_ONLY = { authDemoLogin: 1, authDemoUnknown: 1, demoReset: 1, authAdminView: 1 };
   var DEMO_ONLY_MSG = 'У справжньому додатку тестового входу немає — увійдіть через Slack.';
+  var NOT_READY_MSG = 'Цей розділ ще не підключено: він запрацює, коли дані перенесуть зі старої системи.';
 
   function expiryMs(x) {
     if (typeof x === 'number') return x < 1e12 ? x * 1000 : x;
@@ -37,6 +43,7 @@
     var now = env.now || function () { return Date.now(); };
 
     A.real = function () { return cfg.backend === 'supabase' && !!cfg.authUrl; };
+    A.siteButton = function () { return !A.real() || cfg.oidc !== false; };
     function base() { return String(cfg.authUrl || '').replace(/\/+$/, ''); }
 
     A.maskId = function (id) { id = String(id == null ? '' : id); return id.length > 4 ? id.charAt(0) + '…' + id.slice(-3) : id; };
@@ -55,8 +62,8 @@
       if (s) h.Authorization = 'Bearer ' + s.session;
       return h;
     };
-    A.call = function (path, body) {
-      return env.fetch(base() + path, { method: 'POST', headers: A.headers(), body: JSON.stringify(body || {}) }).then(function (res) {
+    A.post = function (url, body) {
+      return env.fetch(url, { method: 'POST', headers: A.headers(), body: JSON.stringify(body || {}) }).then(function (res) {
         return Promise.resolve(res.json()).then(function (j) { return j; }, function () { return null; }).then(function (j) {
           j = j && typeof j === 'object' ? j : {};
           if (res.status === 401 && j.ok !== true && !j.code) return { ok: false, code: 'auth', error: j.error || 'Потрібен вхід.' };
@@ -65,6 +72,22 @@
           return j;
         });
       }, function () { return { ok: false, code: 'offline', error: 'Немає звʼязку із сервером. Перевірте інтернет і спробуйте ще раз.' }; });
+    };
+    A.call = function (path, body) { return A.post(base() + path, body); };
+
+    A.appFn = function (fn) {
+      return typeof cfg.appUrl === 'string' && !!cfg.appUrl && Array.isArray(cfg.appFns) && cfg.appFns.indexOf(fn) >= 0;
+    };
+    A.view = function () {
+      var loc = env.storage.get(VIEW_KEY);
+      return { role: P.demoViewRole || null, locationId: typeof loc === 'string' && loc ? loc : null };
+    };
+    A.app = function (fn, payload) { return A.post(cfg.appUrl, { fn: fn, payload: payload || {}, view: A.view() }); };
+    A.realOk = function (flag) {
+      if (flag === true) return true;
+      if (typeof flag === 'string') return A.appFn(flag);
+      if (Array.isArray(flag)) return flag.length > 0 && flag.every(A.appFn);
+      return false;
     };
 
     A.init = function () {
@@ -140,7 +163,7 @@
         if (!r || !r.ok) return r || { ok: false, code: 'server', error: 'Не вдалося отримати список людей.' };
         var s = A.session(), me = (s && s.me) || {}, users = r.users || r.items || [], byRole = {}, locs = {}, locList = [];
         function addLoc(id, name) { if (id && !Object.prototype.hasOwnProperty.call(locs, id)) { locs[id] = 1; locList.push({ id: id, name: name || id, active: true }); } }
-        (me.locations || []).forEach(function (l) { addLoc(l.id, l.name); });
+        (me.allLocations || me.locations || []).forEach(function (l) { addLoc(l.id, l.name); });   // v1.12: адмін «як профіль» — усі локації з назвами
         var items = users.map(function (u) {
           var on = u.active !== false;
           if (on) byRole[u.role] = (byRole[u.role] || 0) + 1;
@@ -149,7 +172,7 @@
             roleLabel: u.roleLabel || ROLE_LABELS[u.role] || u.role, locationIds: u.locationIds || [],
             canAddPeople: !!u.canAddPeople, addedBy: u.addedBy || null, canEdit: u.canEdit !== false, canEnable: u.canEnable !== false,
             allLocations: u.role === 'manager' || u.role === 'admin', active: on, seniorOff: false, disabledBy: u.disabledBy || null,
-            lastAuditAt: null, addedAt: u.createdAt || null, isMe: !!me.id && u.id === me.id };
+            lastAuditAt: null, addedAt: u.createdAt || null, isMe: !!me.id && u.id === me.id, email: u.email || '' };   // v1.11: пошту сервер віддає лише адміну
         });
         var roles = ROLE_ORDER.filter(function (k) { return ASSIGNABLE.indexOf(k) >= 0 || users.some(function (u) { return u.role === k; }); })
           .map(function (k) { return { id: k, label: ROLE_LABELS[k], count: byRole[k] || 0, assignable: ASSIGNABLE.indexOf(k) >= 0 }; });
@@ -166,15 +189,38 @@
 
     A.install = function (backend) {
       if (!A.real() || !backend || typeof backend.call !== 'function' || backend.slackWrapped) return backend;
-      var orig = backend.call.bind(backend);
       return { slackWrapped: true, reset: backend.reset, failNext: backend.failNext, call: function (fn, payload) {
-        if (fn === 'authMe') return A.me();
+        if (fn === 'authMe') {
+          return A.me().then(function (a) {
+            if (!(a && a.ok && a.me && A.appFn('meAs'))) return a;
+            return A.app('meAs', {}).then(function (r) {
+              if (!(r && r.ok && r.me)) return a;
+              var s = A.session();
+              if (s && r.me.id === (s.me && s.me.id)) { s.me = r.me; env.storage.set(KEY, s); }
+              return { ok: true, me: r.me };
+            });
+          });
+        }
+        if (fn === 'authAdminView' && A.appFn('meAs')) {
+          var loc = payload && payload.locationId;
+          if (typeof loc !== 'string' || loc.length < 1 || loc.length > 40) return Promise.resolve({ ok: false, code: 'validation', error: 'Оберіть локацію зі списку.' });
+          var prev = env.storage.get(VIEW_KEY);
+          env.storage.set(VIEW_KEY, loc);
+          return A.app('meAs', {}).then(function (r) {
+            if (r && r.ok) return r;
+            if (typeof prev === 'string' && prev) env.storage.set(VIEW_KEY, prev); else env.storage.del(VIEW_KEY);   // сервер не прийняв локацію — лишається попередня
+            return r;
+          });
+        }
+        if (A.appFn(fn)) return A.app(fn, payload);
         if (fn === 'authLogout') return A.logout();
         if (fn === 'demoUsers') return Promise.resolve({ ok: true, users: [] });
+        if (fn === 'demoReload') return Promise.resolve({ ok: true });   // «Оновлено о …» — просто перемалювати екран
         if (Object.prototype.hasOwnProperty.call(DEMO_ONLY, fn)) return Promise.resolve({ ok: false, code: 'forbidden', error: DEMO_ONLY_MSG });
-        return orig(fn, payload);
+        return Promise.resolve({ ok: false, code: 'not_ready', error: NOT_READY_MSG });
       } };
     };
+    A.notReady = function (r) { return !!(r && r.ok === false && r.code === 'not_ready'); };
 
     return A;
   }
@@ -195,6 +241,9 @@
 
   A.loginHtml = function (style) {
     var ui = style === 'ui';
+    if (!A.siteButton()) {
+      return '<p class="' + (ui ? 'login__note' : 'hint') + '"><b>' + esc(SLACK_ONLY) + '</b> ' + esc(SLACK_ONLY_HOW) + '</p>';
+    }
     return '<button class="' + (ui ? 'ui-btn ui-btn--primary login__btn' : 'btn btn--primary btn--block') + '" type="button" data-slack-login>' +
         P.ic('slack') + 'Увійти через Slack</button>' +
       '<p class="' + (ui ? 'login__note' : 'hint') + '">' + esc(HINT) + '</p>' +

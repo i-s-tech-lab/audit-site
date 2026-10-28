@@ -42,7 +42,7 @@
         return '<tr data-act="an-order" data-no="' + esc(o.no) + '"><td><b>' + hl(o.no, q) + '</b><span class="sub">' + hl(o.products.join(', '), q) + (o.customer ? ' · ' + hl(o.customer, q) : '') + '</span></td>' +
           r.departments.map(function (d) {
             var c = o.cells[d.id], on = sel === d.id ? ' an-ocol--on' : '';
-            return c ? '<td class="n an-oc' + on + '"><span class="an-oc__k">перевірено</span> <b>' + h.num(c.checked) + ' шт</b> · ' + A.pct0(c.planPct) + ' плану' +
+            return c ? '<td class="n an-oc' + on + '"><span class="an-oc__k">перевірено</span> <b>' + h.num(c.checked) + ' шт</b>' + (c.planPct == null ? '' : ' · ' + A.pct0(c.planPct) + ' плану') +
               '<span class="sub">брак ' + X.brak(c.rejected, c.pct) + '</span></td>' : '<td class="n an-oc an-oc--none' + on + '">—</td>';
           }).join('') + '</tr>';
       }).join('') : '<tr><td colspan="' + (r.departments.length + 1) + '" class="an-oc--none" style="padding:28px 12px;text-align:center">За запитом «' + esc(ui.oq.trim()) + '» замовлень немає · у списку ' +
@@ -51,7 +51,7 @@
   function draw(view) {
     var r = view.data, box = view.box('an-orders');
     var head = '<div class="card-head"><div style="flex:1"><h2 class="card-title">Аналітика по замовленнях' + A.q('sr.an.orders') + '</h2><p class="hint">Замовлення з аудитами за ' + esc(A.span(r.from, r.to)) + '. ' +
-      'Числа — стан замовлення на зараз. % плану = перевірено у відділі ÷ план відділу на замовлення. «—» — у відділі аудитів цього замовлення не було. Натисніть рядок — вікно замовлення.</p></div></div>';
+      'Числа — стан замовлення на зараз. % плану = перевірено у відділі ÷ план відділу на замовлення (немає плану — цифри «% плану» немає). «—» — у відділі аудитів цього замовлення не було. Натисніть рядок — вікно замовлення.</p></div></div>';
     if (!r.orders.length) { box.innerHTML = head + h.empty('Аудитів по замовленнях за період не було', A.span(r.from, r.to)); return; }
     if (!view.box('an-oq')) {
       box.innerHTML = '<div id="an-ohead"></div><div class="an-obar"><div class="search an-osearch">' + h.ic('search', 'icon') +
@@ -120,8 +120,9 @@
         if (view.dep && own(r.views, view.dep) && r.views[view.dep].audits) dep = view.dep;
         layer.el.querySelector('.modal__title').textContent = 'Замовлення ' + o.no + (o.products.length ? ' · ' + o.products.join(', ') : '');
         var head = layer.el.querySelector('.modal__head > div');
-        head.insertAdjacentHTML('beforeend', '<p class="hint">План ' + h.num(o.plan) + ' шт по всіх відділах · ' + esc(o.customer) + (o.blockName ? ' · ' + esc(o.blockName) : '') +
-          (o.firstAuditDay ? ' · аудити з ' + esc(A.span(o.firstAuditDay, o.lastAuditDay).replace(' — ', ' по ')) : '') + '</p>');
+        var meta = [o.plan ? 'План ' + h.num(o.plan) + ' шт по всіх відділах' : 'План не задано', o.customer ? esc(o.customer) : '', o.blockName ? esc(o.blockName) : '',
+          o.firstAuditDay ? 'аудити з ' + esc(A.span(o.firstAuditDay, o.lastAuditDay).replace(' — ', ' по ')) : ''].filter(Boolean);
+        head.insertAdjacentHTML('beforeend', '<p class="hint">' + meta.join(' · ') + '</p>');
         head.insertAdjacentHTML('afterend', '<span class="badge badge--' + (o.active ? 'info">у роботі' : 'ok">завершено') + '</span>');
         layer.el.querySelector('[data-an="crit"]').textContent = 'Червона риска зліва в таблиці аудитів — брак в аудиті понад ' + r.criticalPct + '% (критичний рівень).';
         draw();
@@ -136,7 +137,7 @@
       r.departments.map(function (d) {
         return '<button class="seg__btn' + (dep === d.id ? ' seg__btn--on' : '') + '" type="button" data-act="dep" data-id="' + esc(d.id) + '"' + (d.audits ? '' : ' style="color:var(--text-3)"') + '>' +
           esc(d.name) + ' · ' + d.audits + '</button>'; }).join('') + '</div><p class="hint" style="margin-top:-8px">Число біля відділу — скільки в ньому аудитів цього замовлення.</p>';
-    var kpis = '<div class="kpis an-kpis6">' + A.kpi(h.num(v.checked), 'перевірено, шт', 'term.checked') + A.kpi(A.pct0(v.planPct), 'плану · план ' + h.num(v.plan) + ' шт', 'sr.an.planPct') +
+    var kpis = '<div class="kpis an-kpis6">' + A.kpi(h.num(v.checked), 'перевірено, шт', 'term.checked') + A.kpi(A.pct0(v.planPct), v.plan ? 'плану · план ' + h.num(v.plan) + ' шт' : 'плану · плану для цього замовлення немає', 'sr.an.planPct') +
       A.kpi(h.num(v.rejected), 'брак, шт', 'term.rejected') + A.kpi(h.pct(v.pct), 'брак, % · у цеху за ці дні ' + h.pct(v.shopPct), 'term.rate') +
       h.kpi(h.num(v.audits), P.plural(v.audits, 'аудит', 'аудити', 'аудитів')) + h.kpi(h.num(v.daysWithAudits), 'днів з аудитами · з ' + v.daysTotal) + '</div>';
     if (!v.audits) return seg + kpis + h.empty(depName + ': аудитів цього замовлення не було', '');

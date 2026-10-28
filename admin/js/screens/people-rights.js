@@ -7,7 +7,7 @@
     viewAllLocations: 'Огляд усіх локацій із числами за сьогодні (кабінети керівника й адміністратора).'
   };
 
-  P.cab.screen('/people/rights', { tab: 'people', title: 'Що може роль', render: function (ctx) {
+  P.cab.screen('/people/rights', { tab: 'people', title: 'Що може роль', real: false, render: function (ctx) {   // real: false — права ролей поки лише в тестовій версії
     var data = null, holders = null;   // holders — старші й керівники з вимкненим правом «Додавати людей» (null — ще не завантажили чи не вдалося)
     function grantCard() {
       var list = holders || [];

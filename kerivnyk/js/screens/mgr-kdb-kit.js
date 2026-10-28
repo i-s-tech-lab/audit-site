@@ -26,8 +26,15 @@
   X.weeks = function (q) { var w = +(q && q.w); return w === 4 || w === 13 ? w : 8; };
   X.LV_WORD = { fix: 'неправильно зроблене', repair: 'пошкоджене', scrap: 'зламане' };
   X.lvlDot = function (level) { return '<i class="kb-dot kb-lv--' + (X.LV_WORD[level] ? level : 'fix') + '"></i>'; };
-  X.OUT = { helped: 'тримається', held_types: 'її види нижче', not_needed: 'не потрібно', not_helped: 'рецидив' };
+  X.OUT = { helped: 'тримається', held_types: 'її види нижче', not_needed: 'не потрібно', not_helped: 'рецидив', self_closed: 'без участі старшого' };
   X.cause = function (id, label) { return P.mgr.causeName(id, label); };
+
+  X.kdWait = function (r) { return !!r && r.kdFrom === null; };
+  X.kdFromNote = function (r) {
+    if (!r || r.kdFrom === undefined) return '';
+    return r.kdFrom ? '<p class="kb-kdfrom">Коригуючі дії рахуються з ' + esc(X.day(r.kdFrom)) + '.</p>'
+      : '<p class="kb-kdfrom kb-kdfrom--wait">Коригуючі дії почнуть відкриватися з дня переходу на новий Аудит.</p>';
+  };
 
   var GEN = ['понеділка', 'вівторка', 'середи', 'четверга', 'пʼятниці', 'суботи', 'неділі'];
   var ACC = ['понеділок', 'вівторок', 'середу', 'четвер', 'пʼятницю', 'суботу', 'неділю'];
@@ -76,10 +83,10 @@
       '<button type="button" class="kb-out" data-act="mkd-how">' + P.ic('info', 'ui-icon--sm') + 'Як працюють коригуючі дії</button></div>';
   };
 
-  var OUTS = [['helped', 'mkd-o1', 'тримається'], ['held_types', 'mkd-o2', 'її види нижче'], ['not_needed', 'mkd-o3', 'не потрібно']];
+  var OUTS = [['helped', 'mkd-o1', 'тримається'], ['held_types', 'mkd-o2', 'її види нижче'], ['not_needed', 'mkd-o3', 'не потрібно'], ['self_closed', 'mkd-o4', 'без участі старшого']];
   X.outBar = function (c) {
     c = c || {};
-    var tot = (c.helped || 0) + (c.held_types || 0) + (c.not_needed || 0);
+    var tot = OUTS.reduce(function (s, o) { return s + (c[o[0]] || 0); }, 0);
     return '<span class="mkd-ob" role="img" aria-label="' + esc(OUTS.map(function (o) { return o[2] + ' — ' + (c[o[0]] || 0); }).join(', ')) + '">' +
       (tot ? OUTS.filter(function (o) { return c[o[0]]; }).map(function (o) { return '<i class="' + o[1] + '" style="--w:' + (c[o[0]] / tot * 100).toFixed(1) + '%"></i>'; }).join('') : '') + '</span>';
   };
@@ -97,8 +104,9 @@
       }).join('') + '<b class="kb-spark__n" style="--y:' + (T / max * 100).toFixed(1) + '%"></b></span>';
   };
 
-  var SEG = { early: 'kb-sg--early', open: 'kb-sg--open', extra: 'mkd-sg--extra', week1: 'kb-sg--w1', week2: 'kb-sg--w2', quiet: 'mkd-sg--quiet', relapse: 'kb-sg--rel' };
-  var MARK = { helped: ['✓', 'kb-mk--done', 'тримається'], held_types: ['✓', 'kb-mk--part', 'її види нижче'], relapse: ['✕', 'kb-mk--rel', ''], not_needed: ['○', 'kb-mk--skip', 'не потрібно'] };
+  var SEG = { early: 'kb-sg--early', open: 'kb-sg--open', analysis: 'kb-sg--analysis', extra: 'mkd-sg--extra', week1: 'kb-sg--w1', week2: 'kb-sg--w2', quiet: 'mkd-sg--quiet', relapse: 'kb-sg--rel' };
+  var MARK = { helped: ['✓', 'kb-mk--done', 'тримається'], held_types: ['✓', 'kb-mk--part', 'її види нижче'], relapse: ['✕', 'kb-mk--rel', ''], not_needed: ['○', 'kb-mk--skip', 'не потрібно'],
+    self_closed: ['✓', 'kb-mk--alone', 'без участі старшого'] };
   var MARK_EARLY = ['✓', 'kb-mk--done mkd-mk--early', 'закрито достроково'], MARK_QUIET = ['✕', 'kb-mk--rel', '', 'брак повернувся в тихий нагляд'];
   function markOf(m) { return m.early ? MARK_EARLY : m.quiet ? MARK_QUIET : MARK[m.kind] || MARK.relapse; }
   var TAG = { early: 'достроково', parallel: 'паралельна', repeat: 'повторна' };
@@ -110,6 +118,7 @@
   }
   function segTexts(s, T) {
     if (s.kind === 'open') return ['без плану'];
+    if (s.kind === 'analysis') return ['аналіз · план ще не записано', 'аналіз', ''];   // v1.2
     if (s.kind === 'extra') return ['дострокова: до звичайного розбору', 'до звичайного розбору', 'до розбору'];
     if (s.kind === 'relapse') return ['рецидив · новий план ще не записано', 'рецидив · новий план', 'рецидив'];
     if (s.kind === 'week1' || s.kind === 'week2' || s.kind === 'quiet') {
@@ -161,13 +170,14 @@
     var body = '<div class="kb-scroll"><div class="kb-tl__box">' + head + (rows || '<p class="kb-cs kb-tl__none">За ці тижні дій не було.</p>') + '</div></div>' +
       X.legend([['<i class="kb-sw kb-sg--early"></i>', 'відкрито достроково'], ['<i class="kb-sw kb-sg--open"></i>', 'без плану'], ['<i class="kb-sw mkd-sg--extra"></i>', 'дострокова: до звичайного розбору'],
         ['<i class="kb-sw kb-sg--w1"></i>', 'дні 1–7 після плану'], ['<i class="kb-sw kb-sg--w2"></i>', 'дні 8–14 після плану'], ['<i class="kb-sw mkd-sg--quiet"></i>', 'тихий нагляд після дострокового закриття'],
-        ['<i class="kb-sw kb-sg--rel"></i>', 'рецидив — потрібен новий план'],
-        ['<i class="kb-mk kb-mk--done kb-mk--lg">✓</i>', 'тримається'], ['<i class="kb-mk kb-mk--done mkd-mk--early kb-mk--lg">✓</i>', 'закрито достроково'], ['<i class="kb-mk kb-mk--rel kb-mk--lg">✕</i>', 'рецидив'],
+        ['<i class="kb-sw kb-sg--analysis"></i>', 'аналіз — старший шукає причину'], ['<i class="kb-sw kb-sg--rel"></i>', 'рецидив — потрібен новий план'],
+        ['<i class="kb-mk kb-mk--done kb-mk--lg">✓</i>', 'тримається'], ['<i class="kb-mk kb-mk--done mkd-mk--early kb-mk--lg">✓</i>', 'закрито достроково'],
+        ['<i class="kb-mk kb-mk--alone kb-mk--lg">✓</i>', 'закрито без участі старшого'], ['<i class="kb-mk kb-mk--rel kb-mk--lg">✕</i>', 'рецидив'],
         ['<i class="kb-ln kb-ln--today"></i>', 'сьогодні']]);
     return X.card('Дії по тижнях · ' + X.span(tl.from, tl.to), 'mkd.timeline', 'дні 1–7 і 8–14 — дні з аудитами · число на смузі — брак за ці дні · натисніть рядок — уся дія (лише перегляд)', body);
   };
 
-  var ICO = { helped: ['✓', 'kb-mk--done'], held_types: ['✓', 'kb-mk--part'], not_needed: ['○', 'kb-mk--skip'] };
+  var ICO = { helped: ['✓', 'kb-mk--done'], held_types: ['✓', 'kb-mk--part'], not_needed: ['○', 'kb-mk--skip'], self_closed: ['✓', 'kb-mk--alone'] };
   X.effCard = function (e, weeks) {
     e = e || { items: [] };
     var items = e.items || [], vals = [];
@@ -186,7 +196,7 @@
     var avg = e.avg && e.avg.before != null ? '<b class="kb-ef__tot">У середньому</b><span class="kb-ef__tot"></span><span class="kb-r kb-ef__tot">' + X.arrow(e.avg.before, e.avg.after) + '</span>' : '';
     var body = items.length ? '<div class="kb-ef" role="table" aria-label="Види браку в дії до і після для закритих дій"><span class="kb-cs">Дія · відкрито → закрито</span><span class="kb-ef__ax">' + ticks.join('') + '</span>' +
       '<span class="kb-cs kb-r">види браку в дії: до → після</span>' + rows + avg + '</div>' +
-      X.legend([['<i class="kb-ef__kb"></i>', 'на початку дії'], ['<i class="kb-ef__ka"></i>', 'після'], ['<i class="kb-ln kb-ln--less"></i>', 'менше'], ['<i class="kb-mk kb-mk--skip kb-mk--lg">○</i>', 'старший позначив «не потрібно»']])
+      X.legend([['<i class="kb-ef__kb"></i>', 'на початку дії'], ['<i class="kb-ef__ka"></i>', 'після'], ['<i class="kb-ln kb-ln--less"></i>', 'менше'], ['<i class="kb-mk kb-mk--skip kb-mk--lg">○</i>', 'старший позначив «не потрібно»'], ['<i class="kb-mk kb-mk--alone kb-mk--lg">✓</i>', 'закрито без участі старшого']])
       : X.none('За ' + weeks + ' ' + P.plural(weeks, 'тиждень', 'тижні', 'тижнів') + ' закритих дій немає.');
     return X.card('Ефективність закритих дій · ' + weeks + ' ' + P.plural(weeks, 'тиждень', 'тижні', 'тижнів'), 'mkd.eff', e.from && e.to ? X.day(e.from) + ' — ' + X.day(e.to) : '', body);
   };

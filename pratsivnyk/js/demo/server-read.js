@@ -94,7 +94,7 @@
       var deps = db.departments.filter(function (d) { return d.locationId === r.loc.id && on(d); });
       var types = {};
       deps.forEach(function (d) { types[d.deptTypeId] = true; });
-      var orders = db.orders.filter(function (o) { return o.locationId === r.loc.id && o.firstDay <= day; })
+      var orders = db.orders.filter(function (o) { return o.locationId === r.loc.id && o.firstDay <= day && on(o); })
         .sort(function (a, b) { return a.lastDay < b.lastDay ? 1 : a.lastDay > b.lastDay ? -1 : a.no < b.no ? 1 : -1; }).slice(0, 50);
       var canAdd = !!me.can.recordAudit && (P.demoApis || []).some(function (a) { return Object.prototype.hasOwnProperty.call(a, 'workerQuickAdd'); });
       return { ok: true, location: { id: r.loc.id, name: r.loc.name }, limits: Object.assign({}, C.LIMITS), canAddWorker: canAdd,

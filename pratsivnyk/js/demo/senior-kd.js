@@ -37,12 +37,13 @@
   var STATUS_LABELS = { pre: 'відкрито достроково · тиждень ще йде',
     'new': 'понад норму, не почато', check: 'впроваджено · дні 1–7 спостереження', hold: 'під наглядом · дні 8–14',
     helped: 'закрито: тримається', held_types: 'закрито: її види браку нижче, ніж до дії', not_helped: 'рецидив',
-    not_needed: 'дія не потрібна', none: 'дій не було' };
+    not_needed: 'дія не потрібна', none: 'дій не було', self_closed: 'закрито достроково без участі старшого' };
   var CLOSED_EARLY_LABEL = 'закрито достроково: брак видів дії впав щонайменше вдвічі';
   var STATE_OF = { pre: 'pre', 'new': 'over', check: 'watch', hold: 'hold', helped: 'done', held_types: 'part',
-    not_helped: 'relapse', not_needed: 'skip' };
+    not_helped: 'relapse', not_needed: 'skip', self_closed: 'alone' };
   var PHASE_OF = { pre: 'open', 'new': 'open', check: 'observe', hold: 'observe', helped: 'final', held_types: 'final',
-    not_helped: 'final', not_needed: 'final' };
+    not_helped: 'final', not_needed: 'final', self_closed: 'final' };
+  var NOTE_MAX = 300;
   var ONGOING = { pre: 1, over: 1, watch: 1, hold: 1 };
   var NO_END = 1e9;
 
@@ -52,6 +53,11 @@
   function mean(list) { return list.length ? list.reduce(function (s, v) { return s + v; }, 0) / list.length : 0; }
   function daysBetween(a, b) { return Math.round((S.parseDay(b) - S.parseDay(a)) / 86400000); }
 
+  function kdStart(env) {
+    if (!env || env.real !== true) return { real: false, from: null, min: null };
+    var v = env.db && env.db.settings ? env.db.settings.kdFrom : null;
+    return isDay(v) ? { real: true, from: v, min: v } : { real: true, from: null, min: '9999-12-31' };
+  }
   function liveRules() { return { threshold: KD.THRESHOLD, wd: KD.REVIEW_DAY, early: KD.EARLY_MIN, pareto: KD.PARETO }; }
   function rulesOut(R) {
     return { threshold: R.threshold, early: R.early, pareto: R.pareto, cycleDays: KD.CYCLE_DAYS, reviewWeekday: R.wd, reviewWeekdayName: S.WEEKDAYS[R.wd - 1],
@@ -73,6 +79,8 @@
       of: function (day) { return S.periodOf(day, R.wd); } };
     cx.L = cx.of(today) - 1;
     cx.n0 = first ? Math.max(cx.of(first), cx.L - MAX_BACK) : cx.L;
+    cx.kdMin = kdStart(env).min;
+    cx.canOpen = function (d) { return !cx.kdMin || (!!d && d >= cx.kdMin); };
     cx.stored = (stored || env.db.kdActions || []).filter(function (a) {
       return a && a.locationId === loc.id && has(env.ix.dep, a.departmentId) && isDay(a.weekStart) && isDay(a.weekEnd);
     });
@@ -112,7 +120,7 @@
       for (var d = start; d < end && d < today; d = S.addDays(d, 1)) {
         if (!byDay[d]) continue;
         var x = cx.day(depId, d); c += x.checked; r += x.rejected;
-        if (RU.earlyOk(c, r, R.threshold, R.early) && !list.some(function (a) { return activeAt(a, d); })) return d;
+        if (cx.canOpen(d) && RU.earlyOk(c, r, R.threshold, R.early) && !list.some(function (a) { return activeAt(a, d); })) return d;
       }
       return null;
     };
@@ -130,13 +138,13 @@
           var rl = relapseIn(cx, list, n), day = null;
           if (rl) {
             c = ctxAt(cx, list, n);
-            if (!c.cover && paretoIds(cx.env, cx.range(depId, rl.from, rl.day).byType, R.pareto, busyTypes(list, { key: null }, rl.open)).length) {
+            if (!c.cover && cx.canOpen(rl.open) && paretoIds(cx.env, cx.range(depId, rl.from, rl.day).byType, R.pareto, busyTypes(list, { key: null }, rl.open)).length) {
               v = fresh(cx, depId, n, rl.open, false, c); v.onRelapse = true; v.baseStart = rl.from; v.repeatOf = rl.a.key;   // v4.1: саме ця дія
             }
           }
           if (!v) day = cx.earlyDay(depId, n, list);
           if (day) v = fresh(cx, depId, n, day, true, quietRep(list, day, ctxEarly(list, day)));
-          else if (!v && n <= cx.L && cx.wk(depId, n).over) {
+          else if (!v && n <= cx.L && cx.canOpen(cx.start(n + 1)) && cx.wk(depId, n).over) {
             c = ctxAt(cx, list, n);
             var wt = cx.range(depId, cx.start(n), cx.end(n)).byType;
             if (!c.cover && !hotObs(cx, list, n) && paretoIds(cx.env, wt, R.pareto, busyTypes(list, { key: null }, cx.start(n + 1))).length) {
@@ -201,6 +209,8 @@
     o.n = cx.of(rec.weekStart); o.key = dep + '|' + rec.weekStart; o.overWeeks = 0; o.coverEnd = NO_END;
     if (!isDay(o.openedAt)) o.openedAt = rec.early ? rec.weekStart : cx.start(o.n + 1);
     o.repeatOf = rec.repeatOf || null; o.parallelWith = Array.isArray(rec.parallelWith) ? rec.parallelWith : [];
+    o.analysisAt = isDay(rec.analysisAt) ? [[rec.analysisAt, o.openedAt].sort()[1], cx.today].sort()[0] : null;
+    if (o.analysisAt && isDay(rec.implementedAt) && rec.implementedAt < o.analysisAt) o.analysisAt = [rec.implementedAt, o.openedAt].sort()[1];
     var items = knownIds(cx, rec.items) || [], excl = knownIds(cx, rec.excludedTypes), fz;
     if (rec.notNeeded) {
       var at = isDay(rec.notNeeded.at) ? rec.notNeeded.at : o.openedAt;
@@ -217,6 +227,14 @@
       o.implementedAt = null;
       o.status = rec.early && o.n > cx.L ? 'pre' : 'new';
       o.items = null;   // живий список — live()
+      var sc = o.analysisAt ? null : selfClose(cx, o, list);
+      if (sc) {
+        o.status = 'self_closed'; o.finishedOn = sc.day; o.selfClose = sc;
+        o.items = sc.ids.slice(); o.excludedTypes = sc.excl.slice(); o.typesBefore = sc.typesBefore;
+        for (o.coverEnd = o.n; cx.start(o.coverEnd + 2) < sc.day;) o.coverEnd++;   // тижні, розібрані до самозакриття (як у «не потрібно»)
+        o.overWeeks = countOver(cx, dep, o.n, o.coverEnd);
+        return o;
+      }
       o.overWeeks = countOver(cx, dep, o.n, cx.L);
       return o;
     }
@@ -316,6 +334,23 @@
     });
   }
 
+  function selfClose(cx, o, list) {
+    var D = o.openedAt, first = S.addDays(D, RU.SELF_CLOSE_DAYS);
+    if (first >= cx.today) return null;
+    var dep = o.departmentId, sp = openSpan(cx, o), ex = busyTypes(list || [], o, D), base = cx.range(dep, sp.from, sp.to);
+    var ids = paretoIds(cx.env, base.byType, cx.R.pareto, ex), before = C.pct(sumOf(base.byType, ids), base.checked);
+    if (!(before > 0)) return null;
+    var c = 0, r = 0, pcs = 0, from = S.addDays(D, 1);
+    var last = S.addDays(D, RU.SELF_CLOSE_MAX_DAYS);
+    for (var d = from, g = 0; d < cx.today && d <= last && g < 400; d = S.addDays(d, 1), g++) {
+      if (cx.byDay[d]) { var x = cx.day(dep, d); c += x.checked; r += x.rejected; pcs += sumOf(x.byType, ids); }
+      if (d < first) continue;
+      var ok = RU.selfCloseOk(daysBetween(D, d), { checked: c, rejected: r, typesPieces: pcs }, before, cx.T, cx.R.early);
+      if (ok.ok) return { day: S.addDays(d, 1), from: from, to: d, days: ok.days, ids: ids, excl: ex, typesBefore: before, baseFrom: sp.from, baseTo: sp.to, check: ok };
+    }
+    return null;
+  }
+
   function paretoIds(env, byType, pct, excl) {
     var skip = Object.create(null);
     (excl || []).forEach(function (t) { skip[t] = 1; });
@@ -385,6 +420,20 @@
     return { checked: st.checked, rejected: st.rejected, rate: C.pct(st.rejected, st.checked) };
   }
 
+  function analysisView(cx, a) {
+    if (!a.analysisAt) return null;
+    var ix = cx.env.ix, by = typeof a.analysisBy === 'string' && has(ix.user, a.analysisBy) ? ix.user[a.analysisBy] : null;
+    var to = a.implementedAt || (PHASE_OF[a.status] === 'final' ? a.finishedOn || null : null);
+    return { from: a.analysisAt, to: to, days: daysBetween(a.analysisAt, to || cx.today) + 1, by: a.analysisBy || null, byName: by ? by.name : null,
+      note: typeof a.analysisNote === 'string' ? a.analysisNote : '' };
+  }
+  function selfView(sc) {
+    var k = sc.check;
+    return { day: sc.day, from: sc.from, to: sc.to, days: sc.days, typesBefore: sc.typesBefore, baseFrom: sc.baseFrom, baseTo: sc.baseTo,
+      checked: k.checked, min: k.min, minOk: k.minOk, deptRate: k.deptRate, deptOk: k.deptOk, typesRate: k.typesRate, hi: k.hi, half: k.half,
+      typesOk: k.typesOk, daysOk: k.daysOk, needDays: RU.SELF_CLOSE_DAYS, maxDays: RU.SELF_CLOSE_MAX_DAYS };
+  }
+
   function view(cx, a) {
     var ix = cx.env.ix, depId = a.departmentId, dep = ix.dep[depId], u = a.who && has(ix.user, a.who) ? ix.user[a.who] : null;
     var os = openSpan(cx, a), bw = cx.range(depId, os.from, a.onRelapse ? os.to : a.weekEnd);
@@ -395,6 +444,7 @@
     var phase = PHASE_OF[a.status], lv = phase === 'open' ? live(cx, a) : null, ids = itemIds(cx, a), cum = 0;
     var lt = a.notNeeded ? [a.notNeeded.at || a.openedAt, cx.today].sort()[0] : a.implementedAt;
     var rf = lv ? lv.from : a.implementedAt ? a.baseFrom : a.weekStart, rt = lv ? lv.to : a.implementedAt ? a.baseTo : lt;
+    if (a.selfClose) { rf = a.selfClose.baseFrom; rt = a.selfClose.baseTo; }   // v4.2: закрита без участі старшого — дні «до» (момент відкриття)
     var ir = cx.range(depId, rf, rt);
     var items = ids.map(function (t) {
       var pcs = ir.byType[t] || 0, def = ix.def[t];
@@ -412,8 +462,10 @@
     var split = a.early ? { before: rangeRate(cx, depId, a.weekStart, openTo),
       after: rangeRate(cx, depId, S.addDays(a.openedAt, 1), [a.weekEnd, cx.today].sort()[0]) } : null;
     var below = !!a.early && a.weekEnd < cx.today && rate != null && rate <= cx.T;
+    var an = analysisView(cx, a);
     return { id: a.id || null, key: depId + '|' + a.weekStart, status: a.status,
-      statusLabel: a.status === 'new' && below ? 'відкрито достроково, не почато' : a.closedEarly ? CLOSED_EARLY_LABEL : STATUS_LABELS[a.status], state: STATE_OF[a.status], phase: phase,
+      statusLabel: an && phase === 'open' ? 'аналіз · ' + an.days + '-й день' : a.status === 'new' && below ? 'відкрито достроково, не почато' : a.closedEarly ? CLOSED_EARLY_LABEL : STATUS_LABELS[a.status], state: STATE_OF[a.status], phase: phase,
+      analysis: an, selfClosed: a.status === 'self_closed', selfClose: a.selfClose ? selfView(a.selfClose) : null,
       locationId: cx.loc.id, departmentId: depId, departmentName: dep ? dep.name : '', period: a.n, periodStart: a.weekStart, periodEnd: a.weekEnd,
       current: a.weekEnd >= cx.today, openedAt: a.openedAt, early: !!a.early, overWeeks: a.overWeeks || 0,
       weekRate: rate, weekDone: a.weekEnd < cx.today, earlyBelow: below,
@@ -488,6 +540,7 @@
       if (a.early && a.n <= cx.L && !before(a.implementedAt) && !(a.notNeeded && before(a.notNeeded.at))) add(s1, 2, 'over', a.n);
       if (a.implementedAt) add(a.implementedAt, 3, 'watch', a.n);
       if (a.notNeeded) add(a.notNeeded.at, 4, 'skip', a.n);
+      if (a.status === 'self_closed') add(a.finishedOn, 4, 'alone', a.n);   // v4.2: закрито без участі старшого
       if (a.p1 && a.p1.done) add(S.addDays(a.p1.to, 1), 0, a.relapseStage === 1 ? 'relapse' : a.closedEarly ? 'done' : 'hold', cx.of(a.p1.to));
       if (a.p2 && a.p2.done && !a.closedEarly) add(S.addDays(a.p2.to, 1), 0, a.status === 'helped' ? 'done' : a.status === 'held_types' ? 'part' : 'relapse', cx.of(a.p2.to));
     });
@@ -579,10 +632,10 @@
   function totals(cx) {
     var from = since(cx, 30), all = cx.all(), n = function (st, recent) { return all.filter(function (a) { return a.status === st && (!recent || a.finishedOn >= from); }).length; };
     return { 'new': n('new'), check: n('check'), hold: n('hold'), helped30: n('helped', true), notHelped30: n('not_helped', true), notNeeded30: n('not_needed', true),
-      pre: n('pre'), heldTypes30: n('held_types', true) };
+      pre: n('pre'), heldTypes30: n('held_types', true), selfClosed30: n('self_closed', true) };
   }
   function stateCounts(list, from) {
-    var c = { over: 0, watch: 0, hold: 0, done: 0, relapse: 0, skip: 0, pre: 0, part: 0 };
+    var c = { over: 0, watch: 0, hold: 0, done: 0, relapse: 0, skip: 0, pre: 0, part: 0, alone: 0 };
     list.forEach(function (a) { var s = STATE_OF[a.status]; if (ONGOING[s] || !from || a.finishedOn >= from) c[s]++; });
     return c;
   }
@@ -661,6 +714,7 @@
   var GEN_PLAN = { skill: 'Провели інструктаж біля робочого місця, показали правильний прийом.', discipline: 'Нагадали про перевірку виробу перед здачею; тімлід перевіряє першу партію зміни.',
     tool: 'Замінили голки й налаштували натяг нитки на двох машинах.', material: 'Замінили партію ниток на іншого постачальника.', organization: 'Переставили стіл контролю ближче до лінії.' };
   var GEN_SKIP = ['Разовий збій машини — полагодили того ж дня.', 'Партія з браком від постачальника — повернули.'];
+  var GEN_NOTE = 'Перевіряємо голки й натяг нитки на машинах 3 і 5, дивимось партію тканини.';
 
   var PLANS = ['early', 'parallel', 'relapse', 'history', 'early_week'];
   function gPastDays(g, depId) {
@@ -679,6 +733,7 @@
     var j = function (a, b) { return Math.round(g.rnd.between(a, b) * 10) / 10; }, at = function (o) { return id + '|' + (L + o); };
     var impl = function (o, plus, causes) { return function (v, cx, list) { return seedRec(g, v, { implementedAt: S.addDays(s(o), plus), causes: causes }, list); }; };
     var skip = function (v, cx, list) { return seedRec(g, v, { notNeeded: GEN_SKIP[0] }, list); }, open = function () { return null; };
+    var anl = function (v, cx, list) { return seedRec(g, v, { analysis: GEN_NOTE }, list); };   // v4.2: аналіз триває
     var quiet = function (a, b) { cap(g, dep, s(a), e(b), 4.5); };
     var over = function (o, lo, hi) { push(g, dep, s(o), e(o), j(lo, hi)); };
     var past = function (k) { var d = gPastDays(g, id); return d[Math.min(k, d.length) - 1] || null; };
@@ -722,7 +777,7 @@
         cap(g, dep, s(-5), e(pre ? 0 : -1), 4.2);
         var eIds = gItems(g, id, s(-6), S.addDays(s(-5), 1)), eOth = others(eIds);
         if (eOth.length) push(g, dep, S.addDays(s(-5), 2), e(-5), j(8.6, 9.0), null, null, g.rnd.sample(eOth, Math.min(2, eOth.length)));
-        if (pre) { push(g, dep, s(1), preTo, j(8.2, 9.0)); dec[at(1)] = open; } else earlyWeek(0);
+        if (pre) { push(g, dep, s(1), preTo, j(8.2, 9.0)); dec[at(1)] = anl; } else earlyWeek(0, anl);
         break;
       }
       case 'parallel': {
@@ -753,6 +808,10 @@
         if (!rImpl) break;
         rN = W(rImpl) - 1;
         cap(g, dep, s(-5), S.addDays(ws(rN), -1), 4.2);
+        if (ws(rN) > S.addDays(s(-4), 6)) {
+          push(g, dep, s(-5), e(-5), j(5.6, 6.0), e(-5), e(-5)); dec[at(-5)] = open;
+          cap(g, dep, s(-4), e(-4), 1.0); bulk(g, dep, S.addDays(s(-4), 1), S.addDays(s(-4), 2), 600);
+        }
         overTo(rN, rImpl); dec[id + '|' + rN] = implAt(rImpl, ['tool']);
         rIds = gItems(g, id, ws(rN), rImpl);
         cap(g, dep, S.addDays(rImpl, 1), g.today, 4.2);
@@ -799,6 +858,12 @@
       departmentId: v.departmentId, weekStart: v.weekStart, weekEnd: v.weekEnd, openedAt: v.openedAt, early: v.early,
       onRelapse: v.onRelapse || undefined, baseStart: v.baseStart || undefined, items: [], excludedTypes: [], causes: [], causeNote: '', plan: '', who: g.senior, implementedAt: null,
       recordedAt: null, recordedBy: g.senior, startedAt: null, notNeeded: null, seeded: true }, day;
+    if (o.analysis) {
+      day = [S.addDays(v.openedAt, 1), g.today].sort()[0];
+      rec.analysisAt = rec.recordedAt = day; rec.analysisBy = g.senior; rec.analysisNote = o.analysis;
+      g.db.kdSeed.push(rec);
+      return rec;
+    }
     if (o.notNeeded) { day = [S.addDays(v.openedAt, 1), g.today].sort()[0]; rec.notNeeded = { reason: o.notNeeded, at: day, by: g.senior }; rec.recordedAt = rec.startedAt = day; }
     else {
       day = [o.implementedAt, g.today].sort()[0];
@@ -881,6 +946,7 @@
     return { opened: opened.length, earlyOpened: opened.filter(function (a) { return a.early; }).length, implemented: impl.length,
       implementedDaysAvg: d.length ? r1(mean(d)) : null, notImplemented: opened.filter(function (a) { return PHASE_OF[a.status] === 'open'; }).length,
       notNeeded: opened.filter(function (a) { return a.status === 'not_needed'; }).length, results: res, held: held,
+      selfClosed: opened.filter(function (a) { return a.status === 'self_closed'; }).length,   // v4.2: з відкритих — закрились без участі старшого
       effect: { items: before.length, avgBefore: before.length ? r1(mean(before)) : null, avgAfter: after.length ? r1(mean(after)) : null,
         avgDeltaPp: before.length ? r1(mean(after) - mean(before)) : null },
       causes: CAUSES.filter(function (c) { return cause[c.id]; }).map(function (c) { return { id: c.id, label: c.label, n: cause[c.id] }; }) };
@@ -900,6 +966,8 @@
     st.relapse = all.filter(function (a) { return a.status === 'not_helped' && a.finishedOn >= rg.from && a.finishedOn <= rg.to; }).length;
     st.skip = all.filter(function (a) { return a.status === 'not_needed' && a.finishedOn >= rg.from && a.finishedOn <= rg.to; }).length;
     st.part = all.filter(function (a) { return a.status === 'held_types' && a.finishedOn >= rg.from && a.finishedOn <= rg.to; }).length;
+    var alone = selfClosedIn(cx, all, rg.from, rg.to);   // v4.2: закриті без участі старшого в періоді
+    st.alone = alone.length;
     var weeks = [];
     for (var n = cx.of(rg.from); n <= cx.of(rg.to); n++) {
       var c = 0, r = 0, s = cx.start(n), e = cx.end(n), inW = function (d) { return !!d && d >= s && d <= e; };
@@ -915,13 +983,15 @@
         watch: mine.filter(function (a) { return a.status === 'check'; }).length, hold: mine.filter(function (a) { return a.status === 'hold'; }).length,
         relapse: mine.filter(function (a) { return a.status === 'not_helped' && a.finishedOn >= rg.from && a.finishedOn <= rg.to; }).length,
         pre: mine.filter(function (a) { return a.status === 'pre'; }).length,
-        part: mine.filter(function (a) { return a.status === 'held_types' && a.finishedOn >= rg.from && a.finishedOn <= rg.to; }).length };
+        part: mine.filter(function (a) { return a.status === 'held_types' && a.finishedOn >= rg.from && a.finishedOn <= rg.to; }).length,
+        selfClosed: alone.filter(function (x) { return x.departmentId === d.id; }).length };
     });
     var actions = all.filter(function (a) { return a.openedAt <= rg.to && !(a.finishedOn && a.finishedOn < rg.from); }).map(function (a) {
       var v = view(cx, a), cur = a.status === 'check' ? v.result : a.status === 'hold' ? v.hold : null;
       return { id: v.id, key: v.key, departmentId: v.departmentId, departmentName: v.departmentName, weekStart: v.periodStart, weekEnd: v.periodEnd,
         resultDay: cur ? S.addDays(cur.end, 1) : null, resultEstimated: cur ? !!cur.estimated : false,
         closedEarly: !!a.closedEarly, obsStart: a.obsStart || null,
+        selfClosed: v.selfClosed, analysis: v.analysis,   // v4.2: закрито без участі старшого · етап «аналіз»
         openedAt: v.openedAt, early: v.early, earlyBelow: v.earlyBelow, weekRate: v.weekRate, weekDone: v.weekDone, implementedAt: v.implementedAt, daysToImplement: v.daysToImplement,
         finishedOn: v.finishedOn,   // v3.3: коли стан став остаточним — керівник рахує «закрито за період» і «знизили» по одних і тих самих діях
         cause: v.causes.length && has(CAUSE_IX, v.causes[0]) ? CAUSE_IX[v.causes[0]].label : null, done: v.plan || null, before: v.rate, after: v.after, after2: v.after2,
@@ -932,8 +1002,18 @@
     return { ok: true, location: { id: loc.id, name: loc.name }, from: rg.from, to: rg.to, today: cx.today,
       cycle: { days: KD.CYCLE_DAYS, reviewWeekday: cx.R.wd, reviewWeekdayName: S.WEEKDAYS[cx.R.wd - 1] }, threshold: T, early: cx.R.early, pareto: cx.R.pareto,
       states: st, period: { opened: ps.opened, earlyOpened: ps.earlyOpened, implemented: ps.implemented, implementedDaysAvg: ps.implementedDaysAvg,
-        notImplemented: ps.notImplemented, notNeeded: ps.notNeeded, results: ps.results, held: ps.held },
-      effect: ps.effect, causes: ps.causes, depts: depts, weeks: weeks, actions: actions };
+        notImplemented: ps.notImplemented, notNeeded: ps.notNeeded, results: ps.results, held: ps.held, selfClosed: ps.selfClosed },
+      effect: ps.effect, causes: ps.causes, depts: depts, weeks: weeks, actions: actions, selfClosed: alone };
+  }
+  function selfClosedIn(cx, all, from, to) {
+    return all.filter(function (a) { return a.status === 'self_closed' && a.finishedOn >= from && a.finishedOn <= to; })
+      .sort(function (x, y) { return x.finishedOn < y.finishedOn ? 1 : x.finishedOn > y.finishedOn ? -1 : 0; })
+      .map(function (a) {
+        var s = a.selfClose, dep = cx.env.ix.dep[a.departmentId];
+        return { key: a.key, departmentId: a.departmentId, departmentName: dep ? dep.name : '', openedAt: a.openedAt, finishedOn: a.finishedOn,
+          from: s.from, to: s.to, days: s.days, typesBefore: s.typesBefore, typesAfter: s.check.typesRate, deptRate: s.check.deptRate, checked: s.check.checked,
+          types: (a.items || []).filter(function (t) { return has(cx.env.ix.def, t); }).map(function (t) { return cx.env.ix.def[t].name; }) };
+      });
   }
 
 
@@ -1012,7 +1092,7 @@
   }
   function save(env, rec) {
     var keep = ['id', 'locationId', 'departmentId', 'weekStart', 'weekEnd', 'openedAt', 'early', 'onRelapse', 'baseStart', 'items', 'excludedTypes', 'causes', 'causeNote', 'itemCauses', 'itemNotes', 'plan', 'who',
-      'implementedAt', 'recordedAt', 'recordedBy', 'startedAt', 'notNeeded', 'seeded'], o = {};
+      'implementedAt', 'recordedAt', 'recordedBy', 'startedAt', 'notNeeded', 'seeded', 'analysisAt', 'analysisBy', 'analysisNote'], o = {};
     keep.forEach(function (k) { if (rec[k] !== undefined) o[k] = rec[k]; });
     var all = S.get(env, KEY, {}) || {};
     if (typeof all !== 'object' || Array.isArray(all)) all = {};
@@ -1061,7 +1141,14 @@
   }
   P.demoKd = {
     remapDefect: remapDefect,
+    kdFrom: function (env) { var k = kdStart(env); return { real: k.real, from: k.from }; },
+    withKdFrom: function (env, out) { var k = kdStart(env); if (k.real && out && out.ok) out.kdFrom = k.from; return out; },
     locSummary: function (env, locId, from, to) { return locSummary(env, locId, from, to); },
+    selfClosed: function (env, locId, from, to) {
+      if (!has(env.ix.loc, locId)) return [];
+      var cx = makeCx(env, env.ix.loc[locId]), rg = rangeOf({ from: from, to: to }, env);
+      return selfClosedIn(cx, cx.all(), rg.from, rg.to);
+    },
     deptNow: function (env, locId, depId) {
       if (!has(env.ix.loc, locId)) return null;
       var cx = makeCx(env, env.ix.loc[locId]);
@@ -1163,6 +1250,7 @@
       var r = S.loc(p, me, env); if (r.err) return r.err;
       var cx = makeCx(env, r.loc), a;
       if (p.id) { a = findAction(cx, p.id); if (!a) return C.fail('not_found', 'Коригуючу дію не знайдено. Оновіть сторінку.'); }
+      else if (typeof p.key === 'string' && (a = cx.all().filter(function (x) { return x.key === p.key; })[0])) { /* знайдено за ключем */ }
       else { var o = openKd(cx, p); if (o.err) return o.err; a = o.kd; }
       var v = view(cx, a), d = details(cx, a.departmentId, null, a.weekStart, a.weekEnd);
       v.series = series(cx, a.departmentId, Math.min(cx.L - DEPT_BARS + 1, a.n - 2), cx.L + 1);
@@ -1176,7 +1264,7 @@
       var r = S.loc(p, me, env); if (r.err) return r.err;
       var cx = makeCx(env, r.loc), dep = typeof p.departmentId === 'string' && p.departmentId ? p.departmentId : null;
       var all = cx.all().filter(function (a) { return !dep || a.departmentId === dep; }).map(function (a) { return view(cx, a); });
-      var counts = { 'new': 0, check: 0, hold: 0, helped: 0, not_helped: 0, not_needed: 0, pre: 0, held_types: 0, all: all.length };
+      var counts = { 'new': 0, check: 0, hold: 0, helped: 0, not_helped: 0, not_needed: 0, pre: 0, held_types: 0, self_closed: 0, all: all.length };
       all.forEach(function (a) { counts[a.status]++; });
       var state = has(counts, p.state) ? p.state : 'all';
       return { ok: true, state: state, counts: counts, items: all.filter(function (a) { return state === 'all' || a.status === state; }).sort(byRank),
@@ -1327,7 +1415,7 @@
         var a = findAction(cx, p.id);
         if (!a) return C.fail('not_found', 'Коригуючу дію не знайдено. Оновіть сторінку.');
         if (PHASE_OF[a.status] === 'open') kd = a;
-        else if (a.status !== 'not_needed') return C.fail('conflict', 'Для цієї коригуючої дії вже записано впроваджений план, тому позначити «дія не потрібна» не можна.');
+        else if (a.status !== 'not_needed') return C.fail('conflict', a.status === 'self_closed' ? 'Ця дія вже закрилась сама (без участі старшого) — позначати її не потрібно.' : 'Для цієї коригуючої дії вже записано впроваджений план, тому позначити «дія не потрібна» не можна.');
         else { rec = clone(a); rec.notNeeded = { reason: reason, at: a.notNeeded.at, by: me.id }; }
       } else {
         var o = openKd(cx, p); if (o.err) return o.err;
@@ -1338,6 +1426,27 @@
         rec = newRec(cx, kd, me); rec.who = me.id; rec.notNeeded = { reason: reason, at: cx.today, by: me.id };
         rec.items = lv.ids.slice(); rec.excludedTypes = lv.excl.slice();
       }
+      save(env, rec);
+      return after(env, cx.loc, rec.id);
+    },
+
+    srKdAnalysis: function (p, me, env) {
+      var w = writable(p, me, env); if (w.err) return w.err;
+      var cx = w.cx, note = p.note == null ? '' : typeof p.note === 'string' ? p.note.trim() : null, kd;
+      if (note === null) return C.fail('validation', 'Перевірте нотатку.', [{ field: 'note', message: 'Нотатка — це текст. Оновіть сторінку й спробуйте ще раз.' }]);
+      if (note.length > NOTE_MAX) return C.fail('validation', 'Нотатка задовга.', [{ field: 'note', message: 'Коротше, будь ласка: до ' + NOTE_MAX + ' знаків.' }]);
+      if (p.id) {
+        kd = findAction(cx, p.id);
+        if (!kd) return C.fail('not_found', 'Коригуючу дію не знайдено. Оновіть сторінку.');
+        if (PHASE_OF[kd.status] !== 'open') return C.fail('conflict', 'Аналіз можна почати лише в дії без плану. Оновіть сторінку — побачите, як є зараз.');
+      } else {
+        var o = openKd(cx, p); if (o.err) return o.err;
+        kd = o.kd;
+      }
+      var rec = newRec(cx, kd, me), had = isDay(rec.analysisAt), old = typeof rec.analysisNote === 'string' ? rec.analysisNote : '';
+      if (had && !p.edit && old && note && note !== old) return C.fail('conflict', 'Аналіз уже почато, у нього є нотатка. Оновіть сторінку — побачите її й зможете змінити.');
+      if (!had) { rec.analysisAt = cx.today; rec.analysisBy = me.id; }
+      if (p.edit || !had || !old) rec.analysisNote = note;
       save(env, rec);
       return after(env, cx.loc, rec.id);
     }

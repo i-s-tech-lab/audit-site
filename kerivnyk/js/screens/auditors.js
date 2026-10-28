@@ -14,7 +14,7 @@
     });
   }
   function who(a) {
-    return '<b>' + esc(a.name) + '</b>' + (a.senior ? ' <span class="badge mgr-senior">старший</span>' : '') + (a.active ? '' : ' ' + H.badge('вимкнено')) +
+    return '<b>' + esc(a.name) + '</b>' + (a.senior ? ' <span class="badge mgr-senior">старший</span>' : '') + (a.legacy ? ' ' + H.badge('ще не в новій системі') : a.active ? '' : ' ' + H.badge('вимкнено')) +
       '<span class="mgr-dim mgr-block">' + esc(a.roleLabel) + ' · ' + esc(a.locations.join(', ')) + '</span>';
   }
   function last(a) { return a.lastAt ? P.fmt.dateTime(a.lastAt) : '—'; }
@@ -62,7 +62,7 @@
       '</tbody></table></div></section>';
   }
 
-  P.cab.tab({ id: 'auditors', label: 'Аудитори', ic: 'people', path: '/auditors', order: 30 });
+  P.cab.tab({ id: 'auditors', label: 'Аудитори', ic: 'people', path: '/auditors', order: 30, real: 'mgrAuditors' });
   P.cab.screen('/auditors', { tab: 'auditors', title: 'Аудитори', period: true, render: function (ctx) {
     var req = 0, data = null;
     function load() {

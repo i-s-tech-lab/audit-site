@@ -22,30 +22,52 @@
       var dash = '<td class="n mg-dim">—</td>', norm = '<td class="n">' + (r.sampleTarget ? H.num(r.sampleTarget) + ' шт' : '<span class="mg-dim">не задано</span>') + '</td>';
       if (!r.connected) return '<tr><td><b>' + esc(r.name) + '</b></td><td>' + H.badge('не підключено', 'warn') + '</td>' + dash + dash + '<td class="mg-dim">—</td>' + norm + '</tr>';
       var src = '<span class="mg-tags">' + r.sources.map(function (s) { return tag(s.mark, s.label); }).join('') + '</span>' + (r.sources.length > 1 ? '<span class="sub">складено з ' + r.sources.length + ' таблиць</span>' : '');
+      if (r.waiting) return '<tr><td><b>' + esc(r.name) + '</b></td><td>' + src + '</td>' + dash + dash + '<td>' + H.badge('ще не прочитано', 'info') + '</td>' + norm + '</tr>';
+      if (r.partial && r.partial.length) src += '<span class="sub">' + H.badge('частково: без таблиці ' + r.partial.join(', '), 'warn') + '</span>';
       var pct = r.planKnown ? '<div class="mg-prog"><div class="hbar__track" style="flex:1;min-width:120px"><i style="width:' + Math.min(100, r.pct || 0) + '%"></i></div><b>' + (r.pct == null ? '—' : r.pct + '%') + '</b></div>' : H.badge('немає колонки «треба»', 'warn');
       return '<tr><td><b>' + esc(r.name) + '</b></td><td>' + src + '</td><td class="n">' + H.num(r.doneYesterday) + '</td>' + (r.planKnown ? '<td class="n">' + H.num(r.planWeek) + '</td>' : dash) + '<td>' + pct + '</td>' + norm + '</tr>';
+    }
+    function readText(st) {
+      if (!st || st.status === 'never') return '<span class="mg-dim">ще не прочитано — числа зʼявляться після найближчого читання</span>';
+      var okAt = st.okAt ? 'востаннє вдалося ' + esc(when(st.okAt)) : 'жодного разу не прочитано';
+      if (st.status === 'error') return H.badge('не прочитано', 'danger') + ' ' + esc(st.error || '') + ' <span class="mg-dim">' + esc(when(st.readAt)) + ' · ' + okAt + '</span>';
+      var sk = st.skipped || {}, miss = (sk.date || 0) + (sk.num || 0);
+      return 'прочитано ' + esc(when(st.readAt)) + ' · рядків: ' + H.num(st.rows) + (miss ? ' · пропущено клітинок: ' + H.num(miss) + ' (не дата чи не число)' : '') +
+        (st.cut ? ' · взято найсвіжіші 20 000 рядків' : '');
     }
     function card(t) {
       var free = data.departments.filter(function (d) { return !t.depts.some(function (x) { return x.departmentId === d.id; }); }).length;
       return '<section class="card mg-tcard mg-t' + t.mark + '"><div class="mg-tcard__head">' + tag(t.mark, t.label, 'mg-tag--lg') +
         '<div class="mg-tcard__title"><h3 class="card-title">' + esc(t.title) + '</h3><p class="hint mg-ellipsis">' + esc(t.url) + '</p></div>' +
-        '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-t-edit"' + da('id', t.id) + ' aria-label="Змінити таблицю ' + esc(t.label) + '">' + P.ic('edit', 'ui-icon--sm') + 'Змінити</button></div>' +
+        (data.canEdit ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-t-edit"' + da('id', t.id) + ' aria-label="Змінити таблицю ' + esc(t.label) + '">' + P.ic('edit', 'ui-icon--sm') + 'Змінити</button>' : '') + '</div>' +
         '<dl class="kv mg-tcard__kv"><dt>Аркуш</dt><dd>«' + esc(t.sheet) + '» · шапка — рядок ' + esc(t.headerRow) + ' · дані з рядка ' + esc(t.dataRow) + '</dd>' +
-        '<dt>Спільне для відділів</dt><dd>дата — ' + esc(colName(t.columns, t.dateCol)) + ' · замовлення — ' + esc(colName(t.columns, t.orderCol)) + '</dd></dl>' +
+        '<dt>Спільне для відділів</dt><dd>дата — ' + esc(colName(t.columns, t.dateCol)) + ' · замовлення — ' + esc(colName(t.columns, t.orderCol)) + '</dd>' +
+        (data.real ? '<dt>Читання</dt><dd>' + readText(t.read) + '</dd>' : '') + '</dl>' +
         '<div class="tbl-box"><table class="tbl mg-tcard__tbl"><thead><tr><th>Відділ · ' + t.depts.length + '</th><th>Скільки зроблено</th><th>Скільки треба</th></tr></thead><tbody>' +
         (t.depts.length ? t.depts.map(function (x) {
           return '<tr><td><b>' + esc(depName(x.departmentId)) + '</b></td><td>' + esc(colName(t.columns, x.doneCol)) + '</td><td>' + (x.planCol ? esc(colName(t.columns, x.planCol)) : '<span class="mg-dim">немає колонки</span>') + '</td></tr>';
         }).join('') : '<tr><td colspan="3" class="mg-dim">жодного відділу</td></tr>') + '</tbody></table></div>' +
-        '<div class="mg-actions">' + (free ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-t-dept"' + da('id', t.id) + '>' + P.ic('add', 'ui-icon--sm') + 'Відділ</button>' : '') +
-        '<span style="flex:1"></span><button class="btn btn--quiet btn--sm mg-danger" type="button" data-act="mg-t-del"' + da('id', t.id) + '>' + P.ic('delete', 'ui-icon--sm') + 'Прибрати таблицю</button></div></section>';
+        (!data.canEdit ? '' : '<div class="mg-actions">' + (free ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-t-dept"' + da('id', t.id) + '>' + P.ic('add', 'ui-icon--sm') + 'Відділ</button>' : '') +
+        '<span style="flex:1"></span><button class="btn btn--quiet btn--sm mg-danger" type="button" data-act="mg-t-del"' + da('id', t.id) + '>' + P.ic('delete', 'ui-icon--sm') + 'Прибрати таблицю</button></div>') + '</section>';
+    }
+    function realStatus(n, on) {
+      var bad = data.tables.filter(function (t) { return t.read && t.read.status === 'error'; });
+      if (data.keyMissing) return '<section class="card">' + M.banner('warn', data.keyMissing, 'Поки ключа немає, таблиці цеху не читаються — числа тижня порожні.') + '</section>';
+      var title = data.updatedAt ? 'Прочитано ' + when(data.updatedAt) : n ? 'Таблиці ще не прочитано' : 'Таблиць ще немає';
+      var nextTxt = data.nextAt ? 'Наступне читання — ' + when(data.nextAt) : 'Наступне читання — після запуску сервера';
+      return '<section class="card mg-status"><span class="hero__logo' + (bad.length ? '' : ' hero__logo--ok') + '" style="width:48px;height:48px">' + P.ic(bad.length ? 'warning' : 'check') + '</span>' +
+        '<div style="flex:1;min-width:240px"><b>' + esc(title) + '</b><p class="hint">' + esc(nextTxt) + ' · раз на 4 години · ' + M.cnt(n, W.table) + ' · підключено ' + on + ' з ' + data.week.rows.length + ' відділів</p>' +
+        (bad.length ? '<p class="mg-warnline">' + P.ic('warning', 'ui-icon--sm') + 'Не прочитано: ' + esc(bad.map(function (t) { return 'таблиця ' + t.label; }).join(', ')) + ' — причина на картці таблиці нижче.</p>' : '') + '</div>' +
+        (n ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-refresh">' + P.ic('refresh', 'ui-icon--sm') + 'Оновити зараз</button>' : '') + '</section>';
     }
     function draw() {
-      var n = data.tables.length, on = data.week.rows.filter(function (r) { return r.connected; }).length, canAdd = n < data.maxTables;
+      var n = data.tables.length, on = data.week.rows.filter(function (r) { return r.connected; }).length, canAdd = data.canEdit && n < data.maxTables;
       v.col.innerHTML = M.head('Виробництво: план і факт', 'Скільки зроблено й скільки треба по відділах — з таблиць цеху',
         canAdd ? '<button class="btn btn--primary" type="button" data-act="mg-t-new">' + P.ic('add') + 'Додати таблицю</button>' : '', 'sr.mg.import') +
+        (data.real ? realStatus(n, on) :
         '<section class="card mg-status"><span class="hero__logo hero__logo--ok" style="width:48px;height:48px">' + P.ic('check') + '</span>' +
         '<div style="flex:1;min-width:240px"><b>Оновлено ' + esc(when(data.updatedAt)) + '</b><p class="hint">Наступне оновлення — завтра о ' + P.fmt.time(data.nextAt) + ' · ' + M.cnt(n, W.table) + ' · підключено ' + on + ' з ' + data.week.rows.length + ' відділів</p></div>' +
-        '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-refresh">' + P.ic('refresh', 'ui-icon--sm') + 'Оновити зараз</button></section>' +
+        '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-refresh">' + P.ic('refresh', 'ui-icon--sm') + 'Оновити зараз</button></section>') +
         '<section class="card"><div class="card-head" style="flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2 class="card-title">Цей тиждень по відділах</h2><p class="hint">З ' + weekName(data.weekStart) + ', ' + esc(M.dateLong(data.week.from)) + ' · «зроблено» — до вчора включно · з усіх таблиць</p></div>' +
         '<div class="mg-actions"><span class="hint">Тиждень з</span><div class="seg seg--sm" role="radiogroup" aria-label="Тиждень починається">' + [['mon', 'понеділка'], ['sun', 'неділі']].map(function (o) {
           return '<button class="seg__btn' + (o[0] === data.weekStart ? ' seg__btn--on' : '') + '" type="button" aria-pressed="' + (o[0] === data.weekStart) + '" data-act="mg-week"' + da('v', o[0]) + '>' + o[1] + '</button>'; }).join('') + '</div></div></div>' +
@@ -53,22 +75,34 @@
           data.week.rows.map(weekRow).join('') + '</tbody></table></div>' : H.empty('Увімкнених відділів немає', '')) +
         (data.warnings.length ? '<p class="mg-warnline">' + P.ic('warning', 'ui-icon--sm') + 'Кількості складено з кількох таблиць: ' + esc(overlapText(data.warnings)) + '</p>' : '') + '</section>' +
         '<div class="mg-head"><div><h2 class="card-title">Таблиці-джерела · ' + n + '</h2><p class="hint">У кожної — своя літера й колір; дата й замовлення задаються раз на таблицю.</p></div></div>' +
-        (n ? '<div class="mg-tcards">' + data.tables.map(card).join('') + '</div>' : '<section class="card">' + H.empty('Таблиць ще немає', '') + '</section>') +
-        '<p class="hint">У тестовій версії справжні таблиці не відкриваються: колонки й числа вигадані. Доступу «Перегляд» досить — додаток у таблиці нічого не змінює.</p>';
+        (n ? '<div class="mg-tcards">' + data.tables.map(card).join('') + '</div>' : '<section class="card">' + H.empty(data.real ? (data.canEdit ? 'Ще немає таблиць — додайте першу' : 'Ще немає таблиць — їх підключає адміністратор') : 'Таблиць ще немає', '') + '</section>') +
+        (data.real && !data.canEdit ? '<p class="hint">' + P.ic('info', 'ui-icon--sm') + ' Таблиці підключає адміністратор — напишіть йому, якщо треба додати чи змінити таблицю.</p>' : '') +
+        (data.real ? '<p class="hint">Додаток лише читає таблиці — доступу «Перегляд» досить, у таблицях нічого не змінюється. Сервер читає їх сам раз на 4 години; «Оновити зараз» — раз на хвилину.</p>'
+          : '<p class="hint">У тестовій версії справжні таблиці не відкриваються: колонки й числа вигадані. Доступу «Перегляд» досить — додаток у таблиці нічого не змінює.</p>');
     }
 
     function openWizard(opt) {
       opt = opt || {};
       var drafts = data.tables.map(function (t) {
         return { id: t.id, mark: t.mark, label: t.label, title: t.title, url: t.url, sheet: t.sheet, headerRow: t.headerRow, dataRow: t.dataRow, dateCol: t.dateCol, orderCol: t.orderCol,
-          depts: t.depts.map(function (x) { return { departmentId: x.departmentId, doneCol: x.doneCol, planCol: x.planCol }; }) };
+          depts: t.depts.map(function (x) { return { departmentId: x.departmentId, doneCol: x.doneCol, planCol: x.planCol }; }),
+          columns: data.real ? (t.columns || []) : null, sheets: null, probe: null };
       });
       var cur = 0, errs = {}, layer;   // errs[i] = помилки вкладки i: [{field, message}]
-      function cols(d) { return data.marks[d.mark].columns; }
+      function cols(d) { return data.real ? (d.columns || []) : data.marks[d.mark].columns; }
+      function seenOf(d) {
+        var names = {}, out = {};
+        cols(d).forEach(function (c) { names[c.col] = c.name; });
+        [d.dateCol, d.orderCol].concat(d.depts.reduce(function (a, x) { return a.concat([x.doneCol, x.planCol]); }, [])).forEach(function (c) {
+          if (c && Object.prototype.hasOwnProperty.call(names, c)) out[c] = names[c];
+        });
+        return out;
+      }
       function freeMark() { var used = {}; drafts.forEach(function (d) { used[d.mark] = 1; }); return data.marks.filter(function (m) { return !used[m.mark]; })[0]; }
       function addDraft() {
         var m = freeMark(); if (!m) return false;
-        drafts.push({ id: null, mark: m.mark, label: m.label, title: m.title, url: '', sheet: m.sheet, headerRow: m.headerRow, dataRow: m.headerRow + 1, dateCol: '', orderCol: '', depts: [] });
+        drafts.push({ id: null, mark: m.mark, label: m.label, title: m.title, url: '', sheet: m.sheet, headerRow: m.headerRow, dataRow: m.headerRow + 1, dateCol: '', orderCol: '', depts: [],
+          columns: data.real ? [] : null, sheets: null, probe: null });
         cur = drafts.length - 1; return true;
       }
       function freeDepts(d) { return data.departments.filter(function (x) { return !d.depts.some(function (y) { return y.departmentId === x.id; }); }); }
@@ -110,6 +144,35 @@
           var busy = taken[x.col] && x.col !== curCol;
           return '<option value="' + x.col + '"' + (x.col === curCol ? ' selected' : '') + (busy ? ' disabled' : '') + '>' + x.col + ' · ' + esc(x.name) + (busy ? ' — зайнята' : '') + '</option>'; }).join('');
       }
+      function probe(d) {
+        d.probe = { busy: true, text: 'Читаємо таблицю…' }; redraw(true);
+        v.call('srMgImportProbe', { url: d.url, sheet: d.sheet, headerRow: +d.headerRow || 1 }).then(function (r) {
+          if (!layer || drafts.indexOf(d) < 0) return;
+          if (!r.ok) { d.probe = { bad: true, text: r.error }; redraw(true); return; }
+          d.sheets = r.sheets; d.sheet = r.sheet; d.headerRow = r.headerRow; d.columns = r.columns;
+          if (!(+d.dataRow > d.headerRow)) d.dataRow = d.headerRow + 1;
+          var got = {}; r.columns.forEach(function (c) { got[c.col] = 1; });
+          if (!got[d.dateCol]) d.dateCol = ''; if (!got[d.orderCol]) d.orderCol = '';
+          d.depts.forEach(function (x) { if (!got[x.doneCol]) x.doneCol = ''; if (x.planCol && !got[x.planCol]) x.planCol = null; });
+          d.probe = { text: (r.sheetMissing ? 'Аркуша «' + r.sheet + '» немає — взято перший. ' : '') + 'Прочитано: аркушів ' + r.sheets.length + ', колонок у шапці ' + r.columns.length +
+            (r.columns.length ? '' : ' — вкажіть рядок, де написані заголовки') };
+          forget(cur); redraw(true);
+        });
+      }
+      function realBlock(d) {
+        var sheet = d.sheets ? '<label class="field" data-f="sheet"><span class="label">Аркуш</span><select class="input" data-k="sheet">' +
+          d.sheets.map(function (x) { return '<option value="' + esc(x) + '"' + (x === d.sheet ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>'
+          : M.field('sheet', 'Аркуш', M.input('sheet', d.sheet, ' data-k="sheet" autocomplete="off" maxlength="100" placeholder="зʼявиться після читання"'));
+        var st = d.probe ? '<p class="' + (d.probe.bad ? 'err' : 'mg-wz__matched') + '">' + (d.probe.bad ? '' : P.ic(d.probe.busy ? 'refresh' : 'check', 'ui-icon--sm')) + esc(d.probe.text) + '</p>' : '';
+        return '<div class="mg-form">' +
+          M.field('title', 'Назва таблиці', M.input('title', d.title, ' data-k="title" autocomplete="off" maxlength="60"')) +
+          M.field('url', 'Посилання на Google-таблицю', M.input('url', d.url, ' data-k="url" autocomplete="off" maxlength="400" placeholder="https://…"')) +
+          '<div class="mg-wz__3">' + sheet +
+          M.field('headerRow', 'Рядок шапки', M.input('headerRow', d.headerRow, ' data-k="headerRow" type="number" min="1" max="20" inputmode="numeric"'), '', 'sr.mg.headerRow') +
+          M.field('dataRow', 'Перший рядок даних', M.input('dataRow', d.dataRow, ' data-k="dataRow" type="number" min="2" max="60" inputmode="numeric"'), '', 'sr.mg.dataRow') + '</div>' +
+          '<div class="mg-actions"><button class="btn btn--secondary btn--sm" type="button" data-act="mg-wz-probe"' + (d.probe && d.probe.busy ? ' disabled' : '') + '>' +
+          P.ic('refresh', 'ui-icon--sm') + (d.columns && d.columns.length ? 'Прочитати ще раз' : 'Прочитати таблицю') + '</button></div>' + st + '</div>';
+      }
       function block(n, title, sub, inner, extra) {
         return '<section class="mg-wz__block"><div class="card-head" style="flex-wrap:wrap"><span class="num-badge">' + n + '</span><div style="flex:1;min-width:180px"><h3 class="card-title">' + title + '</h3>' +
           (sub ? '<p class="hint">' + sub + '</p>' : '') + '</div>' + (extra || '') + '</div>' + inner + '</section>';
@@ -123,7 +186,7 @@
           (d.id ? H.badge('збережена') : H.badge('нова', 'info') + '<button class="btn btn--quiet btn--sm" type="button" data-act="mg-wz-drop">' + P.ic('close', 'ui-icon--sm') + 'Не додавати</button>') + '</div>' +
           (first ? '<div class="banner banner--danger">' + P.ic('error', 'icon') + '<div class="banner__body"><p class="banner__title">Не збережено · таблиця ' + esc(d.label) + '</p><p class="banner__text">' + esc(first.message) +
             (errs[i].length > 1 ? ' Ще ' + (errs[i].length - 1) + ' — біля полів нижче.' : '') + '</p></div></div>' : '') +
-          block(1, 'Таблиця', '', '<div class="mg-form">' +
+          block(1, 'Таблиця', data.real ? 'Посилання → «Прочитати таблицю»: зʼявляться аркуші й колонки шапки.' : '', data.real ? realBlock(d) : '<div class="mg-form">' +
             M.field('title', 'Назва таблиці', M.input('title', d.title, ' data-k="title" autocomplete="off" maxlength="60"')) +
             M.field('url', 'Посилання на таблицю', M.input('url', d.url, ' data-k="url" autocomplete="off" maxlength="400" placeholder="https://…"')) +
             '<div class="mg-wz__3">' + M.field('sheet', 'Аркуш', M.input('sheet', d.sheet, ' data-k="sheet" autocomplete="off" maxlength="60"')) +
@@ -145,8 +208,9 @@
                 '<td style="width:44px"><button class="icon-btn" type="button" data-act="mg-wz-del" data-row="' + k + '" aria-label="Прибрати ' + esc(depName(x.departmentId)) + '">' + P.ic('delete') + '</button></td></tr>';
             }).join('') : '<tr><td colspan="4" class="mg-dim">жодного відділу</td></tr>') + '</tbody></table></div>' +
             (free.length ? '<button class="btn btn--secondary btn--add" type="button" data-act="mg-wz-add">' + P.ic('add', 'ui-icon--sm') + 'Відділ</button>' : ''),
-            '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-wz-match">' + P.ic('search', 'ui-icon--sm') + 'Підібрати за назвами колонок</button>') +
-          '<p class="hint">У тестовій версії таблицю не відкриваємо: колонки в списках вигадані.</p>';
+            cols(d).length ? '<button class="btn btn--secondary btn--sm" type="button" data-act="mg-wz-match">' + P.ic('search', 'ui-icon--sm') + 'Підібрати за назвами колонок</button>' : '') +
+          (data.real ? '<p class="hint">Колонки — з шапки справжньої таблиці. Змінили аркуш чи рядок шапки — «Прочитати ще раз». Додаток таблицю лише читає.</p>'
+            : '<p class="hint">У тестовій версії таблицю не відкриваємо: колонки в списках вигадані.</p>');
       }
       function foot() {
         var fresh = drafts.filter(function (d) { return !d.id; }).length;
@@ -181,7 +245,7 @@
             if (row != null) d.depts[+row][k] = value || (k === 'planCol' ? null : '');
             else d[k] = value;
             if (k === 'title') { var a = q(el, '[data-mg-tabname="' + cur + '"]'), n = q(el, '[data-mg-bandname]'); if (a) a.textContent = value || 'Без назви'; if (n) n.textContent = value || 'Без назви'; }
-            if (e.type === 'change' && t.tagName === 'SELECT') { forget(cur); redraw(true); }
+            if (e.type === 'change' && t.tagName === 'SELECT') { forget(cur); if (data.real && k === 'sheet') probe(d); else redraw(true); }
           }
           el.addEventListener('input', bind); el.addEventListener('change', bind);
         },
@@ -192,10 +256,12 @@
           'mg-wz-add': function () { addDept(drafts[cur]); forget(cur); redraw(true); },
           'mg-wz-del': function (t) { drafts[cur].depts.splice(+t.getAttribute('data-row'), 1); forget(cur); redraw(true); },
           'mg-wz-match': function () { match(drafts[cur]); forget(cur); redraw(true); },
+          'mg-wz-probe': function () { probe(drafts[cur]); },
           'mg-wz-save': function (t) {
             t.disabled = true;
             v.call('srMgImportSave', { tables: drafts.map(function (d) {
-              return { id: d.id, mark: d.mark, title: d.title, url: d.url, sheet: d.sheet, headerRow: d.headerRow, dataRow: d.dataRow, dateCol: d.dateCol, orderCol: d.orderCol, depts: d.depts };
+              return { id: d.id, mark: d.mark, title: d.title, url: d.url, sheet: d.sheet, headerRow: d.headerRow, dataRow: d.dataRow, dateCol: d.dateCol, orderCol: d.orderCol, depts: d.depts,
+                seen: data.real ? seenOf(d) : undefined };
             }) }).then(function (r) {
               t.disabled = false;
               if (!r.ok) {
@@ -208,7 +274,8 @@
               }
               layer.close();
               P.toast('ok', 'Збережено ' + M.cnt(r.saved.length, W.table) + ' · ' + r.saved.map(function (s) { return s.label; }).join(', '),
-                r.warnings.length ? 'Відділ є в кількох таблицях — їхні кількості додаються: ' + overlapText(r.warnings) + '.' : 'Оновлено о ' + P.fmt.time(r.updatedAt) + '.');
+                r.warnings.length ? 'Відділ є в кількох таблицях — їхні кількості додаються: ' + overlapText(r.warnings) + '.' :
+                  r.reading ? 'Читаємо таблиці — числа зʼявляться за хвилину.' : 'Оновлено о ' + P.fmt.time(r.updatedAt) + '.');
               if (v.ctx.alive()) load();
             });
           }
@@ -251,7 +318,13 @@
         if (!v.ctx.alive()) return;
         t.disabled = false;
         if (!r.ok) { M.failToast(r); return; }
-        P.toast('ok', 'Дані виробництва оновлено о ' + P.fmt.time(r.updatedAt), 'У тестовій версії числа ті самі — справжню таблицю не читаємо.');
+        if (!data.real) P.toast('ok', 'Дані виробництва оновлено о ' + P.fmt.time(r.updatedAt), 'У тестовій версії числа ті самі — справжню таблицю не читаємо.');
+        else if (r.pending) P.toast('ok', 'Читаємо таблиці', 'Це довше, ніж зазвичай, — числа зʼявляться за хвилину.');
+        else {
+          var bad = r.tables.filter(function (x) { return !x.ok; });
+          P.toast(bad.length ? 'warn' : 'ok', 'Прочитано таблиць: ' + (r.tables.length - bad.length) + ' з ' + r.tables.length,
+            bad.length ? bad.map(function (x) { return 'Таблиця ' + x.label + ': ' + x.error; }).join(' ') : 'Числа тижня оновлено о ' + P.fmt.time(r.updatedAt) + '.');
+        }
         load();
       });
     });

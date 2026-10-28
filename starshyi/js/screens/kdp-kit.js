@@ -25,7 +25,7 @@
   X.top = function (r, page, st) {
     var s = r.tiles && r.tiles[0] ? r.tiles[0].series || [] : [], sel = st.dep || null;
     var links = { list: X.url('list', { dep: st.dep, w: st.w }), after: X.url('after', { dep: st.dep, w: st.w }) };
-    return B.compactBar(r, sel) + B.ruleLine(r.week && r.week.start, r.threshold, page, links) + B.tiles(r, sel) +
+    return B.compactBar(r, sel) + B.ruleLine(r.week && r.week.start, r.threshold, page, links) + B.kdFromNote(r) + B.tiles(r, sel) +
       B.legend([['', 'Плитка показує дії лише цього відділу'], ['<i class="kb-sw kb-sw--slate"></i>', 'брак, % по тижнях' + (s.length ? ' з ' + B.day(s[0].start) : '')],
         ['<i class="kb-sw kb-sw--red"></i>', 'тиждень понад норму'], ['<i class="kb-sw kb-sw--dim"></i>', 'тиждень ще йде'], ['<i class="kb-ln kb-ln--norm"></i>', 'норма ' + r.threshold + '%']]);
   };
@@ -48,7 +48,7 @@
 
   X.obsDays = function (week) { return week === 2 ? 'дні 8–14 після плану' : 'дні 1–7 після плану'; };
   var STATE = { open: ['open', 'без плану'], relapse: ['rel', 'рецидив · новий план'], helped: ['done', '✓ тримається'],
-    held_types: ['part', '✓ її види нижче'], not_needed: ['skip', '○ не потрібна'], not_helped: ['rel', '✕ закрито: рецидив'] };
+    held_types: ['part', '✓ її види нижче'], not_needed: ['skip', '○ не потрібна'], not_helped: ['rel', '✕ закрито: рецидив'], self_closed: ['done', '✓ без участі старшого'] };
   X.obsText = function (x) {
     if (x.waiting) return 'план є · дні після плану ще не почались';
     return x.day != null ? x.day + ' з 14 днів після плану' : X.obsDays(x.week);
@@ -56,6 +56,7 @@
   X.stateChip = function (x) {
     var state = x.state;
     if (state === 'observe') return B.chip('obs', esc(X.obsText(x)));
+    if (x.analysis && (state === 'open' || state === 'relapse')) return B.chip(state === 'relapse' ? 'rel' : 'open', esc((state === 'relapse' ? 'рецидив · ' : '') + B.anText(x)));   // v1.3
     if (x.closedEarly && (state === 'helped' || state === 'held_types')) return B.chip(state === 'helped' ? 'done' : 'part', '✓ закрито достроково');
     var k = STATE[state];
     return k ? B.chip(k[0], k[1]) : B.chip('none', esc(String(state || '—')));
@@ -88,6 +89,7 @@
   X.SEG = {
     early: ['kb-sg--early', 'відкрито достроково', []],
     open: ['kb-sg--open', 'без плану', ['без плану']],
+    analysis: ['kb-sg--analysis', 'аналіз — шукають причину', ['аналіз', '']],
     extra: ['kb-sg--extra', 'план є, до розбору — дні не рахуються', ['до розбору · дні не рахуються', 'до розбору', '']],
     week1: ['kb-sg--w1', 'дні 1–7 після плану', ['дні 1–7', '1–7']],
     week2: ['kb-sg--w2', 'дні 8–14 після плану', ['дні 8–14', '8–14']],
@@ -95,7 +97,7 @@
     relapse: ['kb-sg--rel', 'рецидив — потрібен новий план', ['рецидив · новий план', 'рецидив']]
   };
   X.MARK = { helped: ['✓', 'kb-mk--done', 'тримається'], held_types: ['✓', 'kb-mk--part', 'її види нижче'], relapse: ['✕', 'kb-mk--rel', 'рецидив'], not_needed: ['○', 'kb-mk--skip', 'не потрібна'],
-    early: ['✓', 'kb-mk--done kb-mk--early', 'закрито достроково'] };
+    early: ['✓', 'kb-mk--done kb-mk--early', 'закрито достроково'], self_closed: ['✓', 'kb-mk--alone', 'без участі старшого'] };
   function segOf(s) { return X.SEG[s.kind] || ['kdp-sg--other', String(s.label || s.kind || ''), [String(s.label || s.kind || '')]]; }
   function markOf(m) { return (m.early ? X.MARK.early : X.MARK[m.kind]) || ['•', 'kb-mk--skip', String(m.label || m.kind || '')]; }
   X.strip = function (row, sc) {

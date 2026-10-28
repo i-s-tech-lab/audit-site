@@ -2,7 +2,7 @@
   'use strict';
   var P = root.P, esc = P.esc, X = P.mgrKdb;
   var WD = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-  var OUT = { helped: 'тримається', held_types: 'її види нижче', not_helped: 'рецидив', not_needed: 'не потрібно' };
+  var OUT = { helped: 'тримається', held_types: 'її види нижче', not_helped: 'рецидив', not_needed: 'не потрібно', self_closed: 'без участі старшого' };
   function nm(a) { return a.departmentName + ' №' + a.no; }
   function wl(r) { return X.wl(r.weeks); }
   function dv(v) { return v == null ? '—' : '<b class="' + X.dcls(v) + '">' + X.signed(v) + '</b>'; }

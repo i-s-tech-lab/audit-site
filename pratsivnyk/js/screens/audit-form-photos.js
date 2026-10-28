@@ -49,6 +49,7 @@
   };
 
   AF.photoField = function (F, d) {
+    if (P.authSlack && P.authSlack.real()) return '';   // v1.2: на справжньому сервері фото поки немає (рішення власника 27.10) — поле не показуємо
     var list = Array.isArray(d.photos) ? d.photos : [], k = esc(d.key);
     return '<div class="ui-field ph-field"><span class="ui-label">Фото · ' + list.length + ' з ' + MAX + ' <span class="ui-hint">можна без фото</span>' + P.help.btn('w.form.photo') + '</span>' +
       '<div class="ph-row">' + list.map(function (src, i) {
