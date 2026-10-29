@@ -1,0 +1,72 @@
+
+
+
+.tr-wrap { position: relative; min-width: 0; }
+
+
+.tr-row { position: relative; display: flex; flex-wrap: nowrap; align-items: stretch; }
+.tr-row > .tr-tile { position: relative; flex: 0 0 var(--tr-w, 170px); min-width: 0; }
+.tr-row--fill > .tr-tile { flex: 1 1 0; }
+
+
+.tr-row--slider {
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity; scroll-padding-inline: 3px;
+  padding-top: 6px; padding-bottom: 14px; padding-inline: 3px; margin-top: -6px; margin-inline: -3px;
+  scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+}
+.tr-row--slider > .tr-tile { scroll-snap-align: start; }
+.tr-row--slider::-webkit-scrollbar { height: 6px; }
+.tr-row--slider::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: var(--r-pill); }
+.tr-row--slider::-webkit-scrollbar-track { background: transparent; }
+
+.tr-row--slider.tr-row--more-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.tr-row--slider.tr-row--more-l { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.tr-row--slider.tr-row--more-l.tr-row--more-r {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+
+.tr-arrow {
+  position: absolute; top: calc(50% - 7px); z-index: 4; display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; margin-top: -16px; padding: 0; border: 1px solid var(--line-mid); border-radius: 50%;
+  background: var(--surface); color: var(--text-2); box-shadow: var(--sh-2); cursor: pointer;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.tr-arrow[hidden] { display: none; }
+.tr-arrow--prev { left: 6px; }
+.tr-arrow--next { right: 6px; }
+.tr-arrow::before { content: ""; width: 8px; height: 8px; border: solid currentColor; border-width: 2px 0 0 2px; border-radius: 1px; }
+.tr-arrow--prev::before { transform: translateX(2px) rotate(-45deg); }
+.tr-arrow--next::before { transform: translateX(-2px) rotate(135deg); }
+.tr-arrow:hover { background: var(--surface-2); color: var(--text); }
+@media not all and (pointer: fine) { .tr-arrow { display: none !important; } }
+
+
+.tr-grip {
+  position: absolute; left: 50%; bottom: 1px; z-index: 1; width: 36px; height: 18px; margin: 0 0 0 -18px; padding: 0;
+  border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-3); opacity: .5;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.tr-grip::before {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 15px; height: 10px; margin: -5px 0 0 -7.5px;
+  background: radial-gradient(circle, currentColor 1.15px, transparent 1.55px) 0 0 / 5px 5px repeat;
+}
+.tr-tile:hover > .tr-grip, .tr-tile:focus-within > .tr-grip, .tr-tile--lifted > .tr-grip { opacity: 1; }
+.tr-grip:hover { color: var(--text-2); }
+.tr-grip:active, .tr-row--dragging .tr-grip { cursor: grabbing; }
+@media (hover: none) { .tr-grip { opacity: .7; } }   
+
+
+.tr-row--dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; -webkit-user-select: none; }
+.tr-row--dragging > .tr-tile { transition: transform .18s var(--ease), scale .18s var(--ease), box-shadow .18s var(--ease); }
+.tr-row > .tr-tile--lifted { z-index: 3; scale: 1.04; box-shadow: var(--sh-3); transition: scale .18s var(--ease), box-shadow .18s var(--ease); }
+.tr-row > .tr-tile--flip { transition: transform .18s var(--ease), scale .18s var(--ease), box-shadow .18s var(--ease); }
+
+
+@media (prefers-reduced-motion: reduce) {
+  .tr-row > .tr-tile--lifted { scale: none; }
+  .tr-row--dragging > .tr-tile, .tr-row > .tr-tile--lifted, .tr-row > .tr-tile--flip { transition: none; }
+}

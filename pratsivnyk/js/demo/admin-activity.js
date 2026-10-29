@@ -4,7 +4,7 @@
   P.demoApis = P.demoApis || [];
 
   var MIN = 60000, DAY = 86400000;
-  var PAGE = 50, DEF_DAYS = 7, KEEP_DAYS = 183, ONLINE_MIN = 15, PAGE_MAX = 10000;
+  var PAGE = 50, DEF_DAYS = 7, KEEP_DAYS = 183, ONLINE_MIN = 15, ONLINE_REAL_MIN = 5, PAGE_MAX = 10000;   // v1.1: на справжньому сервері «онлайн» = сесія за 5 хв
   var DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
   var KEY_TRASH = 'demo:sr:hist:trash';   // корзина аудитів (senior-history.js)
   var KINDS = [['login', 'Входи'], ['admin', 'Налаштування'], ['catalog', 'Довідники локацій'], ['audit', 'Аудити']];
@@ -49,25 +49,28 @@
     return x;
   }
 
-  function loginEvents(env, me, fromIso, toIso) {
+  function loginEvent(env, e, fromIso, toIso) {
+    if (!e || typeof e.at !== 'string' || e.at < fromIso || e.at >= toIso || !has(LOGIN_TEXT, e.event) || (e.kind !== 'login' && e.kind !== 'refused' && e.event !== 'sessions_closed')) return null;
+    var u = e.who ? userOf(env, e.who.id) : null, det = [];
+    if (VIA[e.detail]) det.push(['Спосіб входу', VIA[e.detail]]);
+    if (e.slackId) det.push(['Slack', e.slackId]);
+    if (e.kind === 'refused' && e.detail && /[А-Яа-яІіЇїЄєҐґ]/.test(e.detail)) det.push(['Подробиці', e.detail]);
+    return ev(env, { at: e.at, kind: 'login', area: 'Вхід', what: LOGIN_TEXT[e.event], locationId: homeLoc(env, u), app: u && e.event === 'exchange_ok' ? appOf(u.role) : null,
+      who: e.who ? { id: e.who.id, name: e.who.name, role: e.who.role } : { id: null, name: 'Невідомий · Slack ' + (e.slackId || '—'), role: null },
+      target: e.event === 'sessions_closed' ? (e.target && e.target.name ? e.target.name : 'усі, крім того, хто закривав') : u ? APPS[appOf(u.role)] || 'Аудит' : 'Аудит',
+      details: det });
+  }
+  function loginEvents(env, me, fromIso, toIso, rows) {
     var h = apiFn('admLoginLog'), out = [];
+    function take(e) { var x = loginEvent(env, e, fromIso, toIso); if (x) out.push(x); }
+    if (env.real) { arr(rows).forEach(take); return out; }   // v1.1: вигаданого журналу входів на справжньому сервері немає
     if (!h) return out;
     var back = Math.ceil((env.now().getTime() - Date.parse(fromIso)) / DAY);
     var days = LOG_DAYS.filter(function (d) { return d >= back; })[0] || 90, before, r;
     do {
       r = h({ days: days, limit: 200, beforeId: before }, me, env);
       if (!r || !r.ok) break;
-      r.items.forEach(function (e) {
-        if (e.at < fromIso || e.at >= toIso || !has(LOGIN_TEXT, e.event) || (e.kind !== 'login' && e.kind !== 'refused' && e.event !== 'sessions_closed')) return;
-        var u = e.who ? userOf(env, e.who.id) : null, det = [];
-        if (VIA[e.detail]) det.push(['Спосіб входу', VIA[e.detail]]);
-        if (e.slackId) det.push(['Slack', e.slackId]);
-        if (e.kind === 'refused' && e.detail && /[А-Яа-яІіЇїЄєҐґ]/.test(e.detail)) det.push(['Подробиці', e.detail]);
-        out.push(ev(env, { at: e.at, kind: 'login', area: 'Вхід', what: LOGIN_TEXT[e.event], locationId: homeLoc(env, u), app: u && e.event === 'exchange_ok' ? appOf(u.role) : null,
-          who: e.who ? { id: e.who.id, name: e.who.name, role: e.who.role } : { id: null, name: 'Невідомий · Slack ' + (e.slackId || '—'), role: null },
-          target: e.event === 'sessions_closed' ? (e.target && e.target.name ? e.target.name : 'усі, крім того, хто закривав') : u ? APPS[appOf(u.role)] || 'Аудит' : 'Аудит',
-          details: det }));
-      });
+      r.items.forEach(take);
       before = r.nextBeforeId;
     } while (r.more && before);
     return out;
@@ -122,10 +125,10 @@
     });
     return out;
   }
-  function collect(env, me, fromIso, toIso) {
+  function collect(env, me, fromIso, toIso, loginRows) {
     me = adminMe(env, me);
     if (!me) return [];
-    var all = loginEvents(env, me, fromIso, toIso).concat(adminEvents(env, fromIso, toIso), catalogEvents(env, me, fromIso, toIso), auditEvents(env, fromIso, toIso));
+    var all = loginEvents(env, me, fromIso, toIso, loginRows).concat(adminEvents(env, fromIso, toIso), catalogEvents(env, me, fromIso, toIso), auditEvents(env, fromIso, toIso));
     all.forEach(function (e, i) { e.seq = i; });
     all.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : a.seq - b.seq; });
     all.forEach(function (e) { delete e.seq; });
@@ -137,7 +140,19 @@
     return s;
   }
 
-  function onlineNow(env, me) {
+  function onlineFromSessions(env, rows) {
+    var best = {};
+    arr(rows).forEach(function (x) {
+      var u = x && userOf(env, x.userId);
+      if (!u || u.active === false || u.accessOff || typeof x.lastAt !== 'string' || (best[u.id] && best[u.id].lastAt >= x.lastAt)) return;
+      best[u.id] = { userId: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role] || u.role, app: null, appLabel: null, lastAt: x.lastAt };
+      var loc = homeLoc(env, u);
+      if (loc) best[u.id].locationName = env.ix.loc[loc].name;
+    });
+    return Object.keys(best).map(function (k) { return best[k]; }).sort(function (a, b) { return a.lastAt < b.lastAt ? 1 : a.lastAt > b.lastAt ? -1 : a.name.localeCompare(b.name, 'uk'); });
+  }
+  function onlineNow(env, me, rows) {
+    if (env.real) return onlineFromSessions(env, rows);
     me = adminMe(env, me);
     if (!me) return [];
     var now = env.now().getTime(), nowIso = env.now().toISOString(), fromIso = new Date(now - ONLINE_MIN * MIN).toISOString(), best = {};
@@ -194,7 +209,7 @@
       if (!P.demoAdmin.isAdmin(me)) return C.forbidden();
       var r = filters(p || {}, env); if (r.err) return r.err;
       var f = r.f, DT = P.demoDates;
-      var all = collect(env, me, DT.kyivToIso(f.from, 0), DT.kyivToIso(DT.addDays(f.to, 1), 0));
+      var all = collect(env, me, DT.kyivToIso(f.from, 0), DT.kyivToIso(DT.addDays(f.to, 1), 0), env.real ? arr(p.loginRows) : null);
       var seen = {}, people = [];
       all.forEach(function (e) { if (e.who && e.who.id && !has(seen, e.who.id)) { seen[e.who.id] = 1; people.push({ id: e.who.id, name: e.who.name }); } });
       var scoped = all.filter(function (e) { return (!f.who || (e.who && e.who.id === f.who)) && (!f.loc || e.locationId === f.loc); });
@@ -206,7 +221,7 @@
     },
     admOnline: function (p, me, env) {
       if (!P.demoAdmin.isAdmin(me)) return C.forbidden();
-      return { ok: true, asOf: env.now().toISOString(), items: onlineNow(env, me) };
+      return { ok: true, asOf: env.now().toISOString(), windowMin: env.real ? ONLINE_REAL_MIN : ONLINE_MIN, items: onlineNow(env, me, env.real && p ? p.sessions : null) };
     }
   });
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,0 +1,39 @@
+
+
+.cab-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; padding-top: 20px; }
+.cab-body { min-width: 0; display: flex; flex-direction: column; }
+.cab-layout .bar { padding: 0 0 16px; }
+
+
+.cab-side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+  padding-bottom: 16px; scrollbar-width: thin; }
+.cab-side__grp { display: flex; flex-direction: column; gap: 2px; }
+.cab-side__lbl { margin: 0; padding: 0 12px 4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.cab-side__item { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: var(--r-md);
+  color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; text-decoration: none; }
+.cab-side__item:hover { background: var(--surface-2); color: var(--text); }
+.cab-side__item:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.cab-side__item--on, .cab-side__item--on:hover { background: var(--brand-soft); color: var(--brand-ink); box-shadow: inset 3px 0 0 var(--brand); }
+.cab-side__t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-side__n { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn); font-size: 13px; font-weight: 700; }
+
+
+.cab-side--drawer { position: static; max-height: none; overflow: visible; padding-bottom: 0; }
+
+
+.cab-sec { display: none; }
+.cab-sec .wrap { padding-top: 6px; padding-bottom: 6px; }
+.cab-sec__btn { width: 100%; max-width: 420px; justify-content: flex-start; }
+.cab-sec__t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+
+@media (max-width: 899px) {
+  .cab-layout { display: block; }
+  .cab-layout > .cab-side { display: none; }
+  .cab-sec { display: block; }
+}
+
+@media (max-width: 720px) {
+  .hdr__titles { min-width: 0; flex: 1 1 0; }
+  .hdr__title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

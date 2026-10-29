@@ -12,7 +12,14 @@
 
   M.section('products', 'Відділи й вироби', function (v) {
     var data = null, st = { dep: null, sel: {} };
-    function load() { v.get('srMgCatalog', function (r) { data = r; if (!dep()) st.dep = r.departments[0] && r.departments[0].id; draw(); }); }
+    var wantDept = !!(v.ctx.query && v.ctx.query.newDept === '1');
+    if (wantDept && root.history && root.history.replaceState) root.history.replaceState(null, '', '#/manage/products');
+    function load() {
+      v.get('srMgCatalog', function (r) {
+        data = r; if (!dep()) st.dep = r.departments[0] && r.departments[0].id; draw();
+        if (wantDept) { wantDept = false; if (data.canAddDept) openNewDept(); }
+      });
+    }
     function findD(id) { return data.departments.filter(function (d) { return d.id === id; })[0]; }
     function dep() { return findD(st.dep); }
     function prods() { var d = dep(); return d ? data.products.filter(function (x) { return x.deptTypeId === d.deptTypeId; }) : []; }

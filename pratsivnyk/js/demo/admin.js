@@ -67,8 +67,11 @@
       if (!A.isAdmin(me)) return C.forbidden();
       var meta = (env.storage.get(A.K.rules, null) || {}).meta || {};
       return { ok: true, items: A.RULES.map(function (r) {
-        return { key: r.key, label: r.label, unit: r.unit, min: r.min == null ? null : r.min, max: r.max == null ? null : r.max, dec: r.dec || 0,
-          locked: !!r.locked, value: A.GET[r.key](env.db), def: A.DEF[r.key], changed: has(meta, r.key) ? meta[r.key] : null };
+        var lock = env.real && r.realLock ? r.realLock : null;   // v1.6: правило, яке на справжньому сервері діє не тут
+        var item = { key: r.key, label: r.label, unit: r.unit, min: r.min == null ? null : r.min, max: r.max == null ? null : r.max, dec: r.dec || 0,
+          locked: !!r.locked || !!lock, value: lock ? null : A.GET[r.key](env.db), def: lock ? null : A.DEF[r.key], changed: !lock && has(meta, r.key) ? meta[r.key] : null };
+        if (lock) item.lockReason = lock;
+        return item;
       }) };
     },
 

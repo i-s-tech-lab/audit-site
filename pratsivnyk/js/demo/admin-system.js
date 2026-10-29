@@ -13,6 +13,7 @@
   var MSG = { daily: 'Щоденних — ціле число від 1 до 31.', weekly: 'Щотижневих — ціле число від 0 до 12.',
     monthly: 'Щомісячних — ціле число від 0 до 24.', maxBytes: 'Місце для всіх копій — від 100 МБ (0,1 ГБ) до 50 ГБ.' };
   var SCHEMA = '0009_people_v3', HISTORY_DAYS = 183, DISK_GB = 476, DISK_USED_GB = 138;
+  var STALE_H = 30;   // копія старша за стільки годин — head.state = 'stale' (як позначка в «Огляді»)
   var EXCLUDED = ['mail_private', 'sessions', 'login_tokens', 'auth_fail', 'mail_auth_fail'];
   var FILE = 'D:\\AuditBackups\\audit-РРРРММДДTГГХХССZ.dump';
   var RESTORE = [
@@ -138,6 +139,19 @@
   function totalOf(items) { return items.reduce(function (s, x) { return s + x.bytes; }, 0); }
   function diskFreePct(bytes) { return Math.round((DISK_GB - DISK_USED_GB - bytes / GB) / DISK_GB * 100); }
   function findItem(items, id) { return typeof id === 'string' ? items.filter(function (x) { return x.id === id; })[0] || null : null; }
+  function headOf(items, nowIso) {
+    var x = items[0];
+    if (!x) return { state: 'none', at: null, bytes: null, ageH: null, error: null };
+    var ageH = Math.round((Date.parse(nowIso) - Date.parse(x.at)) / H * 10) / 10;
+    return { state: ageH > STALE_H ? 'stale' : 'ok', at: x.at, bytes: x.bytes, ageH: ageH, error: null };
+  }
+  function serverUnknown(env) {
+    return { ok: true, real: true, asOf: env.now().toISOString(), services: [],
+      health: { ok: null, version: null, release: null, uptimeSec: null, db: null, schema: null, mailTick: null },
+      network: { domain: null, frontProxy: null, firewall: null, ports: [], cert: { issuer: null, validTo: null, daysLeft: null, rootValidTo: null } },
+      resources: { diskFreePct: null, diskFreeGb: null, memUsedPct: null, cpuPct: null }, windows: { lastBoot: null, updatesPending: null },
+      releases: [], errors24h: null, commands: [] };
+  }
 
   function serverState(env, backupBytes) {
     var now = Math.floor(env.now().getTime() / 1000) * 1000, iso = function (t) { return new Date(t).toISOString(); };
@@ -172,7 +186,7 @@
       if (!A().isAdmin(me)) return C.forbidden();
       var st = store(env), pol = policyOf(st), items = build(env, st, pol), bytes = totalOf(items), now = env.now().toISOString(), next = at03(env.today);
       if (next <= now) next = at03(addDays(env.today, 1));
-      return { ok: true, asOf: now, policy: pol, totals: { count: items.length, bytes: bytes, diskFreePct: diskFreePct(bytes) }, items: items.map(pub),
+      return { ok: true, asOf: now, head: headOf(items, now), policy: pol, totals: { count: items.length, bytes: bytes, diskFreePct: diskFreePct(bytes) }, items: items.map(pub),
         schedule: { at: '03:00', next: next },
         offsite: { set: false, hint: 'Усі копії лежать на тому самому ноутбуці, що й база. Потрібен окремий диск або другий компʼютер, куди щодня копіюється тека копій.' },
         restore: { text: RESTORE, note: RESTORE_NOTE } };
@@ -226,12 +240,14 @@
     },
     admServer: function (p, me, env) {
       if (!A().isAdmin(me)) return C.forbidden();
+      if (env.real) return serverUnknown(env);   // v1.1: справжні значення дає adm-system.mjs, тут вигадувати нічого
       var st = store(env), s = serverState(env, totalOf(build(env, st, policyOf(st))));
       return Object.assign({ ok: true, asOf: env.now().toISOString() }, s);
     }
   });
 
   P.demoSystem = { snapshot: function (env) {
+    if (env.real) return null;   // v1.1: на справжньому сервері знімка з вигаданих значень немає
     var st = store(env), pol = policyOf(st), items = build(env, st, pol), bytes = totalOf(items), s = serverState(env, bytes);
     var last = items[0] || null, ver = items.map(function (x) { return x.verifiedAt; }).filter(Boolean).sort().pop() || null;
     return {

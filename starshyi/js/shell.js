@@ -57,7 +57,7 @@
     return demoStrip('Тестова версія · усі імена й цифри вигадані · дані живуть лише в цьому браузері') +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(loc ? loc.name : '') + '</h1>' +
       '<p class="hdr__sub">Сторінка старшого аудитора · ' + esc(S.h.dayLong(today())) + '</p></div>' +
-      '<div class="hdr__tools">' + (REAL ? '' : '<button class="plus" type="button" data-act="sr-plus" aria-label="Додати">' + P.ic('add') + '<span class="sr-hide-phone">Додати</span></button>') +
+      '<div class="hdr__tools">' + (plusList().length ? '<button class="plus" type="button" data-act="sr-plus" aria-label="Додати">' + P.ic('add') + '<span class="sr-hide-phone">Додати</span></button>' : '') +
       '<button class="tool" type="button" data-act="sr-refresh" title="Перечитати дані" aria-label="Оновлено о ' + hhmm + ' — перечитати"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="sr-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials ? P.initials(me.name) : '') + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>' +
       '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + shownTabs().map(function (t) {
@@ -107,20 +107,32 @@
     return '<button class="menu__item" type="button" data-act="' + act + '"' + (extra || '') + ' style="border:0;background:transparent;width:100%;text-align:left;font:inherit;cursor:pointer">' +
       '<span class="menu__ic">' + P.ic(ic) + '</span><span><span class="menu__t">' + esc(title) + '</span>' + (sub ? '<span class="menu__s">' + esc(sub) + '</span>' : '') + '</span></button>';
   }
+  function plusItems(me, real, ok) {
+    function can(flag) { return !real || !!(ok && ok(flag)); }
+    var admin = !!(me && (me.admin || me.role === 'admin')), items = [];
+    if (can('auditSubmit')) items.push({ group: 'rec', act: 'p-audit', ic: 'audit', title: 'Новий аудит', sub: 'Та сама форма, що в працівника, — у вікні' });
+    if (can(true) && !(me && me.access && me.access.addPeople === false)) items.push({ group: 'dir', act: 'p-team', ic: 'user', title: 'Аудитор', sub: 'Доступ до додатку за Slack ID', sec: 'team' });
+    if (can('srMgWorkerSave')) items.push({ group: 'dir', act: 'p-workers', ic: 'people', title: 'Виробничий працівник', sub: 'Підпис у цеху (напр. q5) і відділ', sec: 'workers' });
+    if (can('srMgDeptSave')) items.push({ group: 'dir', act: 'p-dept', ic: 'department', title: 'Відділ', sub: 'Новий відділ на цій локації', sec: 'products', query: { newDept: '1' } });
+    if (can('srMgProductSave')) items.push({ group: 'dir', act: 'p-products', ic: 'department', title: 'Виріб', sub: 'Для типу відділу', sec: 'products' });
+    if (can('srMgDefectSave')) items.push({ group: 'dir', act: 'p-defects', ic: 'defect', title: 'Вид браку', sub: 'З рівнем: неправильно зроблене · пошкоджене · зламане', sec: 'defects' });
+    if (can('srMgBlockSave')) items.push({ group: 'dir', act: 'p-blocks', ic: 'order', title: 'Блок замовлень', sub: 'Кілька замовлень під однією назвою', sec: 'blocks' });
+    if (admin && can('srMgImportSave')) items.push({ group: 'dir', act: 'p-import', ic: 'table', title: 'Таблиця виробництва', sub: 'План і факт по відділах — звідки брати', sec: 'import' });
+    return items;
+  }
+  S.plusItems = plusItems;
+  function plusList() { return me ? plusItems(me, REAL, REAL ? P.authSlack.realOk : null) : []; }
   function openPlus(anchor) {
-    var go = function (sec) { return function (t, e, layer) { layer.close(); P.router.go('/manage/' + sec, { new: '1' }); }; };
-    S.menu(anchor, { width: 380, body:
-      '<p class="group-label" style="padding:6px 12px 4px">Записати</p>' +
-      menuItem('p-audit', 'audit', 'Новий аудит', 'Та сама форма, що в працівника, — у вікні') +
-      '<div class="menu__sep"></div><p class="group-label" style="padding:6px 12px 4px">Додати в довідник</p>' +
-      (me.access && me.access.addPeople === false ? '' : menuItem('p-team', 'user', 'Аудитор', 'Доступ до додатку за Slack ID')) +
-      menuItem('p-workers', 'people', 'Виробничий працівник', 'Підпис у цеху (напр. q5) і відділ') +
-      menuItem('p-products', 'department', 'Виріб', 'Для типу відділу') +
-      menuItem('p-defects', 'defect', 'Вид браку', 'З рівнем: неправильно зроблене · пошкоджене · зламане') +
-      menuItem('p-blocks', 'order', 'Блок замовлень', 'Кілька замовлень під однією назвою') +
-      menuItem('p-import', 'table', 'Таблиця виробництва', 'План і факт по відділах — звідки брати'),
-      on: { 'p-audit': function (t, e, layer) { layer.close(); S.newAudit(); }, 'p-team': go('team'), 'p-workers': go('workers'),
-        'p-products': go('products'), 'p-defects': go('defects'), 'p-blocks': go('blocks'), 'p-import': go('import') } });
+    var LABEL = { rec: 'Записати', dir: 'Додати в довідник' }, body = '', group = null, on = {};
+    plusList().forEach(function (it) {
+      if (it.group !== group) { body += (group ? '<div class="menu__sep"></div>' : '') + '<p class="group-label" style="padding:6px 12px 4px">' + LABEL[it.group] + '</p>'; group = it.group; }
+      body += menuItem(it.act, it.ic, it.title, it.sub);
+      on[it.act] = function (t, e, layer) {
+        layer.close();
+        if (it.sec) P.router.go('/manage/' + it.sec, it.query || { new: '1' }); else S.newAudit();
+      };
+    });
+    S.menu(anchor, { width: 380, body: body, on: on });
   }
   function openProfile(anchor) {
     var dark = doc.documentElement.getAttribute('data-theme') === 'dark';
@@ -137,7 +149,11 @@
       (REAL ? '' : menuItem('pf-reset', 'refresh', 'Скинути тестові дані', 'Усе, що ви змінили в тестовій версії, зникне')) +
       menuItem('pf-out', 'logout', 'Вийти', ''),
       on: {
-        th: function (t, e, layer) { var v = t.getAttribute('data-v'); doc.documentElement.setAttribute('data-theme', v); P.store.set('theme:sr', v); layer.close(); },
+        th: function (t, e, layer) {
+          var v = t.getAttribute('data-v');
+          if (P.prefs) P.prefs.setTheme('cab', v); else { doc.documentElement.setAttribute('data-theme', v); P.store.set('theme:sr', v); }
+          layer.close();
+        },
         'pf-reset': function (t, e, layer) { layer.close(); P.confirm({ title: 'Скинути тестові дані?', text: 'Записані аудити, коригуючі дії й зміни в налаштуваннях у цьому браузері зникнуть.', okLabel: 'Скинути', danger: true })
           .then(function (ok) { if (!ok) return; P.srv('demoReset', {}).then(function () { P.toast('ok', 'Тестові дані скинуто'); boot(); }); }); },
         'pf-out': function (t, e, layer) { layer.close(); P.srv('authLogout', {}).then(function () { me = null; boot(); }); }
@@ -198,7 +214,9 @@
       if (m && (m.role === 'senior_auditor' || m.role === 'admin')) {
         me = m; loc = me.locations.filter(function (l) { return l.id === me.defaultLocationId; })[0] || me.locations[0];
         if (!loc) { me = null; noLocScreen(m); return; }
-        render(); refreshKdCount(); return;
+        render(); refreshKdCount();
+        if (P.prefs) P.prefs.load(me.id).then(function () { P.prefs.applyTheme('cab'); });   // v1.16: тема з профілю людини
+        return;
       }
       loginScreen(m ? 'Ви увійшли як «' + m.roleLabel + '». Кабінет старшого — для старших аудиторів.' : (r && !r.ok && r.code !== 'auth' ? 'Не вдалося перевірити вхід — перевірте звʼязок і спробуйте ще раз.' : P.authSlack.takeError()));
     });

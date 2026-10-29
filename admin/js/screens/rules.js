@@ -22,7 +22,7 @@
     return n ? (n[v - 1] || num(v)) : num(v) + (u === '%' ? '%' : ' ' + u);
   }
 
-  P.cab.tab({ id: 'rules', label: 'Правила', ic: 'settings', path: '/rules', order: 30 });
+  P.cab.tab({ id: 'rules', label: 'Правила', ic: 'settings', path: '/rules', order: 30, real: ['adminRules', 'adminRuleSave'] });   // real — назви функцій, які вкладка читає й пише (двигун сервера)
   P.cab.screen('/rules', { tab: 'rules', title: 'Правила', render: function (ctx) {
     var data = null;
     function find(key) { return data.items.filter(function (x) { return x.key === key; })[0]; }
@@ -36,9 +36,9 @@
     function card(r) {
       var c = r.changed, isDef = r.value === r.def;
       return '<section class="card adm-rule' + (r.locked ? ' adm-rule--locked' : '') + '"><div class="adm-rule__head"><h3 class="adm-rule__title">' + esc(SHORT[r.key] || r.label) + A.help(HELP[r.key]) + '</h3>' +
-        (r.locked ? '<span class="adm-lockic" title="Змінити не можна">' + P.ic('lock', 'ui-icon--sm') + '</span>' : A.pen('ru-edit', da('key', r.key), 'Змінити · ' + r.label)) + '</div>' +
-        '<p class="adm-rule__val">' + esc(withUnit(r.value, r.unit, r.key)) + '</p>' +
-        '<p class="hint">' + esc(hintOf(r.key)) + '</p>' +
+        (r.locked ? '<span class="adm-lockic" title="' + esc(r.lockReason || 'Змінити не можна') + '">' + P.ic('lock', 'ui-icon--sm') + '</span>' : A.pen('ru-edit', da('key', r.key), 'Змінити · ' + r.label)) + '</div>' +
+        '<p class="adm-rule__val">' + esc(r.value == null ? '—' : withUnit(r.value, r.unit, r.key)) + '</p>' +
+        '<p class="hint">' + esc(r.lockReason || hintOf(r.key)) + '</p>' +
         '<dl class="kv adm-rule__kv">' + (r.locked ? '' : '<dt>За замовчуванням' + A.help('admin.rule.def') + '</dt><dd>' + esc(withUnit(r.def, r.unit, r.key)) + '</dd>' +
           (NAMES[r.key] ? '' : '<dt>Межі' + A.help('admin.rule.limits') + '</dt><dd>' + esc(num(r.min) + ' – ' + withUnit(r.max, r.unit)) + '</dd>')) +
           (c ? '<dt>Остання зміна' + A.help('admin.rule.last') + '</dt><dd>' + esc(withUnit(c.from, r.unit, r.key) + ' → ' + withUnit(c.to, r.unit, r.key)) + '<br><span class="adm-dim">' + esc(c.byName + ' · ' + P.fmt.dateTime(c.at)) + '</span></dd>' : '') + '</dl>' +

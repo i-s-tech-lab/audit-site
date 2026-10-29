@@ -14,25 +14,28 @@
     if (!d.audits) return (d.target != null ? 'норма дня ' + h.num(d.target) + ' шт' : 'норма дня не задана') + (d.rejected ? ' · брак ' + h.num(d.rejected) + ' шт' : '');
     return '<b>' + h.num(d.checked) + '</b>' + (d.target != null ? ' / ' + h.num(d.target) : '') + ' шт · брак <b>' + h.num(d.rejected) + ' шт</b> · ' + h.pct(d.pct);
   }
-  function tile(id, on, top, today, sparkLabel) {
-    return '<div class="an-tile' + (on ? ' an-tile--on' : '') + '"><button class="an-tile__hit" type="button" data-act="an-dep" data-id="' + esc(id) + '" aria-pressed="' + on + '">' +
+  function tile(id, on, top, today, sparkLabel, name) {
+    return '<div class="an-tile' + (on ? ' an-tile--on' : '') + '" data-tile-id="' + esc(id || 'all') + '" data-tile-name="' + esc(name) + '"><button class="an-tile__hit" type="button" data-act="an-dep" data-id="' + esc(id) + '" aria-pressed="' + on + '">' +
       top + '<span class="an-tile__sep"></span>' + today + '</button>' +
       '<div class="an-tile__spark" data-spark="' + esc(id) + '" aria-label="' + esc(sparkLabel) + '"></div></div>';
   }
   function tiles(view) {
     var r = view.data, all = r.todayAll, box = view.box('an-tiles');
     if (!box) return;
+    if (view.tileRow) { view.tileRow.destroy(); view.tileRow = null; }   // перед новим малюванням знімаємо ряд зі старих плиток (v1.3)
     var allToday = '<span class="an-tile__today"><span class="an-tile__lbl">Сьогодні</span><span class="an-st">' + A.n(all.audits, AUD[0], AUD[1], AUD[2]) + '</span></span>' +
       '<span class="an-segs" role="img" aria-label="Відділів: норму виконано — ' + all.done + ', ще не виконано — ' + all.part + ', аудитів не було — ' + all.none + '">' +
       r.todayDepts.map(function (d) { return X.scale(d, 'sm'); }).join('') + '</span>' +
       '<span class="an-tile__nums">' + (all.audits ? '<b>' + h.num(all.checked) + '</b> шт · брак <b>' + h.num(all.rejected) + ' шт</b> · ' + h.pct(all.pct) : 'аудитів сьогодні не було') + '</span>';
-    box.innerHTML = tile('', !view.dep, tileTop('Усі відділи', !view.dep, all.period), allToday, 'Усі відділи: брак по днях, шт') +
+    box.innerHTML = tile('', !view.dep, tileTop('Усі відділи', !view.dep, all.period), allToday, 'Усі відділи: брак по днях, шт', 'Усі відділи') +
       r.todayDepts.map(function (d) {
         var on = view.dep === d.id;
         return tile(d.id, on, tileTop(d.name, on, d.period),
           '<span class="an-tile__today"><span class="an-tile__lbl">Сьогодні</span>' + X.stateBadge(d) + '</span>' + X.scale(d, 'sm') +
-          '<span class="an-tile__nums">' + todayNums(d) + '</span>', d.name + ': брак по днях, шт');
+          '<span class="an-tile__nums">' + todayNums(d) + '</span>', d.name + ': брак по днях, шт', d.name);
       }).join('');
+    if (P.tileRow) view.tileRow = P.tileRow.mount(box, { scope: 'sr:an:' + view.ctx.loc.id, item: '.an-tile', idAttr: 'data-tile-id', active: '.an-tile--on',
+      fixed: ['all'], minWidth: 160, max: 6, label: 'відділ' });
     Array.prototype.forEach.call(box.querySelectorAll('[data-spark]'), function (el) {
       var id = el.getAttribute('data-spark'), src = id ? r.todayDepts.filter(function (d) { return d.id === id; })[0] : all;
       P.srChart.mount(el, { mini: true, height: 30, label: el.getAttribute('aria-label'),

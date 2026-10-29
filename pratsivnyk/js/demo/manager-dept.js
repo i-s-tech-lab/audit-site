@@ -65,7 +65,67 @@
       opened: actions.filter(function (a) { return inside(a.openedAt); }).length, implemented: actions.filter(function (a) { return inside(a.implementedAt); }).length };
   }
 
+  function producedBy(env, locId, from, to) {
+    var out = {}, days = {};
+    try {
+      var by = P.demoProd.byDay(env, locId, from, to);
+      Object.keys(by).forEach(function (day) {
+        Object.keys(by[day]).forEach(function (dep) {
+          out[dep] = (out[dep] || 0) + (by[day][dep].done || 0);
+          (days[dep] = days[dep] || {})[day] = 1;   // v1.5: дні, за які є числа виробництва цього відділу
+        });
+      });
+    } catch (e) { out = {}; days = {}; }
+    out.__days = days;
+    return out;
+  }
+  function prodReady(env, locId, depId) {
+    try { return !!(P.demoProd && P.demoProd.ready(env, locId, depId)); } catch (e) { return false; }
+  }
+  function kdOfTile(k, depId, from, to) {
+    if (!k) return null;
+    var mine = (k.actions || []).filter(function (a) {
+      var d = a.openedAt ? String(a.openedAt).slice(0, 10) : '';
+      return a.departmentId === depId && d >= from && d <= to;
+    });
+    var days = mine.map(function (a) { return a.daysToImplement; }).filter(function (v) { return v != null; });
+    return { opened: mine.length,
+      worked: mine.filter(function (a) { return !!a.analysis || !!a.implementedAt || a.state === 'skip'; }).length,
+      avgDaysToPlan: days.length ? Math.round(days.reduce(function (s, v) { return s + v; }, 0) / days.length * 10) / 10 : null,
+      selfClosed: mine.filter(function (a) { return !!a.selfClosed; }).length,
+      relapses: mine.filter(function (a) { return a.state === 'relapse'; }).length };
+  }
+  function tileOf(env, d, list, workDays, made, k, rg) {
+    var X = M(), mine = list.filter(function (a) { return a.departmentId === d.id; }), checked = X.stats(env, list, [d]).checked;
+    var ready = prodReady(env, d.locationId, d.id), produced = ready ? Math.round(made[d.id] || 0) : null;
+    var pdays = (made.__days || {})[d.id] || {};
+    var coverChecked = produced == null ? null : X.stats(env, list.filter(function (a) { return pdays[a.day]; }), [d]).checked;
+    return { id: d.id, name: d.name, deptTypeId: d.deptTypeId, active: d.active !== false, audits: mine.length,
+      daysNoAudit: workDays - X.dayCount(mine), workDays: workDays, checked: checked, produced: produced, coverChecked: coverChecked,
+      coverPct: produced ? C.pct(coverChecked, produced) : null, prodReady: ready,
+      auditsDefect: mine.filter(function (a) { return C.rejectedOf(a) > 0; }).length, auditsClean: mine.filter(function (a) { return C.rejectedOf(a) === 0; }).length,
+      kd: kdOfTile(k, d.id, rg.from, rg.to) };
+  }
+
   var api = {
+    mgrDeptTiles: function (p, me, env) {
+      var X = M();
+      if (!X || !X.can(me)) return C.forbidden();
+      var many = X.locsOf(p, env); if (many.err) return many.err;
+      var tid = p.deptTypeId == null || p.deptTypeId === '' ? null : p.deptTypeId;
+      if (tid !== null && !X.has(env.ix.dt, tid)) return C.fail('not_found', 'Такого типу відділу немає.');
+      var rg = X.range(p, env);
+      var locations = env.db.locations.filter(function (l) { return !many.ids || many.ids.indexOf(l.id) >= 0; }).map(function (l) {
+        var list = X.auditsIn(env, l.id, rg.from, rg.to), workDays = X.dayCount(list), made = producedBy(env, l.id, rg.from, rg.to), k = X.kdSum(env, l.id, rg.from, rg.to);
+        var depts = X.depsIn(env, l.id).filter(function (d) { return !tid || d.deptTypeId === tid; }).map(function (d) { return tileOf(env, d, list, workDays, made, k, rg); })
+          .filter(function (t) { return t.active || t.audits; });
+        depts.forEach(function (t) { delete t.audits; });
+        return { id: l.id, name: l.name, workDays: workDays, depts: depts };
+      });
+      return { ok: true, from: rg.from, to: rg.to, asOf: env.now().toISOString(), locations: locations,
+        allLocations: env.db.locations.map(X.short), deptTypes: env.db.deptTypes.map(X.short) };
+    },
+
     mgrDeptDetail: function (p, me, env) {
       var X = M();
       if (!X || !X.can(me)) return C.forbidden();

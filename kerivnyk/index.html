@@ -1,37 +1,44 @@
 <!doctype html>
 <html lang="uk" data-theme="light">
 <head>
-  <meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Ug9pUlyeh+rYQ+B0+cDO5MLL+AI2R/lELPjkxZcTP1w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
-  <script src="../pratsivnyk/js/frame-guard.js?v=20261028142558"></script>
+  <meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ghfxvFloNZhyvwyrL0sXPJ0wt+592AYKW8vON1ve480='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <script src="../pratsivnyk/js/frame-guard.js?v=20261029150147"></script>
   <meta name="robots" content="noindex, nofollow">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Аудит якості — керівник (тест)</title>
-  <link rel="stylesheet" href="../pratsivnyk/css/ds.css?v=20261028142558">
-  <link rel="stylesheet" href="../starshyi/css/app.css?v=20261028142558">
-  <link rel="stylesheet" href="../starshyi/css/desk.css?v=20261028142558">
-  <link rel="stylesheet" href="../starshyi/css/senior.css?v=20261028142558">
-  <link rel="stylesheet" href="../pratsivnyk/css/profile-switch.css?v=20261028142558">
-  <link rel="stylesheet" href="../starshyi/css/s-chart.css?v=20261028142558">
-  <link rel="stylesheet" href="../admin/css/cabinet.css?v=20261028142558">
-  <link rel="stylesheet" href="css/manager.css?v=20261028142558">
-  <link rel="stylesheet" href="../starshyi/css/s-kd-board.css?v=20261028142558">
-  <link rel="stylesheet" href="css/manager-kd.css?v=20261028142558">
-  <link rel="stylesheet" href="css/team.css?v=20261028142558">
-  <link rel="stylesheet" href="css/manager-print.css?v=20261028142558">
+  <link rel="stylesheet" href="../pratsivnyk/css/ds.css?v=20261029150147">
+  <link rel="stylesheet" href="../starshyi/css/app.css?v=20261029150147">
+  <link rel="stylesheet" href="../starshyi/css/desk.css?v=20261029150147">
+  <link rel="stylesheet" href="../starshyi/css/senior.css?v=20261029150147">
+  <link rel="stylesheet" href="../pratsivnyk/css/tile-row.css?v=20261029150147">
+  <link rel="stylesheet" href="../pratsivnyk/css/profile-switch.css?v=20261029150147">
+  <link rel="stylesheet" href="../starshyi/css/s-chart.css?v=20261029150147">
+  <link rel="stylesheet" href="../admin/css/cabinet.css?v=20261029150147">
+  <link rel="stylesheet" href="../admin/css/cab-nav.css?v=20261029150147">
+  <link rel="stylesheet" href="css/manager.css?v=20261029150147">
+  <link rel="stylesheet" href="../starshyi/css/s-kd-board.css?v=20261029150147">
+  <link rel="stylesheet" href="css/manager-kd.css?v=20261029150147">
+  <link rel="stylesheet" href="css/team.css?v=20261029150147">
+  <link rel="stylesheet" href="css/manager-print.css?v=20261029150147">
   <script>
     /* Кабінет керівника: оболонка спільна з адміністратором (../admin/js/cab-shell.js), екрани — js/screens/. v1.1 — 14.10.2026
        v1.2 — 15.10.2026: друкований вигляд (css/manager-print.css) і коригуючі дії локації (js/screens/mgr-kd.js).
        v1.3 — 19.10.2026: вкладка «Коригуючі дії» (js/screens/mgr-kdb-*.js, css/manager-kd.css поверх ../starshyi/css/s-kd-board.css;
        демо-сервер manager-kd-plates.js → manager-kd-board.js; вікно «Як працюють…» — ../starshyi/js/screens/kd-how.js). */
-    window.P = { demoSessionKey: 'demo:me:mgr', demoViewRole: 'manager', cabinet: { role: 'manager', title: 'Кабінет керівника', home: '/overview' } };
+    window.P = { demoSessionKey: 'demo:me:mgr', demoViewRole: 'manager', cabinet: { role: 'manager', title: 'Кабінет керівника', home: '/overview',
+      /* v1.4 — 29.10.2026: «+ Додати» в шапці (../admin/js/cab-plus.js). */
+      plus: [
+        // «Мій звіт» прибрано (29.10): «Мої звіти» — 6 сталих сповіщень, які лише вмикаються й правляться; додавати нема чого.
+        { id: 'person', ic: 'user', title: 'Людина', sub: 'Аудитор чи старший аудитор', go: '/team', query: { new: '1' }, real: true }
+      ] } };
     (function () {
       var t = null;
       try { t = JSON.parse(localStorage.getItem('audit-demo:theme:sr')); } catch (e) { /* без памʼяті */ }
       document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
     })();
   </script>
-<meta name="app-build" content="20261028142558"></head>
+<meta name="app-build" content="20261029150147"></head>
 <body>
   <div class="page" id="app">
     <div class="ui-state" role="status" style="padding-top: 120px"><span class="ui-spinner" aria-hidden="true"></span><p class="ui-state__text">Завантаження…</p></div>
@@ -40,63 +47,69 @@
   <div id="overlay"></div>
   <noscript>Для роботи кабінету потрібен JavaScript.</noscript>
 
-  <script src="../site-config.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/core.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/icons.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/dictionary.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/generate-audits.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/generate.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/server-common.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/access-rules.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/server-read.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/server-submit.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-common.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/admin.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-manage.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/prod.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-kd-rules.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-kd.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-kd-board.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-analytics.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/senior-history.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/admin-manage.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/people-save.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/admin-login.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/manager.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/manager-dept.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/manager-kd-plates.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/manager-kd-board.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/access-log.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/demo/server.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/ui.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/auth-slack.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/auth-team.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/team-requests.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/help.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/help-common.js?v=20261028142558"></script>
-  <script src="js/help-manager.js?v=20261028142558"></script>
-  <script src="js/help-mgr-kd.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/profile-switch.js?v=20261028142558"></script>
-  <script src="../pratsivnyk/js/update-check.js?v=20261028142558"></script>
-  <script src="../starshyi/js/chart.js?v=20261028142558"></script>
-  <script src="../starshyi/js/sr-kit.js?v=20261028142558"></script>
-  <script src="../admin/js/cab-shell.js?v=20261028142558"></script>
+  <script src="../site-config.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/core.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/icons.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/dictionary.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/generate-audits.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/generate.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/server-common.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/access-rules.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/server-read.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/server-submit.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-common.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/admin.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-manage.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/prod.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-kd-rules.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-kd.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-kd-board.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-analytics.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/senior-history.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/admin-manage.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/people-save.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/admin-login.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/manager.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/manager-dept.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/manager-kd-plates.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/manager-kd-board.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/access-log.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/prefs.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/demo/server.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/ui.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/prefs.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/tile-row.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/auth-slack.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/auth-team.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/team-requests.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/help.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/help-common.js?v=20261029150147"></script>
+  <script src="js/help-manager.js?v=20261029150147"></script>
+  <script src="js/help-mgr-kd.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/profile-switch.js?v=20261029150147"></script>
+  <script src="../pratsivnyk/js/update-check.js?v=20261029150147"></script>
+  <script src="../starshyi/js/chart.js?v=20261029150147"></script>
+  <script src="../starshyi/js/sr-kit.js?v=20261029150147"></script>
+  <script src="../admin/js/cab-nav.js?v=20261029150147"></script>
+  <script src="../admin/js/cab-plus.js?v=20261029150147"></script>
+  <script src="../admin/js/cab-shell.js?v=20261029150147"></script>
   
-  <script src="js/screens/mgr-kit.js?v=20261028142558"></script>
-  <script src="js/screens/mgr-kd.js?v=20261028142558"></script>
-  <script src="js/screens/mgr-kdb-kit.js?v=20261028142558"></script>
-  <script src="../starshyi/js/screens/kd-how.js?v=20261028142558"></script>
-  <script src="js/screens/mgr-kdb-action.js?v=20261028142558"></script>
-  <script src="js/screens/mgr-kdb-plates.js?v=20261028142558"></script>
-  <script src="js/screens/mgr-kdb-main.js?v=20261028142558"></script>
-  <script src="js/screens/mgr-kdb-loc.js?v=20261028142558"></script>
-  <script src="js/screens/overview.js?v=20261028142558"></script>
-  <script src="js/screens/depts.js?v=20261028142558"></script>
-  <script src="js/screens/auditors.js?v=20261028142558"></script>
-  <script src="js/screens/month.js?v=20261028142558"></script>
-  <script src="js/screens/month-report.js?v=20261028142558"></script>
-  <script src="js/screens/reports.js?v=20261028142558"></script>
-  <script src="js/screens/team.js?v=20261028142558"></script>
+  <script src="js/screens/mgr-kit.js?v=20261029150147"></script>
+  <script src="js/screens/mgr-kd.js?v=20261029150147"></script>
+  <script src="js/screens/mgr-kdb-kit.js?v=20261029150147"></script>
+  <script src="../starshyi/js/screens/kd-how.js?v=20261029150147"></script>
+  <script src="js/screens/mgr-kdb-action.js?v=20261029150147"></script>
+  <script src="js/screens/mgr-kdb-plates.js?v=20261029150147"></script>
+  <script src="js/screens/mgr-kdb-main.js?v=20261029150147"></script>
+  <script src="js/screens/mgr-kdb-loc.js?v=20261029150147"></script>
+  <script src="js/screens/overview.js?v=20261029150147"></script>
+  <script src="js/screens/depts-tiles.js?v=20261029150147"></script>
+  <script src="js/screens/depts.js?v=20261029150147"></script>
+  <script src="js/screens/auditors.js?v=20261029150147"></script>
+  <script src="js/screens/month.js?v=20261029150147"></script>
+  <script src="js/screens/month-report.js?v=20261029150147"></script>
+  <script src="js/screens/reports.js?v=20261029150147"></script>
+  <script src="js/screens/team.js?v=20261029150147"></script>
   
 </body>
 </html>

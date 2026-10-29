@@ -140,7 +140,7 @@
   }
   P.admAuditCard = { open: open };
 
-  P.cab.tab({ id: 'audits', label: 'Аудити', ic: 'audit', path: '/audits', order: 34 });
+  P.cab.tab({ id: 'audits', label: 'Аудити', ic: 'audit', path: '/audits', order: 34, real: ['admAudits', 'auditGet', 'srAuditDelete', 'srAuditRestore'] });   // real — назви функцій, які вкладка читає й пише (двигун сервера)
   P.cab.screen('/audits', { tab: 'audits', title: 'Аудити', render: function (ctx) {
     var items = [], last = null, loading = false, failed = null, seq = 0, timer = null;
 

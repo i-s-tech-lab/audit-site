@@ -4,7 +4,8 @@
   var CFG = P.cabinet || {}, ROLE = CFG.role === 'manager' ? 'manager' : 'admin';
   var TITLE = CFG.title || (ROLE === 'admin' ? 'Кабінет адміністратора' : 'Кабінет керівника');
   var C = P.cab = {};
-  var app, main, me = null, cur = null, tabs = [], gen = 0, lastPath = null;
+  var app, main, me = null, cur = null, tabs = [], gen = 0, lastPath = null, curTab = null;
+  var SIDE = ROLE === 'admin' && CFG.nav === 'side' && !!P.cabNav;
   var REAL = !!(P.authSlack && P.authSlack.real());
   function shown() { return REAL ? tabs.filter(function (t) { return P.authSlack.realOk(t.real); }) : tabs; }
   function home() { var s = shown(); return REAL ? (s[0] ? s[0].path : '/') : (CFG.home || '/overview'); }
@@ -26,8 +27,8 @@
   C.addDays = addDays;
   C.today = today;
   function setPeriod(p) { period = p; P.store.set('cab:period', p); render(); }
-  function periodBar() {
-    return '<div class="wrap bar"><span class="hint">Період</span>' +
+  function periodBar(inner) {
+    return '<div class="' + (inner ? '' : 'wrap ') + 'bar"><span class="hint">Період</span>' +
       '<label class="date">' + P.ic('calendar', 'ui-icon--sm') + '<input type="date" data-period="from" value="' + period.from + '" max="' + period.to + '" style="border:0;background:transparent;font:inherit;color:inherit"></label>' +
       '<span class="hint">—</span>' +
       '<label class="date">' + P.ic('calendar', 'ui-icon--sm') + '<input type="date" data-period="to" value="' + period.to + '" max="' + today() + '" style="border:0;background:transparent;font:inherit;color:inherit"></label>' +
@@ -42,16 +43,26 @@
     return P.state.empty('info', 'Цей розділ ще не підключено',
       'Він запрацює, коли дані перенесуть зі старої системи.' + (s.length ? ' Зараз працюють: ' + s.map(function (t) { return '«' + t.label + '»'; }).join(', ') + '.' : ''));
   }
+  function plusItems() { return P.cabPlus ? P.cabPlus.visible(CFG.plus, REAL, P.authSlack.realOk) : []; }
+  function navGroups() { return P.cabNav.group(shown(), CFG.groups); }
   function frame(tab, showPeriod) {
     var now = new Date(), hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
-    return strip() +
+    var pad = 'padding-top:' + (showPeriod ? 0 : 20) + 'px';
+    var head = strip() +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(TITLE) + '</h1>' +
       '<p class="hdr__sub">Усі локації · ' + esc(S.h.dayLong(today())) + '</p></div>' +
-      '<div class="hdr__tools"><button class="tool" type="button" data-act="cab-refresh" title="Оновити дані" aria-label="Оновлено о ' + hhmm + ' — оновити дані"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
-      '<button class="who" type="button" data-act="cab-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials(me.name)) + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>' +
+      '<div class="hdr__tools">' + (P.cabPlus ? P.cabPlus.button(plusItems()) : '') + (ROLE === 'admin' && P.cabBackup ? P.cabBackup.html() : '') +
+      '<button class="tool" type="button" data-act="cab-refresh" title="Оновити дані" aria-label="Оновлено о ' + hhmm + ' — оновити дані"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
+      '<button class="who" type="button" data-act="cab-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials(me.name)) + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>';
+    if (SIDE) {   // ліве меню (≥ 900 px) або кнопка «Розділи» (вужче); решта сторінки — справа від меню. v1.6
+      var on = shown().filter(function (t) { return t.id === tab; })[0];
+      return head + P.cabNav.bar(on ? on.label : 'Розділи') + '<div class="wrap cab-layout">' + P.cabNav.html(navGroups(), tab) +
+        '<div class="cab-body">' + (showPeriod ? periodBar(true) : '') + '<main class="content" id="cab-main"></main></div></div>';
+    }
+    return head +
       '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + shown().map(function (t) {
         return '<a class="tab' + (t.id === tab ? ' tab--on' : '') + '" href="#' + t.path + '">' + P.ic(t.ic) + esc(t.label) + '</a>'; }).join('') + '</nav></div>' +
-      (showPeriod ? periodBar() : '') + '<main class="wrap content" id="cab-main" style="padding-top:' + (showPeriod ? 0 : 20) + 'px"></main>';
+      (showPeriod ? periodBar() : '') + '<main class="wrap content" id="cab-main" style="' + pad + '"></main>';
   }
 
   function render() {
@@ -64,6 +75,7 @@
     var def = m.screen, my = ++gen, handlers = {};
     var live = !REAL || screenReal(def);
     S.closeAll();
+    curTab = def.tab;
     app.innerHTML = frame(def.tab, live && !!def.period);
     main = app.querySelector('#cab-main');
     if (r.path !== lastPath) { lastPath = r.path; root.scrollTo(0, 0); }
@@ -113,7 +125,10 @@
       (REAL ? '' : menuItem('pf-reset', 'refresh', 'Скинути тестові дані', 'Усе, що ви змінили в тестовій версії, зникне')) +
       menuItem('pf-out', 'logout', 'Вийти', ''),
       on: {
-        th: function (t, e, layer) { var v = t.getAttribute('data-v'); doc.documentElement.setAttribute('data-theme', v); P.store.set('theme:sr', v); layer.close(); },
+        th: function (t, e, layer) {   // v1.6: тема запамʼятовується в профілі людини (P.prefs), а не лише в браузері
+          var v = t.getAttribute('data-v');
+          if (P.prefs) P.prefs.setTheme('cab', v); else { doc.documentElement.setAttribute('data-theme', v); P.store.set('theme:sr', v); }
+          layer.close(); },
         'pf-reset': function (t, e, layer) { layer.close(); P.confirm({ title: 'Скинути тестові дані?', text: 'Записані аудити, коригуючі дії й зміни в налаштуваннях у цьому браузері зникнуть.', okLabel: 'Скинути', danger: true })
           .then(function (ok) { if (!ok) return; P.srv('demoReset', {}).then(function () { P.toast('ok', 'Тестові дані скинуто'); boot(); }); }); },
         'pf-out': function (t, e, layer) { layer.close(); P.srv('authLogout', {}).then(function () { me = null; boot(); }); }
@@ -134,8 +149,13 @@
     S.closeAll();
     P.authSlack.ready.then(function () { return P.srv('authMe', {}); }).then(function (r) {
       var m = r && r.ok ? r.me : null;
-      if (m && m.role === ROLE) { me = m; render(); return; }
-      me = null;
+      if (m && m.role === ROLE) {
+        me = m; render();
+        if (P.cabBackup && ROLE === 'admin') P.cabBackup.start();   // v1.6: позначка копій — одразу й далі кожні 5 хв
+        if (P.prefs) P.prefs.load(me.id).then(function () { P.prefs.applyTheme('cab'); });   // v1.6: тема з профілю людини
+        return;
+      }
+      me = null; if (P.cabBackup) P.cabBackup.stop();
       loginScreen(m ? 'Ви увійшли як «' + m.roleLabel + '». Цей кабінет — для ' + (ROLE === 'admin' ? 'адміністратора' : 'керівника') + '.' : (r && !r.ok && r.code !== 'auth' ? 'Не вдалося перевірити вхід — перевірте звʼязок і спробуйте ще раз.' : P.authSlack.takeError()));
     });
   }
@@ -149,7 +169,10 @@
       if (!t || !app.contains(t)) return;
       var act = t.getAttribute('data-act');
       if (act === 'cab-profile') { e.preventDefault(); openProfile(t); return; }
-      if (act === 'cab-refresh') { e.preventDefault(); reloadData().then(function () { P.toast('ok', 'Дані оновлено'); }); return; }
+      if (act === 'cab-refresh') { e.preventDefault(); if (P.cabBackup && ROLE === 'admin') P.cabBackup.refresh(); reloadData().then(function () { P.toast('ok', 'Дані оновлено'); }); return; }
+      if (act === 'cab-plus' && P.cabPlus) { e.preventDefault(); P.cabPlus.open(t, plusItems()); return; }   // v1.6
+      if (act === 'cab-backup' && P.cabBackup) { e.preventDefault(); P.cabBackup.open(t); return; }   // v1.6
+      if (act === 'cab-sections' && SIDE) { e.preventDefault(); P.cabNav.open(navGroups(), curTab); return; }   // v1.6
       if (act === 'cab-preset') { var n = +t.getAttribute('data-n'); setPeriod({ from: addDays(today(), -(n - 1)), to: today(), preset: n }); return; }
       if (act === 'retry') { render(); return; }
       if (cur && cur.handlers[act]) { e.preventDefault(); cur.handlers[act](t, e); }
@@ -170,7 +193,7 @@
     });
     root.addEventListener('hashchange', render);
     P.on('route', render);
-    P.on('auth:required', function () { me = null; boot(); });
+    P.on('auth:required', function () { me = null; if (P.cabBackup) P.cabBackup.stop(); boot(); });
     P.on('auth:forbidden', function (r) { P.toast('warn', 'Немає прав на цю дію', r && r.error); });
     boot();
   }

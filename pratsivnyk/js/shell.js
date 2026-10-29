@@ -21,9 +21,17 @@
   P.shell.setTheme = function (t) {
     doc.documentElement.setAttribute('data-theme', t);
     P.store.set('theme', t);
+    metaTheme(t);
+    if (P.prefs && !P.embed) P.prefs.setTheme('worker', t);   // v2.7: тема — і в профіль людини
+  };
+  function metaTheme(t) {
     var meta = doc.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', t === 'dark' ? '#1D1A17' : '#F8F3EC');
-  };
+  }
+  function applyProfileTheme() {
+    if (!P.prefs || P.embed) return;
+    P.prefs.load(S.me && S.me.id).then(function () { var t = P.prefs.applyTheme('worker'); if (t) metaTheme(t); });
+  }
   P.shell.home = function () { return '/home'; };
 
   function isDesktop() { return !!(root.matchMedia && root.matchMedia('(pointer: fine)').matches) && root.innerWidth >= 900; }
@@ -66,7 +74,7 @@
       '<p class="login__note"><a href="../admin/" style="color:inherit">Вхід адміністратора</a></p></main>';
     P.authSlack.bindLogin(app(), { app: 'pratsivnyk',
       users: function (all) { return all.filter(function (x) { return x.role === 'auditor'; }); },
-      onDone: function (res) { S.me = res.me; buildFrame(); P.router.go('/home'); },
+      onDone: function (res) { S.me = res.me; applyProfileTheme(); buildFrame(); P.router.go('/home'); },
       onNotListed: renderLogin });
   }
 
@@ -134,6 +142,7 @@
       S.me = r.ok ? r.me : null;
       if (!S.me && P.embed) { app().innerHTML = P.state.empty('login', 'Увійдіть у кабінет старшого', 'Форма відкривається від імені того, хто увійшов у кабінет.'); return; }
       if (!S.me) return renderLogin((r && !r.ok && r.code !== 'auth' ? 'Не вдалося перевірити вхід — перевірте звʼязок і спробуйте ще раз.' : P.authSlack.takeError()));   // збій перевірки входу — з поясненням, а не мовчки
+      applyProfileTheme();
       buildFrame(); render();
     });
   }

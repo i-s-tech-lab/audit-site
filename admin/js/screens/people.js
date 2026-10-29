@@ -74,8 +74,14 @@
         data = r; draw(); openRequested();
       });
     }
-    var wantReq = ctx.query && ctx.query.req, wantEdit = ctx.query && ctx.query.edit;
+    var wantReq = ctx.query && ctx.query.req, wantEdit = ctx.query && ctx.query.edit, wantNew = !!ctx.query && ctx.query.new === '1';
     function openRequested() {
+      if (wantNew) {   // v1.10: з «+ Додати» в шапці — порожня форма нової людини; адресу чистимо, щоб форма не відкривалась знову
+        wantNew = false;
+        try { root.history.replaceState(null, '', '#/people'); } catch (e) { /* без історії — форма однаково відкриється */ }
+        openEdit(null);
+        return;
+      }
       if (wantEdit) {   // v1.7: з «Що може роль» (картка права «Додавати людей») — олівець відкриває форму цієї людини
         var who = find(wantEdit); wantEdit = null;
         try { root.history.replaceState(null, '', '#/people'); } catch (e) { /* без історії — форма однаково відкриється */ }

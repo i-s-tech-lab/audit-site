@@ -103,9 +103,11 @@
       '</article>';
   }
 
-  P.cab.tab({ id: 'locations', label: 'Локації', ic: 'location', path: '/locations', order: 10 });
+  P.cab.tab({ id: 'locations', label: 'Локації', ic: 'location', path: '/locations', order: 10, real: ['adminOverview', 'adminLocationSave'] });   // real — назви функцій, які вкладка читає й пише (двигун сервера)
   P.cab.screen('/locations', { tab: 'locations', title: 'Локації', render: function (ctx) {
     var data = null;
+    var wantNew = !!(ctx.query && ctx.query.new === '1');
+    if (wantNew && root.history && root.history.replaceState) root.history.replaceState(null, '', '#/locations');
     function find(id) { return data.locations.filter(function (l) { return l.id === id; })[0]; }
     function load() {
       P.srv('adminOverview', {}).then(function (r) {
@@ -116,6 +118,7 @@
         ctx.el.innerHTML = '<section class="adm-col">' +
           head('Локації · ' + r.locations.length, (on < r.locations.length ? on + ' увімкнено · ' : '') + 'числа за сьогодні, ' + asOf() + '. Відкрийте будь-яку так, як її бачить старший або працівник.', btnNew('loc-new', 'Нова локація')) +
           (r.locations.length ? '<div class="cab-locs">' + r.locations.map(tile).join('') + '</div>' : H.empty('Локацій ще немає', 'Додайте першу кнопкою «Нова локація».')) + '</section>';
+        if (wantNew) { wantNew = false; openEdit(null, null); }
       });
     }
     function openEdit(l, part) {

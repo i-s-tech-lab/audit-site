@@ -27,7 +27,8 @@
     { key: 'kdEarlyMin', label: 'Коригуючі дії: ранній тумблер', unit: 'шт', min: 50, max: 10000, dec: 0 },
     { key: 'kdPareto', label: 'Коригуючі дії: пункти (Парето)', unit: '%', min: 50, max: 100, dec: 0 },
     { key: 'editWindowMin', label: 'Виправити свій аудит протягом', unit: 'хв', min: 1, max: 240, dec: 0 },
-    { key: 'sessionDays', label: 'Повторний вхід раз на', unit: 'дн.', min: 1, max: 60, dec: 0 }
+    { key: 'sessionDays', label: 'Повторний вхід раз на', unit: 'дн.', min: 1, max: 60, dec: 0,
+      realLock: 'На справжньому сервері цей строк задає вхід через Slack, а не ця вкладка — змінити його тут не можна.' }
   ];
   var DEF = { criticalPct: 5, kdThreshold: S.KD.THRESHOLD, kdReviewDay: S.KD.REVIEW_DAY, kdCycleDays: S.KD.CYCLE_DAYS, kdEarlyMin: S.KD.EARLY_MIN,
     kdPareto: S.KD.PARETO, editWindowMin: C.LIMITS.editWindowMin, sessionDays: C.SESSION_DAYS };
@@ -200,6 +201,7 @@
       env.reload();
       var r = RULES.filter(function (x) { return x.key === p.key; })[0];
       if (!r) return verr([{ field: 'value', message: 'Такого правила немає — оновіть сторінку.' }]);
+      if (env.real && r.realLock) return C.fail('locked', r.realLock);   // v1.11: на справжньому сервері це правило діє не тут
       if (r.locked) return C.fail('locked', 'Це правило змінити не можна: тиждень розбору — завжди 7 днів.');
       var v = p.reset === true ? DEF[r.key] : typeof p.value === 'string' ? Number(p.value.replace(',', '.')) : p.value;
       if (!okVal(r, v)) {

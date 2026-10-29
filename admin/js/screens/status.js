@@ -18,24 +18,24 @@
     return { n: n, kb: Math.round(chars * 2 / 1024) };   // рядки в памʼяті браузера — 2 байти на знак
   }
 
-  P.cab.tab({ id: 'status', label: 'Стан', ic: 'info', path: '/status', order: 50 });
+  P.cab.tab({ id: 'status', label: 'Стан', ic: 'info', path: '/status', order: 50, real: 'adminStatus' });   // real — назва функції, яку вкладка читає (двигун сервера)
   P.cab.screen('/status', { tab: 'status', title: 'Стан', render: function (ctx) {
     P.srv('adminStatus', {}).then(function (r) {
       if (!ctx.alive()) return;
       if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
-      var b = build(), sz = storageSize(), c = r.counts;
+      var real = P.cab.real(), b = build(), sz = real ? null : storageSize(), c = r.counts;
       ctx.el.innerHTML = '<section class="adm-col">' + A.head('Стан', A.asOf()) +
         '<div class="kpis">' + H.kpi(H.num(c.locations), A.plural(c.locations, ['локація', 'локації', 'локацій'])) +
           H.kpi(H.num(c.people), 'з доступом до додатку') + H.kpi(H.num(c.peopleOff), 'з вимкненим доступом') +
-          H.kpi(H.num(c.audits), A.plural(c.audits, ['аудит', 'аудити', 'аудитів']) + ' у тестових даних') + '</div>' +
+          H.kpi(H.num(c.audits), A.plural(c.audits, ['аудит', 'аудити', 'аудитів']) + (real ? ' у базі' : ' у тестових даних')) + '</div>' +
         '<div class="adm-status">' +
           '<section class="card"><h3 class="adm-card-t">' + P.ic('info', 'ui-icon--sm') + 'Сторінка й дані</h3><dl class="kv">' +
             '<dt>Версія сторінки' + A.help('admin.status.build') + '</dt><dd>' + (b ? esc(b.text) + (b.raw !== b.text ? ' <span class="adm-dim">(' + esc(b.raw) + ')</span>' : '') : '<span class="adm-dim">номера версії немає</span>') + '</dd>' +
-            '<dt>Тестові дані в памʼяті браузера' + A.help('admin.status.storage') + '</dt><dd>' + (sz ? '≈ ' + H.num(sz.kb) + ' КБ · ' + sz.n + ' ' + A.plural(sz.n, ['запис', 'записи', 'записів']) : '<span class="adm-dim">браузер не дає прочитати</span>') + '</dd>' +
-            '<dt>«Сьогодні» в тестових даних' + A.help('admin.status.day') + '</dt><dd>' + esc(H.dayLong(r.day)) + '</dd></dl></section>' +
-          '<section class="card"><h3 class="adm-card-t">' + P.ic('notification', 'ui-icon--sm') + 'Розсилки</h3>' +
+            (real ? '' : '<dt>Тестові дані в памʼяті браузера' + A.help('admin.status.storage') + '</dt><dd>' + (sz ? '≈ ' + H.num(sz.kb) + ' КБ · ' + sz.n + ' ' + A.plural(sz.n, ['запис', 'записи', 'записів']) : '<span class="adm-dim">браузер не дає прочитати</span>') + '</dd>') +
+            '<dt>' + (real ? 'Сьогодні' : '«Сьогодні» в тестових даних') + A.help('admin.status.day') + '</dt><dd>' + esc(H.dayLong(r.day)) + '</dd></dl></section>' +
+          (real ? '' : '<section class="card"><h3 class="adm-card-t">' + P.ic('notification', 'ui-icon--sm') + 'Розсилки</h3>' +
             '<p class="hint">Стан розсилки в Slack, черга й останні надсилання — у вкладці «Розсилки».</p>' +
-            '<div><a class="btn btn--secondary btn--sm" href="#/mailing">' + P.ic('arrow-right', 'ui-icon--sm') + 'Відкрити «Розсилки»</a></div></section>' +
+            '<div><a class="btn btn--secondary btn--sm" href="#/mailing">' + P.ic('arrow-right', 'ui-icon--sm') + 'Відкрити «Розсилки»</a></div></section>') +
         '</div>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('location', 'ui-icon--sm') + 'Локації · останній аудит' + A.help('admin.status.locs') + '</h3><div class="adm-locstat">' +
           r.locations.map(function (l) {

@@ -1,94 +1,12 @@
 (function (root) {
   'use strict';
-  var P = root.P, esc = P.esc, H = P.sr.h, K = P.mgr;
-  var SORTS = [['pct', 'За % браку'], ['checked', 'За перевіреними, шт']];
+  var P = root.P, esc = P.esc, H = P.sr.h, K = P.mgr, T = P.mgrDeptTiles;
   var WEEKLY_FROM = 46;   // з такої довжини періоду (днів) графік панелі — по тижнях, а не по днях
   var FIRST_PRODUCTS = 8, FIRST_DEFECTS = 10;   // скільки рядків панелі видно до «Показати всі»
   var KD_ORDER = ['pre', 'over', 'watch', 'hold', 'done', 'part', 'relapse', 'skip'];
-  var st = { sort: 'pct', locs: [], many: false, type: '' };
+  var st = { locs: [], many: false, type: '' };
 
-  function sorted(list) {
-    return list.slice().sort(function (a, b) {
-      if (st.sort === 'checked') return b.checked - a.checked || (a.name < b.name ? -1 : 1);
-      if (a.pct == null || b.pct == null) return a.pct == null ? (b.pct == null ? b.checked - a.checked : 1) : -1;
-      return b.pct - a.pct || b.checked - a.checked;
-    });
-  }
-  function name(d) { return '<b>' + esc(d.name) + '</b>' + (d.active ? '' : ' ' + H.badge('вимкнено')); }
-  function th(label, key, n) { return '<th' + (n ? ' class="n"' : '') + '>' + esc(label) + (key ? K.help(key) : '') + '</th>'; }
-  function chev() { return P.ic('chevron-right', 'ui-icon--sm mgr-chev'); }
-  function opener(d, open, inner, ph) {
-    return '<button class="mgr-open" type="button" data-act="mgr-d-open" data-id="' + esc(d.id) + '" aria-expanded="' + open + '"' + (open ? ' aria-controls="' + slotId(d, ph) + '"' : '') +
-      ' aria-label="' + esc((open ? 'Згорнути: ' : 'Розгорнути: ') + d.name + (d.locationName ? ' · ' + d.locationName : '')) + '">' + chev() + inner + '</button>';
-  }
-
-  function table(list, crit, open) {
-    return '<div class="tbl-box mgr-desk"><table class="tbl mgr-tbl mgr-dtbl"><thead><tr><th class="n">№</th><th>Відділ</th>' + th('Аудитів', 'term.audit', 1) +
-      th('Перевірено, шт', 'term.checked', 1) + th('Брак, шт', 'mgr.deptBrak', 1) + th('Брак, %', 'term.rate', 1) + th('Рівні браку', 'term.levels') +
-      th('Найчастіші види браку', 'mgr.top') + '</tr></thead><tbody>' +
-      list.map(function (d, i) {
-        var on = open === d.id;
-        return '<tr class="mgr-drow' + (on ? ' sel' : '') + '" data-act="mgr-d-open" data-id="' + esc(d.id) + '" data-row="' + esc(d.id) + '"><td class="n mgr-dim">' + (i + 1) + '</td>' +
-          '<td>' + opener(d, on, '<b>' + esc(d.name) + '</b>', false) + (d.active ? '' : ' ' + H.badge('вимкнено')) + '</td><td class="n">' + H.num(d.audits) + '</td><td class="n">' + H.num(d.checked) + '</td>' +
-          '<td class="n">' + H.num(d.rejected) + '</td><td class="n">' + K.rate(d.pct, crit) + '</td><td class="mgr-tbl__lv">' + H.stack(d.levels, 10) + '</td>' +
-          '<td><span class="mgr-top">' + K.topLine(d.top) + '</span></td></tr>' +
-          (on ? '<tr class="mgr-dprow"><td colspan="8">' + slot(d, false) + '</td></tr>' : '');
-      }).join('') + '</tbody></table></div>';
-  }
-  function cards(list, crit, open) {
-    return '<div class="mgr-cards mgr-phone">' + list.map(function (d, i) {
-      var on = open === d.id;
-      return '<article class="mgr-card mgr-dcard' + (on ? ' mgr-dcard--on' : '') + '" data-act="mgr-d-open" data-id="' + esc(d.id) + '" data-row="' + esc(d.id) + '">' +
-        '<div class="mgr-card__head"><span class="rank">' + (i + 1) + '</span>' + opener(d, on, '<b>' + esc(d.name) + '</b>', true) + (d.active ? '' : H.badge('вимкнено')) + '</div>' +
-        '<dl class="mgr-card__kv"><dt>Аудитів</dt><dd>' + H.num(d.audits) + '</dd><dt>Перевірено</dt><dd>' + H.num(d.checked) + ' шт</dd>' +
-        '<dt>Брак, шт · брак, %' + K.help('term.rate') + '</dt><dd>' + H.num(d.rejected) + ' шт · ' + K.rate(d.pct, crit) + '</dd></dl>' + H.stack(d.levels, 8) +
-        '<div class="mgr-top">' + K.topLine(d.top) + '</div></article>' + (on ? slot(d, true) : '');
-    }).join('') + '</div>';
-  }
-
-  function compareRows(r, locs) {
-    var rows = [], by = {};
-    r.depts.forEach(function (d) {
-      var k = d.deptTypeId + '|' + d.name;
-      if (!by[k]) { by[k] = { name: d.name, type: d.deptTypeName, sub: d.deptTypeName !== d.name ? d.deptTypeName : '', cells: {} }; rows.push(by[k]); }
-      by[k].cells[d.locationId] = d;
-    });
-    rows.sort(function (a, b) { return a.type < b.type ? -1 : a.type > b.type ? 1 : (a.name < b.name ? -1 : 1); });
-    return rows.filter(function (x) { return locs.some(function (id) { return x.cells[id]; }); });
-  }
-  function cell(d, crit, open, ph) {
-    if (!d) return '<span class="mgr-dim">такого відділу в локації немає</span>';
-    return '<div class="mgr-cmpcell">' + opener(d, open === d.id, '<span class="mgr-cmpcell__pct">' + K.rate(d.pct, crit) + '</span>', ph) +
-      '<span class="mgr-dim">брак ' + H.num(d.rejected) + ' з ' + H.num(d.checked) + ' шт · ' + K.n(d.audits, 'аудит', 'аудити', 'аудитів') + '</span>' +
-      H.stack(d.levels, 6) + '<span class="mgr-top">' + K.topLine(d.top) + '</span>' + (d.active ? '' : H.badge('вимкнено')) + '</div>';
-  }
-  function openIn(x, locs, open) { var id = locs.filter(function (l) { return x.cells[l] && x.cells[l].id === open; })[0]; return id ? x.cells[id] : null; }
-  function compare(r, locs, crit, open) {
-    var rows = compareRows(r, locs), names = {};
-    r.locations.forEach(function (l) { names[l.id] = l.name; });
-    if (!rows.length) return '';
-    function td(d) { return d ? '<td class="mgr-cmptd' + (open === d.id ? ' mgr-cmptd--on' : '') + '" data-act="mgr-d-open" data-id="' + esc(d.id) + '" data-row="' + esc(d.id) + '">' + cell(d, crit, open, false) + '</td>' : '<td>' + cell(null) + '</td>'; }
-    return '<div class="tbl-box mgr-desk"><table class="tbl mgr-tbl mgr-cmptbl"><thead><tr><th>Відділ</th>' + locs.map(function (id) {
-      return '<th>' + P.ic('location', 'ui-icon--sm') + ' ' + esc(names[id]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      rows.map(function (x) {
-        var od = openIn(x, locs, open);
-        return '<tr><td><b>' + esc(x.name) + '</b><span class="mgr-dim mgr-block">' + esc(x.sub) + '</span></td>' +
-          locs.map(function (id) { return td(x.cells[id]); }).join('') + '</tr>' +
-          (od ? '<tr class="mgr-dprow"><td colspan="' + (locs.length + 1) + '">' + slot(od, false) + '</td></tr>' : '');
-      }).join('') + '</tbody></table></div>' +
-      '<div class="mgr-cards mgr-phone">' + rows.map(function (x) {
-        var od = openIn(x, locs, open);
-        return '<article class="mgr-card"><div class="mgr-card__head"><b>' + esc(x.name) + '</b><span class="mgr-dim">' + esc(x.sub) + '</span></div>' +
-          locs.map(function (id) {
-            var d = x.cells[id];
-            return '<div class="mgr-cmpline' + (d ? ' mgr-dcard' + (open === d.id ? ' mgr-dcard--on' : '') : '') + '"' + (d ? ' data-act="mgr-d-open" data-id="' + esc(d.id) + '" data-row="' + esc(d.id) + '"' : '') + '>' +
-              '<span class="mgr-cmpline__loc">' + P.ic('location', 'ui-icon--sm') + esc(names[id]) + '</span>' + cell(d, crit, open, true) + '</div>';
-          }).join('') + '</article>' + (od ? slot(od, true) : '');
-      }).join('') + '</div>';
-  }
-
-  function slotId(d, ph) { return (ph ? 'mgr-dpm-' : 'mgr-dp-') + esc(d.id); }
-  function slot(d, ph) { return '<div class="mgr-dp" id="' + slotId(d, ph) + '" data-dpanel="' + esc(d.id) + '" role="region" aria-label="' + esc('Відділ ' + d.name + (d.locationName ? ' · ' + d.locationName : '')) + '"></div>'; }
+  function slot(d) { return '<div class="mgr-dp" id="mgr-dp-' + esc(d.id) + '" data-dpanel="' + esc(d.id) + '" role="region" aria-label="' + esc('Відділ ' + d.name + (d.locationName ? ' · ' + d.locationName : '')) + '"></div>'; }
   function days(n) { return K.n(n, 'день', 'дні', 'днів'); }
   function big(val, label, key, sub) {
     return '<div class="mgr-kdbig"><span class="mgr-kdbig__l">' + esc(label) + (key ? K.help(key) : '') + '</span><b class="mgr-kdbig__v">' + val + '</b>' +
@@ -207,63 +125,74 @@
         '<span class="mgr-dp__nums">' + K.n(a.audits, 'аудит', 'аудити', 'аудитів') + ' · ' + H.num(a.checked) + ' шт</span></li>';
     }).join('') + '</ul></section>';
   }
-  function panel(r, many, allP, allD) {
+  function panel(r, allP, allD) {
     var sub = '<b>' + esc(K.span(r.from, r.to)) + '</b> · ' + K.dn(r.totals.days) + ' · ' + esc(K.asOf(r.asOf)) + (r.department.deptTypeName && r.department.deptTypeName !== r.department.name ? ' · ' + esc(r.department.deptTypeName) : '');
     return head(r.department, r.location ? r.location.name : '', sub) + bigs(r) +
       '<div class="mgr-dp__grid">' + chartSec(r) + productsSec(r, allP) + defectsSec(r, allD) + kdSec(r) + peopleSec(r) + '</div>';
   }
 
-  P.cab.tab({ id: 'depts', label: 'Відділи', ic: 'department', path: '/depts', order: 20, real: 'mgrDepts' });
+  P.cab.tab({ id: 'depts', label: 'Відділи', ic: 'department', path: '/depts', order: 20, real: 'mgrDeptTiles' });
   P.cab.screen('/depts', { tab: 'depts', title: 'Відділи', period: true, render: function (ctx) {
-    var req = 0, last = null;
+    var req = 0, last = null, rows = [];
     var dp = { id: null, row: null, data: null, err: null, req: 0, allP: false, allD: false };
+    function find(r, id) {
+      var out = null;
+      r.locations.forEach(function (l) { l.depts.forEach(function (d) { if (d.id === id) out = { id: d.id, name: d.name, locationId: l.id, locationName: l.name }; }); });
+      return out;
+    }
     function load() {
       var my = ++req, box = ctx.el.querySelector('#mgr-dl');
       if (box) box.classList.add('mgr-busy');   // фільтр змінили — старі числа тьмяніють, доки не прийдуть нові
       var p = { from: ctx.period.from, to: ctx.period.to, deptTypeId: st.type };
       if (st.locs.length) p.locationIds = st.locs;
-      P.srv('mgrDepts', p).then(function (r) {
+      P.srv('mgrDeptTiles', p).then(function (r) {
         if (!ctx.alive() || my !== req) return;
         if (!r.ok && (r.code === 'not_found' || r.code === 'validation') && (st.locs.length || st.type)) { st.locs = []; st.type = ''; load(); return; }   // вибір на те, чого вже немає
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
-        if (!st.locs.length) { st.locs = r.locations.length ? [r.locations[0].id] : []; if (st.locs.length) { load(); return; } }   // перший захід — перша локація
+        if (!st.locs.length) { st.locs = r.allLocations.length ? [r.allLocations[0].id] : []; if (st.locs.length) { load(); return; } }   // перший захід — перша локація
         last = r;
-        if (dp.id && !r.depts.some(function (d) { return d.id === dp.id; })) close();   // відкритого відділу в новому списку немає
+        if (dp.id && !find(r, dp.id)) close();   // відкритого відділу в новому списку немає
         draw(r);
       });
     }
     function draw(r) {
       var types = [['', 'Усі відділи']].concat(r.deptTypes.map(function (t) { return [t.id, t.name]; }));
-      var many = st.many && st.locs.length > 1, names = r.locations.filter(function (l) { return st.locs.indexOf(l.id) >= 0; }).map(function (l) { return l.name; });
-      var tname = st.type ? types.filter(function (t) { return t[0] === st.type; })[0][1] : 'усі відділи';
-      var list = sorted(r.depts), scope = names.join(' · ') + ' · ' + tname;
-      var body = many ? compare(r, st.locs, r.criticalPct, dp.id) : list.length ? table(list, r.criticalPct, dp.id) + cards(list, r.criticalPct, dp.id) : '';
-      ctx.el.innerHTML = '<section class="mgr-page"><div><h2 class="h2">' + (many ? 'Порівняння локацій · ' + esc(tname) : 'Рейтинг відділів · ' + esc(names[0] || '') + ' · відділів: ' + list.length) + '</h2>' +
-        '<p class="h2-sub">' + esc(K.span(r.from, r.to)) + ' · ' + esc(K.asOf(r.asOf)) + ' · брак рахується відділу, який його зробив, хоч би де його знайшли' + K.help('mgr.deptBrak') +
-        ' · натисніть на відділ — розгорнеться все про нього' + K.help('mgr.dept.open') + '</p></div>' +
-        '<div class="card mgr-gap mgr-gap--sm">' + K.locBar('mgr-d', r.locations, st.locs, st.many) +
+      var names = r.locations.map(function (l) { return l.name; }).join(' · ');
+      T.unmount(rows);
+      ctx.el.innerHTML = '<section class="mgr-page"><div><h2 class="h2">Відділи' + (names ? ' · ' + esc(names) : '') + '</h2>' +
+        '<p class="h2-sub">' + esc(K.span(r.from, r.to)) + ' · ' + esc(K.asOf(r.asOf)) + ' · натисніть на плитку відділу — під рядом розгорнеться все про нього' + K.help('mgr.dept.open') + '</p></div>' +
+        '<div class="card mgr-gap mgr-gap--sm">' + K.locBar('mgr-d', r.allLocations, st.locs, st.many) +
         '<div class="mgr-pick"><span class="mgr-pick__l">Відділ' + K.help('mgr.deptPick') + '</span>' + K.chips('mgr-d-type', types, st.type, 'Відділ') + '</div>' +
-        (many ? '' : '<div class="mgr-pick"><span class="mgr-pick__l">Порядок</span>' + K.pills('mgr-d-sort', SORTS, st.sort, 'Сортування') + '</div>') +
-        (st.many && st.locs.length < 2 ? '<p class="hint">Оберіть ще одну локацію вище — вони стануть поруч.</p>' : '') + '</div>' +
-        '<div id="mgr-dl" class="card">' + (body || H.empty('Відділів не знайдено', scope + ' · спробуйте інший відділ чи локацію.')) + '</div></section>';
+        (st.many && st.locs.length < 2 ? '<p class="hint">Оберіть ще одну локацію вище — вони стануть одна під одною.</p>' : '') + '</div>' + T.key() +
+        '<div id="mgr-dl" class="mgr-page">' + (r.locations.length ? r.locations.map(function (l) { return T.block(l, dp.id); }).join('')
+          : '<section class="card">' + H.empty('Локацій ще немає', 'Коли адміністратор додасть локацію, тут зʼявляться її відділи.') + '</section>') + '</div></section>';
+      rows = T.mount(ctx.el);
+      sync();
+    }
+    function sync() {
+      Array.prototype.forEach.call(ctx.el.querySelectorAll('.mgr-dtile'), function (el) {
+        var on = el.getAttribute('data-tile-id') === dp.id, b = el.querySelector('[data-act="mgr-d-open"]');
+        el.classList.toggle('mgr-dtile--on', on);
+        if (b) { b.setAttribute('aria-expanded', on); b.setAttribute('aria-label', (on ? 'Згорнути: ' : 'Розгорнути: ') + el.getAttribute('data-tile-name')); }
+      });
+      Array.prototype.forEach.call(ctx.el.querySelectorAll('[data-dpslot]'), function (box) {
+        box.innerHTML = dp.id && dp.row && dp.row.locationId === box.getAttribute('data-dpslot') ? slot(dp.row) : '';
+      });
       fill();
     }
     function fill() {
-      var slots = ctx.el.querySelectorAll('[data-dpanel]');
-      if (!slots.length || !dp.id) return;
-      var row = dp.row || { id: dp.id, name: '' }, many = st.many && st.locs.length > 1;
-
-      Array.prototype.forEach.call(slots, function (el) {
-        if (dp.data) {
-          el.innerHTML = panel(dp.data, many, dp.allP, dp.allD);
-          mountChart(el, dp.data, dp.data.department.name + (dp.data.location ? ' · ' + dp.data.location.name : '') + ' · ' + K.span(dp.data.from, dp.data.to));
-        } else if (dp.err) {
-          el.innerHTML = head(row, many ? row.locationName : '', '') + '<div class="mgr-dp__msg"><p><b>Не вдалося завантажити відділ.</b> ' + esc(dp.err.error || '') + '</p>' +
-            '<button class="btn btn--secondary btn--sm" type="button" data-act="mgr-d-retry">' + P.ic('refresh', 'ui-icon--sm') + 'Спробувати ще раз</button></div>';
-        } else {
-          el.innerHTML = head(row, many ? row.locationName : '', esc(K.span(ctx.period.from, ctx.period.to))) + '<div class="mgr-dp__msg">' + H.loading() + '</div>';
-        }
-      });
+      var el = ctx.el.querySelector('[data-dpanel]');
+      if (!el || !dp.id) return;
+      var row = dp.row || { id: dp.id, name: '' };
+      if (dp.data) {
+        el.innerHTML = panel(dp.data, dp.allP, dp.allD);
+        mountChart(el, dp.data, dp.data.department.name + (dp.data.location ? ' · ' + dp.data.location.name : '') + ' · ' + K.span(dp.data.from, dp.data.to));
+      } else if (dp.err) {
+        el.innerHTML = head(row, row.locationName, '') + '<div class="mgr-dp__msg"><p><b>Не вдалося завантажити відділ.</b> ' + esc(dp.err.error || '') + '</p>' +
+          '<button class="btn btn--secondary btn--sm" type="button" data-act="mgr-d-retry">' + P.ic('refresh', 'ui-icon--sm') + 'Спробувати ще раз</button></div>';
+      } else {
+        el.innerHTML = head(row, row.locationName, esc(K.span(ctx.period.from, ctx.period.to))) + '<div class="mgr-dp__msg">' + H.loading() + '</div>';
+      }
     }
     function request() {
       var my = ++dp.req, id = dp.id, p = { departmentId: id, from: ctx.period.from, to: ctx.period.to };
@@ -275,21 +204,17 @@
       });
     }
     function close() { dp.id = null; dp.row = null; dp.data = null; dp.err = null; dp.req++; }
-    function reveal(id) {
-      var els = ctx.el.querySelectorAll('[data-row="' + (root.CSS && root.CSS.escape ? root.CSS.escape(id) : id) + '"]');
-      Array.prototype.forEach.call(els, function (el) {
-        if (!el.offsetParent) return;   // прихована версія (таблиця на телефоні чи картки на ПК)
-        var top = el.getBoundingClientRect().top;
-        if (top < 60 || top > root.innerHeight - 120) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      });
+    function reveal() {
+      var el = ctx.el.querySelector('[data-dpanel]'), top = el ? el.getBoundingClientRect().top : 0;
+      if (el && (top < 60 || top > root.innerHeight - 120)) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
     ctx.on('mgr-d-open', function (t) {
       var id = t.getAttribute('data-id');
       if (!last) return;
-      if (dp.id === id) { close(); draw(last); reveal(id); return; }   // повторний клік — закрити
+      if (dp.id === id) { close(); sync(); return; }   // повторний клік — закрити
       close();
-      dp.id = id; dp.row = last.depts.filter(function (d) { return d.id === id; })[0] || null; dp.allP = dp.allD = false;
-      draw(last); reveal(id); request();
+      dp.id = id; dp.row = find(last, id); dp.allP = dp.allD = false;
+      sync(); reveal(); request();
     });
     ctx.on('mgr-d-retry', function () { dp.err = null; fill(); request(); });
     ctx.on('mgr-d-allp', function () { dp.allP = !dp.allP; fill(); });
@@ -300,7 +225,6 @@
       if (!st.many && st.locs.length > 1) { st.locs = st.locs.slice(0, 1); load(); } else if (last) draw(last);
     });
     ctx.on('mgr-d-type', function (t) { st.type = t.getAttribute('data-v'); close(); load(); });
-    ctx.on('mgr-d-sort', function (t) { st.sort = t.getAttribute('data-v'); if (last) draw(last); });
     load();
   } });
 })(window);

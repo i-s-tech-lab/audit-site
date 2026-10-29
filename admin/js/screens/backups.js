@@ -36,6 +36,15 @@
   function kv(label, value, key) { return '<dt>' + esc(label) + A.help(key) + '</dt><dd>' + value + '</dd>'; }
   P.admSys = { demoBanner: demoBanner, bytes: bytes, dur: dur, cmd: cmd, copy: copy, kv: kv };
 
+  function isReal() { return !!(P.cab && P.cab.real && P.cab.real()); }
+  var POLL_MS = 5000, POLL_MAX_MS = 10 * 60 * 1000;
+  var SETUP = [
+    'Підключіться до сервера (AnyDesk) і відкрийте PowerShell від імені адміністратора (Пуск → набрати PowerShell → правою кнопкою → «Запуск від імені адміністратора»).',
+    'Перейдіть у теку оновлення: cd C:\\AuditServer\\update\\current',
+    'Запустіть: & "C:\\Program Files\\nodejs\\node.exe" tools\\server-backup-setup.mjs — наприкінці має бути «Готово».',
+    'Перезапустіть сервер: Restart-Service audit-server -Force; Start-Service audit-caddy',
+    'Оновіть цю сторінку: у шапці зʼявиться стан копій, перша копія — приблизно за 3 хвилини.'
+  ];
   var KINDS = [['manual', 'Зроблені вручну'], ['daily', 'Щоденні'], ['weekly', 'Щотижневі'], ['monthly', 'Щомісячні']];
   var POLICY = [['daily', 'Щоденних копій', 'Від 1 до 31.'], ['weekly', 'Щотижневих копій', 'Від 0 до 12.'], ['monthly', 'Щомісячних копій', 'Від 0 до 24.']];
   function nextText(iso) {
@@ -49,7 +58,7 @@
         (x.protected ? '<span class="badge badge--info">' + P.ic('lock', 'ui-icon--sm') + 'не видаляється</span>' : '') +
         (x.ok ? '' : '<span class="badge badge--danger">помилка</span>') + '</div>' +
         '<span class="adm-bk__meta">' + esc(bytes(x.bytes)) + ' · ' + H.num(x.tables) + ' таблиць · ' + H.num(x.rows) + ' рядків · відбиток ' + esc(x.sha256) + '…' +
-        (x.verifiedAt ? ' · перевірено ' + esc(A.ago(x.verifiedAt)) : '') + '</span></div>' +
+        (x.verifiedAt ? ' · перевірено ' + esc(A.ago(x.verifiedAt)) : '') + (x.checkedAt ? ' · файл перевірено ' + esc(A.ago(x.checkedAt)) : '') + '</span></div>' +
       A.more('bk-more', da('id', x.id), 'Дії · копія ' + P.fmt.dateTime(x.at)) + '</div>';
   }
   function list(items) {
@@ -59,17 +68,52 @@
     }).join('');
   }
 
-  P.cab.tab({ id: 'backups', label: 'Резервні копії', ic: 'backup', path: '/backups', order: 60 });
+  P.cab.tab({ id: 'backups', label: 'Резервні копії', ic: 'backup', path: '/backups', order: 60, real: 'admBackups' });   // real — видно, коли admBackups є на двигуні сервера
   P.cab.screen('/backups', { tab: 'backups', title: 'Резервні копії', render: function (ctx) {
-    var data = null;
+    var data = null, poll = null, pollUntil = 0, real = isReal();
     function find(id) { return data.items.filter(function (x) { return x.id === id; })[0]; }
+    function drawOff(r) {
+      ctx.el.innerHTML = '<section class="adm-col">' + A.head('Резервні копії', A.asOf() + ' · копії на сервері ще не налаштовано', '', 'admin.system.schedule') +
+        (r.problem ? '<div class="banner banner--warn">' + P.ic('warning', 'icon') + '<div class="banner__body"><p class="banner__title">Налаштування копій з помилкою</p>' +
+          '<p class="banner__text">' + esc(r.problem) + '</p></div></div>' : '') +
+        '<section class="card"><h3 class="adm-card-t">' + P.ic('info', 'ui-icon--sm') + 'Як увімкнути копії на сервері' + A.help('admin.system.schedule') + '</h3>' +
+          '<p class="hint"><b>Один раз, на самому сервері.</b> Після цього сервер сам робить копію щодня о ' + esc(r.schedule.at) + ' за Києвом, а тут зʼявиться кнопка «Зробити копію зараз».</p>' +
+          '<ol class="hint">' + SETUP.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' +
+          '<p class="hint">Докладно — у МАНУАЛі, розділ «РЕЗЕРВНА КОПІЯ БАЗИ» → <b>«▶ npm run server:backup-setup»</b>.</p></section></section>';
+    }
+    function notice(r) {
+      if (r.running) return '<div class="banner"><span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span><div class="banner__body"><p class="banner__title">Копія робиться просто зараз</p>' +
+        '<p class="banner__text">Зазвичай це хвилина-дві. Сторінка оновиться сама, коли копія буде готова.</p></div></div>';
+      var h = r.head;
+      if (h && h.state === 'failed') return '<div class="banner banner--danger">' + P.ic('warning', 'icon') + '<div class="banner__body"><p class="banner__title">Остання копія не вдалась</p>' +
+        '<p class="banner__text">' + esc(h.error || 'Причину записано в журнал копій на сервері (backup.log).') + ' Спробуйте «Зробити копію зараз»; не допоможе — перевірте сервер.</p></div></div>';
+      return '';
+    }
+    function watch() {
+      if (poll) return;
+      pollUntil = Date.now() + POLL_MAX_MS;
+      poll = root.setInterval(function () {
+        if (!ctx.alive() || Date.now() > pollUntil) { root.clearInterval(poll); poll = null; return; }
+        P.srv('admBackups', {}).then(function (r) {
+          if (!poll || !ctx.alive() || !r.ok) return;
+          data = r; draw(r);
+          if (r.running) return;
+          root.clearInterval(poll); poll = null;
+          var failed = r.head && r.head.state === 'failed';
+          P.toast(failed ? 'danger' : 'ok', failed ? 'Копію не зроблено' : 'Копію зроблено',
+            failed ? (r.head.error || '') : (r.items[0] ? bytes(r.items[0].bytes) + ', таблиць ' + r.items[0].tables + '.' : ''));
+        });
+      }, POLL_MS);
+    }
     function draw(r) {
+      if (r.configured === false) { drawOff(r); return; }
       var t = r.totals, pol = r.policy, last = r.items[0] || null;
       var ver = r.items.map(function (x) { return x.verifiedAt; }).filter(Boolean).sort().pop() || null;
       ctx.el.innerHTML = '<section class="adm-col">' +
-        A.head('Резервні копії', A.asOf() + ' · щоночі о ' + r.schedule.at + ', наступна — ' + nextText(r.schedule.next),
-          '<button class="btn btn--primary" type="button" data-act="bk-now">' + P.ic('backup') + 'Зробити копію зараз</button>', 'admin.system.schedule') +
-        demoBanner() +
+        A.head('Резервні копії', A.asOf() + ' · щодня о ' + r.schedule.at + (r.schedule.next ? ', наступна — ' + nextText(r.schedule.next) : ''),
+          r.running ? '<button class="btn btn--primary" type="button" disabled><span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>Копія робиться…</button>'
+            : '<button class="btn btn--primary" type="button" data-act="bk-now">' + P.ic('backup') + 'Зробити копію зараз</button>', 'admin.system.schedule') +
+        (real ? notice(r) : demoBanner()) +
         '<div class="kpis">' + A.kpi(H.num(t.count), A.plural(t.count, ['копія', 'копії', 'копій']), 'admin.system.count') +
           A.kpi(bytes(t.bytes), 'разом місця, з ' + bytes(pol.maxBytes), 'admin.system.bytes') +
           A.kpi(last ? A.ago(last.at) : '—', 'остання копія', 'admin.system.last') +
@@ -88,6 +132,7 @@
           (r.items.length ? list(r.items) : H.empty('Копій ще немає', 'Перша зʼявиться сьогодні о ' + r.schedule.at + ' або після «Зробити копію зараз».')) + '</section>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('lock', 'ui-icon--sm') + 'Відновлення поверх робочої бази — лише через SSH' + A.help('admin.system.restore') + '</h3>' +
           '<p class="hint">З браузера відновлення не робиться: воно замінює всі дані бази. Замість назви файлу — копія зі списку вище.</p>' +
+          (real ? '<p class="hint"><b>Перевірка з цієї сторінки — швидка:</b> відбиток файлу і його зміст. Повна перевірка (пробне відновлення в тимчасову базу, крок 1) — лише командою на сервері; після неї копія отримує позначку «перевірено відновленням».</p>' : '') +
           cmd('Відновити з копії', r.restore.text, 0, r.restore.note) + '</section>' +
         '</section>';
     }
@@ -96,6 +141,7 @@
         if (!ctx.alive()) return;
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
         data = r; draw(r);
+        if (r.running) watch();
       });
     }
     function editPolicy() {
@@ -129,20 +175,22 @@
         var total = r.tables.reduce(function (s, t) { return s + t.rows; }, 0);
         A.modal({ title: 'Що всередині копії', sub: esc(P.fmt.dateTime(r.at)),
           body: '<div class="adm-form"><dl class="kv adm-sys-kv">' + kv('Коли зроблено', esc(P.fmt.dateTime(r.at))) + kv('Розмір', esc(bytes(r.bytes))) +
-              kv('Версія схеми', esc(r.schema), 'admin.system.schema') + kv('Перевірено відновленням', r.verifiedAt ? esc(P.fmt.dateTime(r.verifiedAt)) : '<span class="adm-dim">ще ні</span>', 'admin.system.verifiedFlag') + '</dl>' +
+              kv('Версія схеми', r.schema ? esc(r.schema) : '<span class="adm-dim">—</span>', 'admin.system.schema') + kv('Перевірено відновленням', r.verifiedAt ? esc(P.fmt.dateTime(r.verifiedAt)) : '<span class="adm-dim">ще ні</span>', 'admin.system.verifiedFlag') + '</dl>' +
             '<table class="table adm-bk__tables"><thead><tr><th>Таблиця</th><th class="n">Рядків</th></tr></thead><tbody>' +
               r.tables.map(function (t) { return '<tr><td>' + esc(t.name) + '</td><td class="n">' + H.num(t.rows) + '</td></tr>'; }).join('') +
               '<tr><th>Разом · ' + r.tables.length + ' таблиць</th><th class="n">' + H.num(total) + '</th></tr></tbody></table>' +
             '<p class="hint">Без даних (лише структура): ' + esc(r.excluded.join(', ')) + ' — там секрети й входи; після відновлення всі просто увійдуть знову.</p>' +
-            '<p class="hint">На справжньому сервері вміст читається з тимчасової копії бази лише для читання; робоча база не змінюється.</p></div>',
+            '<p class="hint">' + (real ? 'Рядки — на момент копії, з її опису (маніфесту); робоча база не змінюється.'
+              : 'На справжньому сервері вміст читається з тимчасової копії бази лише для читання; робоча база не змінюється.') + '</p></div>',
           foot: '<span style="flex:1"></span><button class="btn btn--quiet" type="button" data-ov-close>Закрити</button>' });
       });
     }
     function verify(x) {
-      P.toast('info', 'Перевіряю відновлення…', 'Копія ' + P.fmt.dateTime(x.at) + ' розгортається в тимчасову базу.');
+      P.toast('info', real ? 'Перевіряю файл копії…' : 'Перевіряю відновлення…',
+        'Копія ' + P.fmt.dateTime(x.at) + (real ? ': відбиток і зміст файлу.' : ' розгортається в тимчасову базу.'));
       P.srv('admBackupVerify', { id: x.id }).then(function (r) {
         if (!r.ok) { if (r.code !== 'forbidden') P.toast('danger', 'Перевірку не пройдено', r.error || ''); }
-        else P.toast('ok', 'Перевірку пройдено', r.message);
+        else P.toast('ok', r.quick ? 'Файл копії цілий' : 'Перевірку пройдено', r.message);
         if (ctx.alive()) load();
       });
     }
@@ -151,6 +199,7 @@
       P.srv('admBackupNow', {}).then(function (r) {
         t.disabled = false;
         if (!r.ok) { if (r.code !== 'forbidden') P.toast('warn', 'Копію не зроблено', r.error || ''); return; }
+        if (r.running) { P.toast('info', 'Копія робиться', r.message || ''); if (ctx.alive()) load(); return; }   // справжній сервер: копія йде у фоні
         P.toast('ok', 'Копію зроблено', r.message + (r.removed ? ' За правилом зберігання прибрано старих: ' + r.removed + '.' : ''));
         if (ctx.alive()) load();
       });
@@ -161,7 +210,8 @@
       if (!x) return;
       A.rowMenu(t, [
         { act: 'm-view', ic: 'table', title: 'Переглянути що всередині', sub: 'таблиці, рядки, версія схеми' },
-        { act: 'm-verify', ic: 'check', title: 'Перевірити відновлення', sub: x.verifiedAt ? 'перевірено ' + A.ago(x.verifiedAt) : 'ще не перевірялась' }
+        real ? { act: 'm-verify', ic: 'check', title: 'Перевірити файл (швидко)', sub: 'відбиток і зміст; повна перевірка — командою на сервері' }
+          : { act: 'm-verify', ic: 'check', title: 'Перевірити відновлення', sub: x.verifiedAt ? 'перевірено ' + A.ago(x.verifiedAt) : 'ще не перевірялась' }
       ], { 'm-view': function () { view(x); }, 'm-verify': function () { verify(x); } });
     });
     ctx.on('sys-copy', function (t) { copy(data.restore.text, A.q(ctx.el, '[data-cmd="' + t.getAttribute('data-i') + '"]')); });

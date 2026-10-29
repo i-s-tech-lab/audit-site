@@ -31,3 +31,17 @@
   .cab-mail__kv dt { margin-top: 8px; }
   .cab-mail__row .input { max-width: none; }
 }
+
+
+.cab-bk { gap: 8px; }
+.cab-bk__dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); }
+.cab-bk--ok .cab-bk__dot { background: var(--ok); }
+.cab-bk--warn .cab-bk__dot { background: var(--warn-fill); box-shadow: 0 0 0 1px var(--warn-line); }
+.cab-bk--bad .cab-bk__dot { background: var(--danger-fill); }
+.cab-bk--bad { color: var(--danger); }
+.cab-bk__short { display: none; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  
+  .cab-bk { padding: 0 10px; gap: 6px; }
+  .cab-bk__short { display: inline; }
+}

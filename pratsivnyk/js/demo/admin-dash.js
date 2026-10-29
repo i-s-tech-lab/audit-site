@@ -12,7 +12,7 @@
   }
 
   function systemTiles(env) {
-    var S = P.demoSystem, snap = S && typeof S.snapshot === 'function' ? S.snapshot(env) : null;
+    var S = P.demoSystem, snap = S && !env.real && typeof S.snapshot === 'function' ? S.snapshot(env) : null;   // v1.1: на справжньому сервері вигадане не показуємо
     var b = snap && snap.backups, s = snap && snap.server;
     return {
       server: s ? { ok: !!s.ok, uptimeSec: s.uptimeSec, errors24h: s.errors24h, services: (s.services || []).map(function (x) { return { id: x.id, label: x.label, state: x.state }; }) } : null,
@@ -22,10 +22,10 @@
     };
   }
 
-  function onlineTile(env) {
+  function onlineTile(env, sessions) {
     var A = P.demoActivity;
     if (!A || typeof A.onlineNow !== 'function') return null;
-    var list = A.onlineNow(env) || [];
+    var list = A.onlineNow(env, null, sessions) || [];
     return { count: list.length, people: list.slice(0, ONLINE_MAX).map(function (x) { return { name: x.name, roleLabel: x.roleLabel, appLabel: x.appLabel }; }) };
   }
 
@@ -37,6 +37,7 @@
   }
 
   function requestsTile(me, env) {
+    if (env.real) return { pending: null };   // v1.1: справжні запити лежать у базі входу — рахує adm-system.mjs
     var h = apiFn('admAccessRequests'), r = h ? h({}, me, env) : null;
     var list = r && r.ok ? r.requests : [];
     return { pending: list.filter(function (x) { return x.status === 'pending'; }).length };
@@ -55,7 +56,7 @@
       var sys = systemTiles(env);
       return { ok: true, asOf: env.now().toISOString(), tiles: {
         server: sys.server, backups: sys.backups, disk: sys.disk, cert: sys.cert,
-        online: onlineTile(env), requests: requestsTile(me, env), auditsToday: auditsTile(env), today: todayTile(env)
+        online: onlineTile(env, env.real && p && Array.isArray(p.sessions) ? p.sessions : null), requests: requestsTile(me, env), auditsToday: auditsTile(env), today: todayTile(env)
       } };
     }
   });

@@ -315,10 +315,28 @@
       all[me.id] = r.clean;
       env.storage.set(KEY, all);
       return { ok: true, settings: reportsOf(env, me.id) };
+    },
+
+    peopleContacts: function (p, me, env) {
+      if (me.role !== 'manager' && me.role !== 'admin') return C.forbidden();
+      var store = null;
+      try { store = P.demoAdmin && P.demoAdmin.peopleStore ? P.demoAdmin.peopleStore(env.storage) : null; } catch (e) { store = null; }
+      function emailOf(u) {
+        if (typeof u.email === 'string' && u.email.trim()) return u.email.trim();
+        var e = store && has(store.edit, u.id) ? store.edit[u.id].email : null;
+        return typeof e === 'string' && e.trim() ? e.trim() : null;
+      }
+      var rank = { manager: 0, admin: 1 };
+      var people = env.db.users.filter(function (u) {
+        return has(rank, u.role) && u.active !== false && !(P.demoAccessOff && P.demoAccessOff(env.storage, u.id));
+      }).map(function (u) {
+        return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], locationIds: (u.locationIds || []).slice(), email: emailOf(u), active: true };
+      }).sort(function (a, b) { return rank[a.role] - rank[b.role] || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+      return { ok: true, people: people };
     }
   };
 
-  P.demoMgr = { has: has, can: can, range: range, locOf: locOf, daysOf: daysOf, auditsIn: auditsIn, stats: stats, top: top,
+  P.demoMgr = { has: has, can: can, range: range, locOf: locOf, locsOf: locsOf, depsIn: depsIn, daysOf: daysOf, auditsIn: auditsIn, stats: stats, top: top,
     dayCount: dayCount, normOf: normOf, kdSum: kdSum, short: short };
 
   P.demoApis.push(api);

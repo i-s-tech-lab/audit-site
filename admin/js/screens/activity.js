@@ -22,11 +22,12 @@
   }
   function roleText(code) { return code ? (P.accessApi ? P.accessApi.roleText(code) : code) : 'немає в списку'; }
 
-  P.cab.tab({ id: 'activity', label: 'Активність', ic: 'clock', path: '/activity', order: 45 });
+  P.cab.tab({ id: 'activity', label: 'Активність', ic: 'clock', path: '/activity', order: 45, real: ['admActivity', 'admOnline'] });   // real — назви функцій, які вкладка читає (двигун сервера)
   P.cab.screen('/activity', { tab: 'activity', title: 'Активність', render: function (ctx) {
     var online = null, data = null, items = [], loading = false, failed = null, seq = 0;
     var locs = (ctx.me.allLocations || ctx.me.locations || []).map(function (l) { return { id: l.id, name: l.name }; });
 
+    function win() { return (online && online.windowMin) || 15; }
     function kpis() {
       var s = data.stats;
       return '<div class="kpis">' + A.kpi(H.num(online.items.length), 'онлайн зараз', 'admin.activity.online') +
@@ -36,12 +37,12 @@
     function onlineCard() {
       var list = online.items;
       return '<section class="card"><h3 class="adm-card-t">' + P.ic('people', 'ui-icon--sm') + 'Онлайн зараз' + A.help('admin.activity.online') +
-        '<span class="adm-dim adm-ac-t-sub">останні 15 хв · ' + esc(P.fmt.time(online.asOf)) + '</span></h3>' +
+        '<span class="adm-dim adm-ac-t-sub">останні ' + win() + ' хв · ' + esc(P.fmt.time(online.asOf)) + '</span></h3>' +
         (list.length ? '<ul class="adm-ac-online">' + list.map(function (x) {
           return '<li class="adm-ac-on"><span class="avatar" aria-hidden="true">' + esc(P.initials(x.name)) + '</span><div class="adm-ac-on__main"><b>' + esc(x.name) + '</b>' +
             '<span class="adm-person__meta">' + esc([x.roleLabel, x.appLabel, x.locationName].filter(Boolean).join(' · ')) + '</span></div>' +
             '<span class="adm-ac-on__ago">' + esc(minAgo(x.lastAt, online.asOf)) + '</span></li>';
-        }).join('') + '</ul>' : '<p class="hint">Зараз нікого: за останні 15 хвилин ніхто нічого не робив в Аудиті.</p>') + '</section>';
+        }).join('') + '</ul>' : '<p class="hint">Зараз нікого: ' + (P.cab.real() ? 'за останні ' + win() + ' хвилин ніхто не відкривав Аудит.' : 'за останні ' + win() + ' хвилин ніхто нічого не робив в Аудиті.') + '</p>') + '</section>';
     }
     function pills() {
       return '<nav class="pills acc-pills" aria-label="Період">' + PRESETS.map(function (x) {

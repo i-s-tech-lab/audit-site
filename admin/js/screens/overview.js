@@ -43,17 +43,18 @@
       flag: s.ok ? null : { kind: 'danger' },   // «не відповідає» вже написано головним словом — лише колір
       lines: line('без перезапуску:', esc(uptime(s.uptimeSec))) +
         (s.services.length ? line('служби:', '<b>' + on + ' з ' + s.services.length + '</b> працюють') : '') +
-        line('помилок за добу:', '<b>' + H.num(s.errors24h) + '</b>') });
+        line('помилок за добу:', s.errors24h == null ? '—' : '<b>' + H.num(s.errors24h) + '</b>') });
   }
   function backupsTile(b, asOf) {
     if (!b) return notReady('/backups', 'backup', 'Копії бази', 'admin.overview.backups');
     var l = b.last, flag = null;
-    if (l && !l.ok) flag = { kind: 'danger', text: 'остання копія не вдалась' };
+    if (b.state === 'off') return tile({ path: '/backups', ic: 'backup', name: 'Копії бази', key: 'admin.overview.backups', val: 'не налаштовано', dim: true });
+    if ((l && !l.ok) || (!l && b.state === 'failed')) flag = { kind: 'danger', text: 'остання копія не вдалась' };
     else if (l && hoursSince(l.at, asOf) > BACKUP_MAX_H) flag = { kind: 'warn', text: 'копія старша за ' + BACKUP_MAX_H + ' год' };
     return tile({ path: '/backups', ic: 'backup', name: 'Копії бази', key: 'admin.overview.backups', flag: flag,
       val: l ? A.ago(l.at) : 'копій ще немає', dim: !l, unit: l ? (l.ok ? 'остання копія · вдалась' : 'остання копія · не вдалась') : '',
-      lines: line('перевірено відновленням:', b.lastVerifiedAt ? '<b>' + esc(A.ago(b.lastVerifiedAt)) + '</b>' : 'ще не перевіряли') +
-        line('копій:', '<b>' + H.num(b.count) + '</b> · ' + esc(bytes(b.totalBytes))) });
+      lines: (b.lastVerifiedAt === undefined ? '' : line('перевірено відновленням:', b.lastVerifiedAt ? '<b>' + esc(A.ago(b.lastVerifiedAt)) + '</b>' : 'ще не перевіряли')) +
+        (b.count == null ? (l && l.bytes != null ? line('розмір:', esc(bytes(l.bytes))) : '') : line('копій:', '<b>' + H.num(b.count) + '</b> · ' + esc(bytes(b.totalBytes)))) });
   }
   function diskTile(d) {
     if (!d) return notReady('/server', 'save', 'Місце на диску', 'admin.overview.disk');
@@ -77,6 +78,7 @@
       }).join('') + '</ul>' + (more > 0 ? '<p class="adm-ov-t__line adm-dim">і ще ' + more + '</p>' : '') : '<p class="adm-ov-t__line adm-dim">зараз нікого немає</p>' });
   }
   function requestsTile(r) {
+    if (!r || r.pending == null) return notReady('/slack-login', 'slack', 'Хочуть увійти', 'admin.overview.requests');
     return tile({ path: '/slack-login', ic: 'slack', name: 'Хочуть увійти', key: 'admin.overview.requests', val: H.num(r.pending),
       unit: A.plural(r.pending, ['запит', 'запити', 'запитів']), flag: r.pending > 0 ? { kind: 'warn', text: 'чекають рішення' } : null,
       lines: r.pending ? '' : '<p class="adm-ov-t__line adm-dim">запитів немає</p>' });
@@ -100,7 +102,7 @@
       a('#/people', 'add', 'Додати людину') + a('#/slack-login/log', 'list', 'Журнал входів') + a('#/backups', 'backup', 'Резервні копії') + '</div></section>';
   }
 
-  P.cab.tab({ id: 'overview', label: 'Огляд', ic: 'home', path: '/overview', order: 5 });
+  P.cab.tab({ id: 'overview', label: 'Огляд', ic: 'home', path: '/overview', order: 5, real: 'admDash' });   // real — назва функції, яку вкладка читає (двигун сервера)
   P.cab.screen('/overview', { tab: 'overview', title: 'Огляд', render: function (ctx) {
     P.srv('admDash', {}).then(function (r) {
       if (!ctx.alive()) return;

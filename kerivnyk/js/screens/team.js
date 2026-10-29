@@ -1,8 +1,8 @@
 (function (root) {
   'use strict';
   var P = root.P, esc = P.esc, H = P.sr.h, K = P.mgr, T = P.authTeam;
-  var ROLES = [['', 'Усі'], ['auditor', 'Аудитори'], ['senior_auditor', 'Старші аудитори']];
-  var SHOWN = { auditor: 1, senior_auditor: 1 };   // кого показуємо в цій вкладці
+  var ROLES = [['', 'Усі'], ['auditor', 'Аудитори'], ['senior_auditor', 'Старші аудитори'], ['manager', 'Керівники'], ['admin', 'Адміністратор']];
+  var SHOWN = { auditor: 1, senior_auditor: 1 };   // кого показуємо в цій вкладці з доступом (керівники й адмін — лише контакти, peopleContacts)
   var OFF_BY = { admin: 'адміністратор', manager: 'керівник', senior_auditor: 'старший' };   // хто вимкнув доступ (disabledBy)
   var NO_RIGHT = 'Право «Додавати людей» для вас вимкнено — увімкнути його може адміністратор. Вимкнути доступ можна й без нього.';
   var CANT_ENABLE = 'Увімкнути доступ може керівник із правом «Додавати людей» або адміністратор';
@@ -39,17 +39,23 @@
 
   P.cab.tab({ id: 'team', label: 'Люди', ic: 'people', path: '/team', order: 60, real: true });   // real — працює і на справжньому сервері
   P.cab.screen('/team', { tab: 'team', title: 'Люди й доступ', render: function (ctx) {
-    var data = null, locs = [], TR = P.teamRequests;
+    var data = null, locs = [], contacts = [], openNew = ctx.query && ctx.query.new === '1', TR = P.teamRequests;
     var reqs = TR.create({ box: function () { return q(ctx.el, '[data-tr-box]'); }, alive: ctx.alive });   // v1.1: картка «Хочуть увійти»
     function find(id) { return data.users.filter(function (x) { return x.id === id; })[0]; }
     function locName(id) { var l = locs.filter(function (x) { return x.id === id; })[0]; return l ? l.name : id; }
     function canAdd() { return data.access.addPeople; }
+    function allLocs(c) { return !c.locationIds.length || locs.every(function (l) { return c.locationIds.indexOf(l.id) >= 0; }); }
     function shown() {
       var s = flt.q.trim().toLowerCase();
-      return data.users.filter(function (u) {
+      var users = data.users.filter(function (u) {
         return (!flt.role || u.role === flt.role) && (!flt.loc || u.locationIds.indexOf(flt.loc) >= 0) &&
           (!s || u.name.toLowerCase().indexOf(s) >= 0 || u.slackId.toLowerCase().indexOf(s) >= 0 || P.authSlack.maskId(u.slackId).toLowerCase().indexOf(s) >= 0);
       });
+      var cs = contacts.filter(function (c) {
+        return (!flt.role || c.role === flt.role) && (!flt.loc || allLocs(c) || c.locationIds.indexOf(flt.loc) >= 0) &&
+          (!s || c.name.toLowerCase().indexOf(s) >= 0 || (c.email || '').toLowerCase().indexOf(s) >= 0);
+      });
+      return users.concat(cs);
     }
     function swLabel(u) {
       if (u.active) return 'Доступ увімкнено · ' + u.name;
@@ -62,16 +68,20 @@
     function acts(u) {
       return sw(u.active, da('id', u.id), swLabel(u), !u.active && !u.canEnable) + (u.canEdit ? pen(da('id', u.id), 'Редагувати · ' + u.name) : '');
     }
-    function locsOf(u) { return u.locationIds.map(locName).join(', '); }
+    function locsOf(u) { return u.contact && allLocs(u) ? 'Усі локації' : u.locationIds.map(locName).join(', '); }
+    function mail(c) { return c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '<span class="mgr-dim">пошти немає</span>'; }
     function table(list) {
       return '<div class="tbl-box mgr-desk"><table class="tbl"><thead><tr><th>Людина</th><th>Роль</th><th>Локації</th><th>Доступ</th><th><span class="tm-vh">Дії</span></th></tr></thead><tbody>' +
         list.map(function (u) {
+          if (u.contact) return '<tr><td><b>' + esc(u.name) + '</b><span class="sub">' + mail(u) + '</span></td><td>' + esc(u.roleLabel) + '</td><td>' + esc(locsOf(u)) + '</td><td><span class="mgr-dim">—</span></td><td></td></tr>';
           return '<tr' + (u.active ? '' : ' class="tm-off"') + '><td><b>' + esc(u.name) + '</b><span class="sub">' + esc(subline(u)) + '</span></td><td>' + esc(u.roleLabel) + '</td><td>' + esc(locsOf(u)) + '</td>' +
             '<td>' + sw(u.active, da('id', u.id), swLabel(u), !u.active && !u.canEnable) + '</td><td>' + (u.canEdit ? pen(da('id', u.id), 'Редагувати · ' + u.name) : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }
     function cards(list) {
       return '<div class="mgr-cards mgr-phone">' + list.map(function (u) {
+        if (u.contact) return '<article class="mgr-card"><div class="tm-card"><div class="tm-card__who"><b>' + esc(u.name) + '</b><span class="mgr-dim mgr-block">' + esc(u.roleLabel + ' · ' + locsOf(u)) +
+          '</span><span class="mgr-block">' + mail(u) + '</span></div></div></article>';
         return '<article class="mgr-card' + (u.active ? '' : ' tm-off') + '"><div class="tm-card"><div class="tm-card__who"><b>' + esc(u.name) + '</b>' +
           '<span class="mgr-dim mgr-block">' + esc(u.roleLabel + ' · ' + locsOf(u)) + '</span><span class="mgr-dim mgr-block">' + esc(subline(u)) + '</span></div>' +
           '<div class="tm-acts">' + acts(u) + '</div></div></article>';
@@ -80,28 +90,36 @@
     function list() {
       var box = q(ctx.el, '[data-tm-list]'), l = shown();
       if (!box) return;
-      box.innerHTML = !data.users.length ? H.empty('Людей ще немає', canAdd() ? 'Додайте першу людину кнопкою угорі.' : '')
-        : !l.length ? H.empty('Нікого не знайдено', 'Змініть пошук або фільтр.') : (l.length < data.users.length ? '<p class="hint">Показано ' + l.length + ' з ' + data.users.length + '</p>' : '') + table(l) + cards(l);
+      var total = data.users.length + contacts.length;
+      box.innerHTML = !total ? H.empty('Людей ще немає', canAdd() ? 'Додайте першу людину кнопкою угорі.' : '')
+        : !l.length ? H.empty('Нікого не знайдено', 'Змініть пошук або фільтр.') : (l.length < total ? '<p class="hint">Показано ' + l.length + ' з ' + total + '</p>' : '') + table(l) + cards(l);
     }
     function frame() {
       var on = data.users.filter(function (u) { return u.active; }).length, acc = data.access;
-      ctx.el.innerHTML = '<section class="tm-page"><div class="tm-head"><div><h2 class="h2">Люди й доступ</h2><p class="h2-sub">Аудитори й старші аудитори · ' + on + ' з доступом · ' + esc(K.asOf(new Date().toISOString())) + '</p></div>' +
+      ctx.el.innerHTML = '<section class="tm-page"><div class="tm-head"><div><h2 class="h2">Люди й доступ</h2><p class="h2-sub">Аудитори й старші аудитори · ' + on + ' з доступом' + (contacts.length ? ' · контакти керівників і адміністратора: ' + contacts.length : '') + ' · ' + esc(K.asOf(new Date().toISOString())) + '</p></div>' +
         (canAdd() ? '<button class="btn btn--primary" type="button" data-act="tm-new">' + P.ic('add') + 'Додати людину</button>' : '') + '</div>' +
-        (canAdd() ? TR.slot() : '') + '<div class="card mgr-gap mgr-gap--sm"><div class="mgr-bar">' + K.search('tm-q', flt.q, 'Імʼя або Slack ID') +
+        (canAdd() ? TR.slot() : '') + '<div class="card mgr-gap mgr-gap--sm"><div class="mgr-bar">' + K.search('tm-q', flt.q, 'Імʼя, Slack ID або пошта') +
           K.select('tm-loc', [['', 'Усі локації']].concat(locs.map(function (l) { return [l.id, l.name]; })), flt.loc, 'Локація') + K.pills('tm-role', ROLES, flt.role, 'Роль') + '</div>' +
           '<p class="hint">' + (canAdd() ? (acc.addLimitPerDay ? 'Сьогодні додано: ' + acc.addedToday + ' з ' + acc.addLimitPerDay + '. ' : '') : esc(NO_RIGHT)) + '</p></div>' +
         '<section class="card" data-tm-list></section></section>';
       reqs.show();   // v1.1: картка запитів (вона й сама тягне запити в load)
     }
     function load() {
-      T.list().then(function (r) {
+      Promise.all([T.list(), P.srv('peopleContacts', {})]).then(function (both) {
+        var r = both[0];
         if (!ctx.alive()) return;
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
+        contacts = both[1] && both[1].ok ? both[1].people.map(function (c) { return Object.assign({ contact: true }, c, c.role === 'admin' ? { roleLabel: 'Адміністратор' } : {}); }) : [];
         data = r; data.users = r.users.filter(function (u) { return SHOWN[u.role]; });
         locs = T.locations(ctx.me, data.users);
         if (flt.loc && !locs.some(function (l) { return l.id === flt.loc; })) flt.loc = '';
         frame(); list();
         if (canAdd()) reqs.refresh();
+        if (openNew) {   // #/team?new=1 — відкрити «Додати людину» один раз і прибрати параметр з адреси (щоб перемальовування не відкривало знову)
+          openNew = false;
+          if (root.history && root.history.replaceState) root.history.replaceState(null, '', '#/team');
+          if (canAdd()) openEdit(null);
+        }
       });
     }
 
