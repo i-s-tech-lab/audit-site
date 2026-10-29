@@ -71,7 +71,7 @@
         return { key: d.day, x: h.dayShort(d.day), d: d, v: mode === 'pcs' ? d.rejected : mode === 'pct' ? d.pct || 0 : d.checked,
           levels: mode === 'chk' ? null : d.levels, none: !d.audits && (mode !== 'pcs' || !d.rejected) };
       }),
-      height: root.innerWidth < 900 ? 240 : dep ? 280 : 420, label: title + ' · ' + view.scope(), line: line,
+      height: root.innerWidth < 900 ? 240 : 280, label: title + ' · ' + view.scope(), line: line,
       tip: function (it) { return X.dayTip(it.d, normLabel); },
       tipRange: function (list, a, b) {
         var s = X.sum(list.map(function (x) { return x.d; }));
@@ -94,14 +94,23 @@
       LV.map(function (k) { return '<div class="an-cmp__r" role="row">' + h.lvl(k) + '<span>' + cellOf(t, k) + '</span><span>' + cellOf(L.prev, k) + '</span></div>'; }).join('') +
       '<div class="an-cmp__r an-cmp__r--sum" role="row"><span>усього браку</span><span><b>' + h.num(tot) + ' шт</b></span><span><b>' + h.num(pt) + ' шт</b></span></div></div>' +
       '<p class="hint">Попередні ' + X.dn(n) + ' — це ' + esc(A.span(L.prevFrom, L.prevTo)) + '.</p>';
-    var byDept = r.department ? '' : '<div class="an-bydept"><p class="group-label" style="padding:0">По відділах · натисніть — сторінка відділу</p>' + L.depts.map(function (d) {
-      var s = A.total(d.levels);
-      return '<button class="lvl-row an-lvl an-lvlbtn" type="button" data-act="an-dep" data-id="' + esc(d.id) + '"><span>' + esc(d.name) + '</span>' + h.stack(d.levels, 14) +
-        '<span class="lvl-row__n">' + (s ? h.num(s) + ' шт · зламане ' + A.share(d.levels, 'scrap') + '%' : 'браку немає') + '</span></button>';
-    }).join('') + '</div>';
     box.innerHTML = head + '<div class="kpis an-kpis3" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + LV.map(function (k) {
       return '<div class="kpi"><span class="kpi__val" style="color:' + A.LV_COLOR[k] + '">' + (tot ? A.share(t, k) + '%' : '—') + '</span><span class="kpi__label">' +
-        esc(P.sr.LEVELS[k]) + ' · ' + h.num(t[k]) + ' шт · ' + A.LV_NEXT[k] + '</span></div>'; }).join('') + '</div>' + h.stack(t) + cmp + byDept;
+        esc(P.sr.LEVELS[k]) + ' · ' + h.num(t[k]) + ' шт · ' + A.LV_NEXT[k] + '</span></div>'; }).join('') + '</div>' + h.stack(t) + cmp;
+  }
+
+  function deptsCard(view) {
+    var r = view.data, box = view.box('an-depts'), list = r.levels.depts || [];
+    if (!box) return;
+    if (r.department || !list.some(function (d) { return A.total(d.levels); })) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = '';
+    box.innerHTML = '<div><h2 class="card-title">Брак по відділах' + A.q('sr.an.depts') + '</h2><p class="hint">' + esc(A.span(r.from, r.to)) + ' · ' + X.dn(r.totals.days) +
+      ' · смуга — рівні браку відділу · праворуч — брак, шт і частка зламаного · натисніть відділ — його сторінка</p></div>' +
+      A.fold('an:depts', list.length, '<div class="an-bydept fold__list">' + list.map(function (d) {
+        var s = A.total(d.levels);
+        return '<button class="lvl-row an-lvl an-lvlbtn" type="button" data-act="an-dep" data-id="' + esc(d.id) + '"><span>' + esc(d.name) + '</span>' + h.stack(d.levels, 14) +
+          '<span class="lvl-row__n">' + (s ? h.num(s) + ' шт · зламане ' + A.share(d.levels, 'scrap') + '%' : 'браку немає') + '</span></button>';
+      }).join('') + '</div>');
   }
 
   function topCard(view) {
@@ -150,7 +159,7 @@
   function drawStatsTable(view) {
     var box = view.box('an-dtbl'), r = stats;
     if (!box || !r) return;
-    box.innerHTML = '<table class="tbl an-dtbl"><thead><tr>' + DCOLS.map(dHead).join('') + '</tr></thead><tbody>' + sortedStats(r.types).map(function (t) {
+    box.innerHTML = A.fold('an:dstats', r.types.length, '<div class="tbl-box"><table class="tbl an-dtbl"><thead><tr>' + DCOLS.map(dHead).join('') + '</tr></thead><tbody class="fold__list">' + sortedStats(r.types).map(function (t) {
       return '<tr><td><b>' + esc(t.name) + '</b><span class="sub">' + h.lvl(t.level) + '</span></td>' +
         '<td class="n"><b>' + h.pct(t.auditsShare) + '</b><span class="sub">' + h.num(t.audits) + ' з ' + h.num(r.audits) + '</span></td>' +
         '<td class="n">' + h.pct(t.avgAll) + '</td><td class="n">' + h.pct(t.avgAny) + '</td>' +
@@ -159,7 +168,7 @@
         '<td class="n">' + (t.worst ? '<button class="an-dlink" type="button" data-act="an-aud" data-id="' + esc(t.worst.auditId) + '"><b>' + h.pct(t.worst.pct) + '</b>' +
           '<span class="sub">' + esc(A.dshort(t.worst.day)) + ' · відкрити аудит</span></button>' : '—') + '</td></tr>';
     }).join('') + '</tbody><tfoot><tr><td><b>Разом</b></td><td class="n"><b>' + h.num(r.withDefects) + ' з ' + h.num(r.audits) + '</b><span class="sub">аудитів з браком</span></td>' +
-      '<td class="n">—</td><td class="n">—</td><td class="n"><b>100%</b></td><td class="n"><b>' + h.pct(r.pct) + '</b></td><td class="n">—</td></tr></tfoot></table>';
+      '<td class="n">—</td><td class="n">—</td><td class="n"><b>100%</b></td><td class="n"><b>' + h.pct(r.pct) + '</b></td><td class="n">—</td></tr></tfoot></table></div>');
   }
   function statsCard(view) {
     var box = view.box('an-dstats'), dep = view.data.department, my = ++statsReq;
@@ -176,13 +185,13 @@
       var sub = esc(A.span(r.from, r.to)) + ' · ' + A.n(r.audits, 'аудит', 'аудити', 'аудитів') + ' відділу · перевірено ' + h.num(r.checked) + ' шт · брак ' + h.num(r.rejected) + ' шт (' + h.pct(r.pct) + ')';
       if (!r.audits) { box.innerHTML = head + '<p class="hint">' + esc(A.span(r.from, r.to)) + '</p></div></div>' + h.empty('Аудитів відділу за період не було', dep.name + ' · ' + A.span(r.from, r.to)); return; }
       if (!r.types.length) { box.innerHTML = head + '<p class="hint">' + sub + '</p></div></div>' + h.empty('Браку за період не знайдено', dep.name + ' · ' + A.span(r.from, r.to)); return; }
-      box.innerHTML = head + '<p class="hint">' + sub + ' · норма браку відділу — ' + r.threshold + '% · натисніть назву колонки — сортування</p></div></div><div class="tbl-box" id="an-dtbl"></div>';
+      box.innerHTML = head + '<p class="hint">' + sub + ' · норма браку відділу — ' + r.threshold + '% · натисніть назву колонки — сортування</p></div></div><div id="an-dtbl"></div>';
       drawStatsTable(view);
     });
   }
 
   X.period = {
-    draw: function (view) { summary(view); daysCard(view); levelsCard(view); topCard(view); statsCard(view); },
+    draw: function (view) { summary(view); daysCard(view); levelsCard(view); deptsCard(view); topCard(view); statsCard(view); },
     bind: function (view) {
       var ctx = view.ctx;
       ctx.on('an-dsort', function (t) {

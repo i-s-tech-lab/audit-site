@@ -79,18 +79,18 @@
       A.kpi(h.num(d.rejected), 'брак відділу, шт', 'sr.an.deptRejected') +
       A.kpi(h.pct(d.pct), d.pct == null ? 'брак, % · перевіреного у відділі немає' : 'брак, % = ' + h.num(d.rejected) + ' шт ÷ ' + h.num(d.checked) + ' перевірених', 'term.rate') +
       '<div class="kpi an-kpi-lv"><span class="kpi__label" style="margin:0">рівні браку дня, шт' + A.q('term.levels') + '</span>' + (lv ? h.legend(d.levels) + h.stack(d.levels, 10) : '<span class="hint">браку немає</span>') + '</div></div>';
-    var audits = '<div class="col an-list"><h3 class="an-h3">Аудити дня · ' + t.audits.length + '</h3>' + (t.audits.length ? '<p class="hint">Нові зверху · натисніть — увесь аудит збоку</p><div class="list">' +
+    var audits = '<div class="col an-list"><h3 class="an-h3">Аудити дня · ' + t.audits.length + '</h3>' + (t.audits.length ? '<p class="hint">Нові зверху · натисніть — увесь аудит збоку</p>' + A.fold('an:aud', t.audits.length, '<div class="list fold__list">' +
       t.audits.map(function (a) {
         return '<button class="row-item an-arow" type="button" data-act="an-aud" data-id="' + esc(a.id) + '"><b class="an-arow__t">' + P.fmt.time(a.createdAt) + '</b>' +
           '<span class="row-item__main"><span class="row-item__title">' + esc(a.auditorName) + '</span><span class="row-item__meta">' + esc(a.products.join(', ') + (a.orders.length ? ' · ' + a.orders.join(', ') : '')) + '</span></span>' +
           '<span class="an-arow__n"><b>' + h.num(a.checked) + ' шт</b><span class="sub">брак ' + X.brak(a.rejected, a.pct) + '</span>' +
           (a.foreign ? '<span class="sub">з них ' + h.num(a.foreign) + ' шт — іншого відділу</span>' : '') + '</span></button>';
-      }).join('') + '</div>' : '<p class="hint">У відділі аудитів сьогодні не було.</p>') + '</div>';
-    var types = '<div class="col an-list"><h3 class="an-h3">Види браку дня · ' + h.num(d.rejected) + ' шт</h3>' + (t.types.length ? '<p class="hint">Брак цього відділу · рівень · у кого · натисніть — екран виду браку</p><div class="list">' +
+      }).join('') + '</div>') : '<p class="hint">У відділі аудитів сьогодні не було.</p>') + '</div>';
+    var types = '<div class="col an-list"><h3 class="an-h3">Види браку дня · ' + h.num(d.rejected) + ' шт</h3>' + (t.types.length ? '<p class="hint">Брак цього відділу · рівень · у кого · натисніть — екран виду браку</p>' + A.fold('an:types', t.types.length, '<div class="list fold__list">' +
       t.types.map(function (x) {
         return '<a class="row-item" href="#/analytics/defect/' + encodeURIComponent(x.id) + '?dep=' + encodeURIComponent(dep.id) + '"><span class="row-item__main"><span class="row-item__title">' + esc(x.name) + '</span>' +
           '<span class="row-item__meta an-who">' + h.lvl(x.level) + '<span>' + who(x.workers) + '</span></span></span><b class="an-arow__n">' + h.num(x.pieces) + ' шт</b></a>';
-      }).join('') + '</div>' : '<p class="hint">Браку цього відділу сьогодні не знайдено.</p>') +
+      }).join('') + '</div>') : '<p class="hint">Браку цього відділу сьогодні не знайдено.</p>') +
       (t.others.length ? '<h3 class="an-h3 an-h3--gap">Брак інших відділів, знайдений тут · ' + h.num(t.others.reduce(function (s, o) { return s + o.pieces; }, 0)) + ' шт' + A.q('term.otherDept') + '</h3>' +
         '<p class="hint">Зарахований відділу-джерелу — у брак відділу «' + esc(dep.name) + '» не входить.</p><div class="list">' +
         t.others.map(function (o) {
@@ -106,13 +106,13 @@
       '<p class="hint">' + esc(A.dcap(r.today)) + ' · станом на ' + P.fmt.time(r.asOf) + ' · шкала — перевірено проти норми дня · натисніть відділ — його сторінка</p></div>' +
       '<p class="an-today__sum"><span class="an-today__line">' + (a.audits ? '<b>' + A.n(a.audits, AUD[0], AUD[1], AUD[2]) + '</b> · перевірено <b>' + h.num(a.checked) + ' шт</b> · брак <b>' + X.brak(a.rejected, a.pct) + '</b>' : '<b>Аудитів сьогодні не було</b>') + '</span>' +
       '<span>відділів: норму виконано — ' + a.done + ' · ще не виконано — ' + a.part + ' · без аудитів — ' + a.none + '</span></p></div>';
-    return head + '<div class="an-drows">' + r.todayDepts.map(function (d) {
+    return head + A.fold('an:drows', r.todayDepts.length, '<div class="an-drows fold__list">' + r.todayDepts.map(function (d) {
       var when = d.lastTodayAt ? 'останній аудит о ' + P.fmt.time(d.lastTodayAt) : d.lastDay ? 'останній аудит ' + A.ago(d.lastDay) : 'аудитів ще не було';
       return '<button class="an-drow" type="button" data-act="an-dep" data-id="' + esc(d.id) + '"><b class="an-drow__name">' + esc(d.name) + '</b>' + X.scale(d, 'md') +
         '<span class="an-drow__n"><b>' + h.num(d.checked) + '</b>' + (d.target != null ? ' / ' + h.num(d.target) : '') + ' шт</span>' +
         '<span class="an-drow__b">' + (d.audits || d.rejected ? 'брак ' + X.brak(d.rejected, d.pct) : 'брак, шт —') + '</span>' +
         '<span class="an-drow__st">' + X.stateBadge(d) + '<span class="an-drow__when">' + esc(when) + '</span></span>' + h.ic('chevron-right', 'ui-icon--sm') + '</button>';
-    }).join('') + '</div>';
+    }).join('') + '</div>');
   }
 
   X.today = {

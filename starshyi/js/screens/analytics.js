@@ -107,10 +107,10 @@
       scope: function () { return view.data && view.data.department ? view.data.department.name : 'Усі відділи'; } };
 
     function frame() {
-      ctx.el.innerHTML = '<section class="an-switch" aria-label="Відділ"><div id="an-tiles" class="an-tiles"></div><div id="an-tiles-key"></div></section>' +
-        '<div id="an-body" class="an-body"><section class="card an-today" id="an-today"></section><section id="an-sum" class="an-sumbox"></section>' +
-        '<div class="row"><section class="card col--wide" id="an-days"></section><section class="card col" id="an-levels"></section></div>' +
-        '<section class="card" id="an-top"></section><section class="card" id="an-dstats" style="display:none"></section><section class="card" id="an-orders"></section></div>';
+      ctx.el.innerHTML = '<section class="an-switch" aria-label="Відділ"><div id="an-tiles" class="an-tiles"></div>' +
+        '<div class="an-switch__bar"><div id="an-tiles-key"></div>' + X.layout.button() + '</div></section>' +
+        '<div id="an-body" class="an-body">' + X.layout.frame() + '</div>';
+      if (P.prefs) P.prefs.load().then(function () { if (ctx.alive()) X.layout.late(view.box('an-body')); });
     }
     function load() {
       var my = ++req, body = view.box('an-body');
@@ -138,6 +138,8 @@
     }
     PARTS.forEach(function (k) { X[k].bind(view); });
     ctx.on('an-dep', function (t) { pick(t.getAttribute('data-id')); });
+    ctx.on('an-layout', function (t) { X.layout.open(t, view.box('an-body')); });   // v1.6: меню «Порядок блоків»
+    ctx.on('an-fold', function (t) { A.foldToggle(t); });                            // v1.6: «Розгорнути / Згорнути» довгого списку
     load();
   } });
 })(window);

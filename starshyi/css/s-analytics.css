@@ -1,7 +1,11 @@
 
 
 
-.an-body { display: flex; flex-direction: column; gap: 20px; transition: opacity .12s linear; }
+
+.an-body { display: flex; flex-wrap: wrap; gap: 20px; transition: opacity .12s linear; }
+.an-body > section { flex: 1 1 100%; min-width: 0; }
+.an-body > #an-days { flex: 2 1 640px; }
+.an-body > #an-levels { flex: 1 1 420px; }
 .an-body.an-busy { opacity: .5; pointer-events: none; }
 .an-switch { display: flex; flex-direction: column; gap: 10px; }
 .an-switch__key { gap: 6px 16px; font-size: 13px; color: var(--text-3); align-items: center; }

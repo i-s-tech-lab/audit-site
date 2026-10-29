@@ -36,8 +36,9 @@
     var list = pickRows(r), q = ui.oq.trim().toLowerCase(), sel = r.department ? r.department.id : '';
     function sortAttr(k) { var s = ui.osort; return s && s.k === k ? ' aria-sort="' + (s.dir === 'asc' ? 'ascending' : 'descending') + '"' : ''; }
     count.textContent = q ? 'знайдено ' + list.length + ' з ' + r.orders.length : A.n(r.orders.length, 'замовлення', 'замовлення', 'замовлень');
-    box.innerHTML = '<table class="tbl an-otbl"><thead><tr><th' + sortAttr('no') + '>' + sortBtn('no', 'Замовлення') + '</th>' +
-      r.departments.map(function (d) { return '<th class="n' + (sel === d.id ? ' an-ocol--on' : '') + '"' + sortAttr(d.id) + '>' + sortBtn(d.id, d.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    var wrap = q ? function (k, n, html) { return html; } : A.fold;
+    box.innerHTML = wrap('an:orders', list.length, '<div class="tbl-box"><table class="tbl an-otbl"><thead><tr><th' + sortAttr('no') + '>' + sortBtn('no', 'Замовлення') + '</th>' +
+      r.departments.map(function (d) { return '<th class="n' + (sel === d.id ? ' an-ocol--on' : '') + '"' + sortAttr(d.id) + '>' + sortBtn(d.id, d.name) + '</th>'; }).join('') + '</tr></thead><tbody class="fold__list">' +
       (list.length ? list.map(function (o) {
         return '<tr data-act="an-order" data-no="' + esc(o.no) + '"><td><b>' + hl(o.no, q) + '</b><span class="sub">' + hl(o.products.join(', '), q) + (o.customer ? ' · ' + hl(o.customer, q) : '') + '</span></td>' +
           r.departments.map(function (d) {
@@ -46,7 +47,7 @@
               '<span class="sub">брак ' + X.brak(c.rejected, c.pct) + '</span></td>' : '<td class="n an-oc an-oc--none' + on + '">—</td>';
           }).join('') + '</tr>';
       }).join('') : '<tr><td colspan="' + (r.departments.length + 1) + '" class="an-oc--none" style="padding:28px 12px;text-align:center">За запитом «' + esc(ui.oq.trim()) + '» замовлень немає · у списку ' +
-        A.n(r.orders.length, 'замовлення', 'замовлення', 'замовлень') + '</td></tr>') + '</tbody></table>';
+        A.n(r.orders.length, 'замовлення', 'замовлення', 'замовлень') + '</td></tr>') + '</tbody></table></div>');
   }
   function draw(view) {
     var r = view.data, box = view.box('an-orders');
@@ -58,7 +59,7 @@
         '<input class="input" id="an-oq" type="search" data-input="an-oq" value="' + esc(ui.oq) + '" placeholder="Номер замовлення, виріб або замовник" aria-label="Пошук замовлення: номер, виріб або замовник" autocomplete="off" spellcheck="false"></div>' +
         '<span class="an-ocount" id="an-ocount" aria-live="polite"></span>' +
         '<span class="hint an-obar__note">Натисніть назву колонки — сортування за «перевірено»: від більшого → від меншого → без сортування</span></div>' +
-        '<div class="tbl-box" id="an-otbl"></div>';
+        '<div id="an-otbl"></div>';
     }
     view.box('an-ohead').innerHTML = head;
     drawTable(view);
