@@ -170,7 +170,7 @@ button.kb-tl:focus-visible { outline: 2px solid var(--brand-line); outline-offse
 .mkd-ld__c > i:first-of-type { border-radius: 3px 3px 0 0; }
 .mkd-ld__c--cur > i { opacity: .7; }
 .mkd-ld__obs { background: var(--info); }
-.mkd-ld__rel { background: var(--kb-rel); }
+.mkd-ld__rel { background: var(--brand); }   
 .mkd-ld__open { background: var(--danger); }
 .mkd-ld__x { display: flex; gap: 4px; font-size: 11px; color: var(--text-2); }
 .mkd-ld__x > span { flex: 1 1 0; text-align: center; min-width: 0; }

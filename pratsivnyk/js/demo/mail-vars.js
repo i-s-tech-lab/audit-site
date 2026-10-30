@@ -68,7 +68,7 @@
     });
     return o;
   }
-  function vars(env, me, loc, depIds) {
+  function data(env, me, loc, depIds) {
     var C = P.demoCommon, today = env.day(), yd = addDays(today, -1), w = lastWeek(today);
     var deps = env.db.departments.filter(function (d) { return d.locationId === loc.id && d.active !== false && (!depIds || depIds.indexOf(d.id) >= 0); });
     var t = agg(env, loc, deps, today, today), y = agg(env, loc, deps, yd, yd), wk = agg(env, loc, deps, w.from, w.to);
@@ -80,13 +80,15 @@
       try { var r = api.srKdOverview({ locationId: loc.id }, me, env); if (r && r.ok && r.totals) kd = r.totals; } catch (e) { kd = null; }
     });
     var pct = function (a) { var x = C.pct(a.rejected, a.checked); return x == null ? '—' : P.fmt.pct(x); };
-    return Object.assign({ 'локація': loc.name, 'перевірено': P.fmt.num(t.checked), 'брак_шт': P.fmt.num(t.rejected), 'брак_%': pct(t),
+    var vars = Object.assign({ 'локація': loc.name, 'перевірено': P.fmt.num(t.checked), 'брак_шт': P.fmt.num(t.rejected), 'брак_%': pct(t),
       'аудитів': P.fmt.num(t.list.length), 'без_аудитів': t.none.slice(0, CAPS.noAudits).join(', ') || 'немає', 'відділів_з_аудитами': t.withAudit + ' з ' + deps.length,
       'вчора_перевірено': P.fmt.num(y.checked), 'вчора_брак_%': pct(y), 'вчора_аудитів': P.fmt.num(y.list.length),
       'тиж_перевірено': P.fmt.num(wk.checked), 'тиж_брак_%': pct(wk), 'тиж_аудитів': P.fmt.num(wk.list.length),
       'найбільший_брак': t.worst ? t.worst.name + ' — ' + P.fmt.pct(t.worst.pct) : '—', 'топ_браку': top.join(' · ') || 'немає',
       'кд_нових': kd ? String(kd.new || 0) : '—', 'кд_на_перевірці': kd ? String(kd.review != null ? kd.review : kd.check || 0) : '—' }, timeVars(env.now()));
+    return { vars: vars, audits: t.list.length, pct: C.pct(t.rejected, t.checked) };
   }
+  function vars(env, me, loc, depIds) { return data(env, me, loc, depIds).vars; }
 
   function kyivOffset(ms) {
     var base = Math.floor(ms / 60000) * 60000, k = kyivParts(new Date(base));
@@ -182,5 +184,5 @@
   }
 
   P.demoMailVars = { GROUPS: GROUPS, LINKS: LINKS, TIME: TIME, DATA: DATA, MONTHS: MONTHS, WD: WD, EVERY: EVERY, MAX_PER_RECIPIENT_DAY: MAX_PER_RECIPIENT_DAY, SKIP_DAYS_MAX: SKIP_DAYS_MAX,
-    kyivParts: kyivParts, addDays: addDays, timeVars: timeVars, vars: vars, nextSendAt: nextSendAt, perDayMax: perDayMax, validSkipDay: validSkipDay, pruneSkipDays: pruneSkipDays };
+    kyivParts: kyivParts, addDays: addDays, timeVars: timeVars, vars: vars, data: data, nextSendAt: nextSendAt, perDayMax: perDayMax, validSkipDay: validSkipDay, pruneSkipDays: pruneSkipDays };
 })(typeof window !== 'undefined' ? window : globalThis);

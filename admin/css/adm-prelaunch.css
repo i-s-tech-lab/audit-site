@@ -1,0 +1,23 @@
+
+
+.adm-pl-card { min-width: 0; }
+.adm-pl-rows { display: flex; flex-direction: column; }
+.adm-pl-row { display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) 0; border-top: 1px solid var(--line); min-width: 0; }
+.adm-pl-row:first-child { border-top: 0; padding-top: 0; }
+.adm-pl-dot { flex: none; width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--text-3); }
+.adm-pl-row--ok .adm-pl-dot { background: var(--ok); }
+.adm-pl-row--warn .adm-pl-dot { background: var(--warn-fill); box-shadow: 0 0 0 1px var(--warn-line); }
+.adm-pl-row--bad .adm-pl-dot { background: var(--danger-fill); }
+.adm-pl-row--info .adm-pl-dot { background: var(--info); }
+.adm-pl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.adm-pl-top { display: flex; align-items: center; flex-wrap: wrap; gap: 4px var(--sp-2); }
+.adm-pl-top .badge { flex: none; }
+.adm-pl-val { font-size: var(--fs-sm); color: var(--text-2); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.adm-pl-todo { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--surface-2); font-size: var(--fs-sm); color: var(--text); overflow-wrap: anywhere; }
+.adm-pl-row--bad .adm-pl-todo { background: var(--danger-soft); }
+.adm-pl-row--warn .adm-pl-todo { background: var(--warn-soft); }
+
+
+.adm-pl-chan__line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.adm-pl-chan__btns { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
+.adm-pl-chan .adm-sys-mono { overflow-wrap: anywhere; }

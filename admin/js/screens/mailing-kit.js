@@ -101,9 +101,14 @@
     return ix;
   }
   function maskId(id) { return P.authSlack && P.authSlack.maskId ? P.authSlack.maskId(id) : String(id); }
+  function chanText(t) { var n = String(t && t.name != null ? t.name : '').replace(/^#+/, ''); return n ? '#' + n : t && t.id ? 'канал ' + t.id : '#'; }
   function recipChip(t, ix, i) {
     var cls, ic, name, sub, label;
-    if (t.type === 'channel') { cls = 'ch'; ic = '<span class="rz-rc__hash" aria-hidden="true">#</span>'; name = esc(String(t.name).replace(/^#+/, '')); sub = 'канал'; label = '#' + t.name; }
+    if (t.type === 'channel') {
+      var nm = String(t.name == null ? '' : t.name).replace(/^#+/, '');
+      cls = 'ch'; ic = '<span class="rz-rc__hash" aria-hidden="true">#</span>'; name = esc(nm || t.id); sub = t.id ? 'канал · ' + t.id : 'канал'; label = chanText(t);
+    }
+    else if (t.type === 'locChannel') { cls = 'ch'; ic = '<span class="rz-rc__hash" aria-hidden="true">#</span>'; name = 'Канал локації'; sub = 'з налаштувань «Локації» — свій у кожної'; label = 'Канал локації'; }
     else {
       var p = ix[t.id];
       ic = P.ic('user', 'ui-icon--sm');
@@ -115,11 +120,12 @@
       (i != null ? '<button class="rz-rc__x" type="button" data-act="rz-to-rm" data-i="' + i + '" aria-label="Прибрати ' + esc(label) + '">' + P.ic('close', 'ui-icon--sm') + '</button>' : '') + '</span>';
   }
   function toShort(r, ix, draft) {
-    var to = r.to || [], ch = to.filter(function (t) { return t.type === 'channel'; }).map(function (t) { return '#' + t.name; });
+    var to = r.to || [], ch = to.filter(function (t) { return t.type === 'channel'; }).map(chanText), perLoc = to.some(function (t) { return t.type === 'locChannel'; });
     var ppl = to.filter(function (t) { return t.type === 'user'; }).map(function (t) { return ix[t.id] ? ix[t.id].name : maskId(t.id); });
     if (!to.length) return draft ? 'ще нікому — додайте канал або людину в кроці 4' : 'у тестовий канал' + (chan ? ' #' + chan : '') + ' (отримувачів не вказано)';
     var parts = [];
     if (ch.length) parts.push((ch.length === 1 ? 'у канал ' : 'у канали ') + ch.join(', '));
+    if (perLoc) parts.push('у канал кожної локації');
     if (ppl.length) parts.push(ppl.length <= 2 ? 'особисто: ' + ppl.join(' і ') : 'особисто ' + ppl.length + ' ' + plural(ppl.length, ['людині', 'людям', 'людям']));
     return parts.join(' і ');
   }
@@ -165,7 +171,7 @@
     subnav: subnav, setCounts: function (k, n) { counts[k] = n; }, chan: function (v) { if (arguments.length) chan = v || null; return chan; },
     needsData: needsData, waitWhy: waitWhy, daysText: daysText, daysOff: daysOff, everyText: everyText, lastSlot: lastSlot,
     whenShort: whenShort, whenText: whenText, condText: condText, condShort: condShort, whereText: whereText, whereNote: whereNote,
-    people: people, recipChip: recipChip, toShort: toShort, summary: summary, maskId: maskId,
+    people: people, recipChip: recipChip, chanText: chanText, toShort: toShort, summary: summary, maskId: maskId,
     box: box, sec: sec, slackChips: slackChips, labels: labels, channelName: channelName, plural: plural, cap: cap, eventName: eventName
   };
 })(window);

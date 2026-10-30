@@ -8,6 +8,15 @@
   function moved(ids, from, to) { var a = ids.slice(); a.splice(to, 0, a.splice(from, 1)[0]); return a; }
   function toSet(list) { var o = Object.create(null); (Array.isArray(list) ? list : []).forEach(function (id) { o[id] = 1; }); return o; }
 
+  function ready(ms) {
+    if (!P.prefs || !P.prefs.load) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var done = false, t = setTimeout(finish, ms == null ? 1000 : ms);
+      function finish() { if (!done) { done = true; clearTimeout(t); resolve(); } }
+      try { P.prefs.load().then(finish, finish); } catch (e) { finish(); }
+    });
+  }
+
   function create(cfg) {
     var BLOCKS = cfg.blocks, IDS = BLOCKS.map(function (b) { return b.id; });
     var SC = { order: 'order.' + cfg.key + '-blocks', off: 'lists.' + cfg.key + '-off', on: 'lists.' + cfg.key + '-on' };
@@ -265,11 +274,11 @@
       if (first) try { first.focus({ preventScroll: true }); } catch (e) { /* */ }
     }
 
-    return { BLOCKS: BLOCKS, IDS: IDS, scopes: SC, order: order, frame: frame, apply: apply, button: button, open: open, box: box,
+    return { ready: ready, BLOCKS: BLOCKS, IDS: IDS, scopes: SC, order: order, frame: frame, apply: apply, button: button, open: open, box: box,
       bindPage: bindPage, visible: visible, hide: hide, show: show,
       late: function (body) { apply(body); } };
   }
 
-  P.blockLayout = { create: create, moved: moved };
-  if (typeof module !== 'undefined' && module.exports) module.exports = { create: create, moved: moved };
+  P.blockLayout = { create: create, moved: moved, ready: ready };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { create: create, moved: moved, ready: ready };
 })(typeof window !== 'undefined' ? window : globalThis);

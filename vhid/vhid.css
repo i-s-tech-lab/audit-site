@@ -4,6 +4,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--
 .vh__head { display: flex; flex-direction: column; gap: var(--sp-2); }
 .vh__kicker { margin: 0; color: var(--brand-ink); font-weight: var(--fw-semibold); font-size: var(--fs-sm); letter-spacing: .02em; }
 .vh__lead { margin: 0; color: var(--text-2); line-height: var(--lh-base); }
+.vh__lead:empty, .vh [hidden] { display: none; }
 .vh__card { padding: var(--sp-5); gap: var(--sp-4); }
 .vh__card--soft { background: var(--surface-2); border-color: transparent; box-shadow: none; }
 .vh__h2 { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-semibold); line-height: var(--lh-snug); }

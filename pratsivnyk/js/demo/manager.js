@@ -219,12 +219,12 @@
       var both = auditsIn(env, null, pFrom, rg.to);
       var cur = both.filter(function (a) { return a.day >= rg.from; }), prev = both.filter(function (a) { return a.day < rg.from; });
       function at(list, locId) { return list.filter(function (a) { return !locId || a.locationId === locId; }); }
-      var kdSel = sel.loc ? kdSum(env, sel.loc.id, rg.from, rg.to, true) : null;
+      var kdSel = sel.loc && p.withKd === true ? kdSum(env, sel.loc.id, rg.from, rg.to, true) : null;
       var locations = env.db.locations.map(function (l) {
         var deps = depsIn(env, l.id), s = stats(env, at(cur, l.id), deps), ps = stats(env, at(prev, l.id), deps);
         return Object.assign(short(l), pub(env, s, 3), { departments: deps.filter(function (d) { return d.active !== false; }).length,
           prev: { audits: ps.audits, checked: ps.checked, rejected: ps.rejected, pct: ps.pct },
-          kd: kdTile(sel.loc && sel.loc.id === l.id ? kdSel : kdSum(env, l.id, rg.from, rg.to)) });
+          kd: kdTile(kdSel && sel.loc.id === l.id ? kdSel : kdSum(env, l.id, rg.from, rg.to)) });
       });
       var locId = sel.loc ? sel.loc.id : null, deps = depsIn(env, locId), scope = at(cur, locId), pscope = at(prev, locId), byDay = {};
       scope.forEach(function (a) { (byDay[a.day] = byDay[a.day] || []).push(a); });
@@ -252,7 +252,7 @@
         var s = stats(env, list, [d]), loc = env.ix.loc[d.locationId], dt = env.ix.dt[d.deptTypeId];
         return Object.assign({ id: d.id, name: d.name, locationId: d.locationId, locationName: loc ? loc.name : '', deptTypeId: d.deptTypeId,
           deptTypeName: dt ? dt.name : '', active: d.active !== false }, pub(env, s, 3));
-      }).filter(function (d) { return d.active || d.audits || d.rejected; });
+      }).filter(function (d) { return d.active; });   // v1.10: вимкнені відділи в таблицях не показуємо — як у старшого
       return { ok: true, from: rg.from, to: rg.to, asOf: env.now().toISOString(), criticalPct: env.db.settings.criticalPct,
         location: sel.loc ? short(sel.loc) : null, locationIds: ids, deptTypeId: tid, locations: env.db.locations.map(short),
         deptTypes: env.db.deptTypes.map(short), depts: depts };
@@ -295,7 +295,7 @@
       var deps = depsIn(env, loc.id), kd = kdSum(env, loc.id, from, to);
       var depts = deps.map(function (d) {
         return Object.assign({ id: d.id, name: d.name, active: d.active !== false }, pub(env, stats(env, mine, [d]), MONTH_TOP), { kd: kdDept(kd, d.id, from, to) });
-      }).filter(function (d) { return d.active || d.audits || d.rejected; });
+      }).filter(function (d) { return d.active; });   // v1.10: вимкнені відділи в таблицях не показуємо — як у старшого
       return { ok: true, month: m, from: from, to: to, partial: end > today, asOf: env.now().toISOString(), hasKd: !!kd, criticalPct: env.db.settings.criticalPct,
         months: months.map(function (k) { return { month: k, audits: count[k] || 0 }; }), locations: env.db.locations.map(short),
         location: Object.assign(short(loc), pub(env, stats(env, mine, deps), MONTH_TOP), { depts: depts }), kd: kd };

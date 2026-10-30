@@ -27,7 +27,7 @@
     var c = zero(), kd = kdCounts(env, locId, fromDay);
     c.audits = env.audits().filter(function (a) { return a.locationId === locId && a.createdAt > sinceIso; }).length;
     c.kdNew = kd.kdNew; c.relapses = kd.relapses; c.selfClosed = kd.selfClosed;
-    c.workersAdded = env.db.workers.filter(function (w) { return w.locationId === locId && typeof w.addedAt === 'string' && w.addedAt > sinceIso; }).length;
+    c.workersAdded = env.db.workers.filter(function (w) { return w.locationId === locId && typeof w.addedAt === 'string' && w.addedAt > sinceIso && !w.reenabled; }).length;   // v1.1: знову увімкнений (reenabled) — не новий
     return c;
   }
 

@@ -154,22 +154,27 @@
     auditListLocation: function (p, me, env) {
       var r = resolveLoc(p, me, env); if (r.err) return r.err;
       var q = String(p.search || '').trim().toLowerCase();
-      var list = inPeriod(env.audits().filter(function (a) {
+      var day = /^\d{4}-\d{2}-\d{2}$/.test(String(p.day || '')) ? String(p.day) : null;
+      var base = env.audits().filter(function (a) {
         if (a.locationId !== r.loc.id || (p.departmentId && a.departmentId !== p.departmentId)) return false;
+        if (day && a.day !== day) return false;
         if (!q) return true;
         var hay = [a.id].concat(a.orders, a.checkedWorkers, a.items.map(function (i) { return nm(env.ix.prod, i.productId, NO_PROD); }));
         return hay.some(function (s) { return String(s).toLowerCase().indexOf(q) >= 0; });
-      }), env, p.period);
+      });
+      var list = day ? base.sort(C.newestFirst) : inPeriod(base, env, p.period);
       var bad = list.filter(function (a) { return C.rejectedOf(a) > 0; });
       var shown = p.onlyDefects ? bad : list;
-      return { ok: true, total: shown.length, counts: { all: list.length, withDefects: bad.length },
+      var res = { ok: true, total: shown.length, counts: { all: list.length, withDefects: bad.length },
         items: page(shown, p).map(function (a) { return summary(a, env); }) };
+      if (day) { res.day = day; res.today = env.day(); }   // лише коли просили день: форма відповіді без day лишається, як була
+      return res;
     },
 
     auditGet: function (p, me, env) {
       var a = env.audits().filter(function (x) { return x.id === p.id; })[0];
       if (!a) return C.fail('not_found', 'Аудит не знайдено.');
-      if (!C.hasLoc(me, a.locationId) && a.auditorId !== me.id) return C.forbidden();
+      if (!C.hasLoc(me, a.locationId) && a.auditorId !== me.id) return C.fail('forbidden', 'Цей аудит — не з вашої локації.');
       var audit = summary(a, env), ix = env.ix;
       audit.comment = a.comment || '';
       audit.noDefects = !!a.noDefects;

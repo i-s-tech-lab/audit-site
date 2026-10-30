@@ -21,14 +21,15 @@
   }
   function lastLine(iso) { return 'Востаннє надіслано: ' + (iso ? P.fmt.date(iso) + ', ' + P.fmt.time(iso) : 'ще не надсилалося'); }
 
-  function intro() {
+  function intro(dataReady) {
     var steps = [['Ви налаштовуєте правило:', ' для яких локацій і відділів, коли надсилати, кому і який текст.'],
       ['Будильник Supabase щохвилини перевіряє,', ' чи настав час котрогось правила, і ставить повідомлення в чергу.'],
       ['Повідомлення йде в канал Slack', ' (бачать усі учасники каналу) <b>або людині особисто</b> — від бота «Аудит».']];
     return '<section class="card rz-intro" aria-label="Як працює розсилка"><ol class="rz-steps">' + steps.map(function (s, i) {
       return '<li><span class="rz-num" aria-hidden="true">' + (i + 1) + '</span><p><b>' + s[0] + '</b>' + s[1] + '</p></li>'; }).join('') + '</ol>' +
-      K.box('warn', '<b>Поки немає бази аудитів,</b> розсилки з цифрами локацій (брак, аудити, відділи) і розсилки після подій зберігаються, але ще не надсилаються — ' +
-        'біля них позначка «Чекає бази даних». Уже зараз працюють розсилки з часом, датою й посиланнями на сайт.') + '</section>';
+      (dataReady ? K.box('ok', '<b>Цифри аудитів підключено:</b> розсилки з цифрами локацій (брак, аудити, відділи), з «каналом локації» і після подій надсилаються разом з усіма.')
+        : K.box('warn', '<b>Поки немає бази аудитів,</b> розсилки з цифрами локацій (брак, аудити, відділи) і розсилки після подій зберігаються, але ще не надсилаються — ' +
+          'біля них позначка «Чекає бази даних». Уже зараз працюють розсилки з часом, датою й посиланнями на сайт.')) + '</section>';
   }
   function statLine(st) {
     var out = [];
@@ -70,7 +71,7 @@
     function passes(r) {
       if (!forLoc(r, flt.loc) || (flt.show === 'on' && !r.enabled) || (flt.show === 'off' && r.enabled)) return false;
       var s = flt.q.trim().toLowerCase(); if (!s) return true;
-      var hay = [r.title].concat((r.to || []).map(function (t) { return t.type === 'channel' ? '#' + t.name : ix[t.id] ? ix[t.id].name : t.id; }));
+      var hay = [r.title].concat((r.to || []).map(function (t) { return t.type === 'channel' ? K.chanText(t) : t.type === 'locChannel' ? 'канал локації' : ix[t.id] ? ix[t.id].name : t.id; }));
       return hay.some(function (x) { return String(x).toLowerCase().indexOf(s) >= 0; });
     }
     function drawFrame() {
@@ -80,7 +81,7 @@
         return [l.id, l.name + ' · ' + data.items.filter(function (r) { return forLoc(r, l.id); }).length]; }));
       list.innerHTML = '<div class="rz-head"><div><h2 class="h2">Розсилки · ' + n + P.help.btn('admin.ml.what') + '</h2>' +
         '<p class="h2-sub">Повідомлення в Slack: за розкладом або одразу після події. Правила зберігаються в Supabase — їх виконує будильник, навіть коли сайт закритий.</p></div>' +
-        '<button class="btn btn--primary" type="button" data-act="rz-new">' + P.ic('add') + 'Нова розсилка</button></div>' + intro() + statLine(st) +
+        '<button class="btn btn--primary" type="button" data-act="rz-new">' + P.ic('add') + 'Нова розсилка</button></div>' + intro(data.dataReady) + statLine(st) +
         (n ? '<div class="card rz-tools"><label class="field rz-tools__q"><span class="label">Знайти розсилку</span><input class="input" type="search" data-input="rz-q" value="' + esc(flt.q) + '" placeholder="Назва розсилки, канал або імʼя людини"></label>' +
           '<label class="field rz-tools__loc"><span class="label">Для якої локації' + P.help.btn('admin.ml.filter') + '</span><select class="input rz-sel" data-change="rz-filter">' + locOpts.map(function (o) {
             return '<option value="' + esc(o[0]) + '"' + (o[0] === flt.loc ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>' +

@@ -14,6 +14,7 @@
   var PH = /\{([^{}\s]{1,20})\}/g;
   var DEP_ID = /^[A-Za-z0-9_-]{1,40}$/, SLACK_ID_MSG = 'Slack ID — літера U або W і ще 8–10 великих літер чи цифр.';
   var MAX_TO = 10, MAX_RULES = 50, RULES_LIMIT = 'Розсилок уже 50 — видаліть зайві';
+  var CH_ID = /^[CG][A-Z0-9]{8,14}$/, LOC_CHANNEL_LABEL = 'Канал локації (з налаштувань «Локації»)';   // validChannelId / LOC_CHANNEL_LABEL у mail-core.mjs
 
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -167,9 +168,17 @@
     (Array.isArray(x.to) ? x.to : []).forEach(function (t) {
       if (!t || typeof t !== 'object') return;
       if (t.type === 'channel') {
+        if (t.id != null && String(t.id).trim() !== '') {
+          var cid = String(t.id).trim().toUpperCase(), label = squash(t.name, 81).replace(/^#+/, '');
+          if (!CH_ID.test(cid)) { err('to', 'ID каналу починається з C або G (Slack → назва каналу → внизу вкладки About).'); return; }
+          if (!seen[cid]) { seen[cid] = 1; to.push(label ? { type: 'channel', id: cid, name: label.slice(0, 80) } : { type: 'channel', id: cid }); }
+          return;
+        }
         var n = channelName(t.name);
         if (!n) { err('to', 'Назва каналу — літери, цифри, «-» чи «_», без пробілів: #якість-цеху.'); return; }
         if (!seen['#' + n]) { seen['#' + n] = 1; to.push({ type: 'channel', name: n }); }
+      } else if (t.type === 'locChannel') {
+        if (!seen.locChannel) { seen.locChannel = 1; to.push({ type: 'locChannel' }); }
       } else if (t.type === 'user') {
         var who = typeof t.id === 'string' && has(known, t.id) ? known[t.id] : null;
         if (!who) { err('to', 'Такої людини немає серед користувачів — оновіть сторінку.'); return; }
@@ -230,7 +239,8 @@
     return 'завжди';
   }
   function toLabel(env, t, known) {
-    if (t.type === 'channel') return { type: 'channel', label: '#' + t.name };
+    if (t.type === 'channel') { var nm = String(t.name == null ? '' : t.name).replace(/^#+/, ''); return { type: 'channel', label: nm ? '#' + nm : t.id ? 'канал ' + t.id : '#' }; }
+    if (t.type === 'locChannel') return { type: 'locChannel', label: LOC_CHANNEL_LABEL };
     var u = has(known, t.id) ? known[t.id] : null;
     return { type: 'user', id: t.id, label: (u ? u.name + (u.kind === 'addr' && !u.active ? ' (вимкнено)' : '') : 'Немає в списку') + ' · особисто' };
   }

@@ -9,7 +9,12 @@
   var DEF = { daily: 7, weekly: 4, monthly: 6, maxBytes: 2 * GB };
   var LIM = { daily: [1, 31], weekly: [0, 12], monthly: [0, 24], maxBytes: [100 * MB, 50 * GB] };
   var FIELDS = ['daily', 'weekly', 'monthly', 'maxBytes'];
-  var LABEL = { daily: 'Щоденних копій', weekly: 'Щотижневих копій', monthly: 'Щомісячних копій', maxBytes: 'Місце для всіх копій' };
+  var DEF_AT = '20:00', AT_RE = /^([01]\d|2[0-3]):[0-5]\d$/, SLACK_TO_RE = /^[CGUW][A-Z0-9-]{6,20}$/;   // дефіс — для демо-ID на кшталт C-DEMO-01
+  var MSG_AT = 'Час щоденної копії — у форматі ГГ:ХХ за Києвом, наприклад 20:00.';
+  var MSG_TO = 'Куди — Slack-ID каналу (починається з C чи G) або людини (U чи W), наприклад C-DEMO-01.';
+  var MSG_TO_NEED = 'Вкажіть, куди надсилати копію: Slack-ID каналу чи людини.';
+  var LABEL = { daily: 'Щоденних копій', weekly: 'Щотижневих копій', monthly: 'Щомісячних копій', maxBytes: 'Місце для всіх копій',
+    at: 'Час щоденної копії', slackOn: 'Копія в Slack', slackTo: 'Куди надсилати копію' };
   var MSG = { daily: 'Щоденних — ціле число від 1 до 31.', weekly: 'Щотижневих — ціле число від 0 до 12.',
     monthly: 'Щомісячних — ціле число від 0 до 24.', maxBytes: 'Місце для всіх копій — від 100 МБ (0,1 ГБ) до 50 ГБ.' };
   var SCHEMA = '0009_people_v3', HISTORY_DAYS = 183, DISK_GB = 476, DISK_USED_GB = 138;
@@ -49,14 +54,29 @@
     return y + '-W' + (Math.floor((t.getTime() - Date.UTC(y, 0, 1)) / (7 * D)) + 1);
   }
   function isInt(n, lim) { return typeof n === 'number' && Math.floor(n) === n && n >= lim[0] && n <= lim[1]; }
-  function okPolicy(p) { p = obj(p); return FIELDS.every(function (k) { return isInt(p[k], LIM[k]); }); }
+  function okPolicy(p) {
+    p = obj(p);
+    return FIELDS.every(function (k) { return isInt(p[k], LIM[k]); }) && (p.at === undefined || (typeof p.at === 'string' && AT_RE.test(p.at))) &&
+      (p.slackOn === undefined || typeof p.slackOn === 'boolean') && (p.slackTo === undefined || p.slackTo === '' || (typeof p.slackTo === 'string' && SLACK_TO_RE.test(p.slackTo)));
+  }
 
   function store(env) {
     var s = obj(env.storage.get(KEY, null));
     return { policy: okPolicy(s.policy) ? s.policy : null, meta: s.meta && typeof s.meta === 'object' ? s.meta : null,
       manual: Array.isArray(s.manual) ? s.manual.filter(function (x) { return typeof x === 'string'; }) : [], verified: obj(s.verified) };
   }
-  function policyOf(st) { var p = st.policy || DEF; return { daily: p.daily, weekly: p.weekly, monthly: p.monthly, maxBytes: p.maxBytes }; }
+  function policyOf(st) {
+    var p = st.policy || DEF;
+    return { daily: p.daily, weekly: p.weekly, monthly: p.monthly, maxBytes: p.maxBytes, at: p.at || DEF_AT, slackOn: p.slackOn === true, slackTo: p.slackTo || '' };
+  }
+  function atKyiv(day, at) {
+    var m = Date.parse(day + 'T00:00:00Z'), mins = Number(at.slice(0, 2)) * 60 + Number(at.slice(3, 5));
+    for (var off = 3; off >= 2; off--) {
+      var iso = new Date(m + (mins - off * 60) * 60000).toISOString();
+      if (P.fmt.time(iso) === at) return iso;
+    }
+    return new Date(m + (mins - 120) * 60000).toISOString();
+  }
 
   function auditStats(env) {
     var list = env.audits().slice().sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0; });
@@ -184,10 +204,10 @@
   P.demoApis.push({
     admBackups: function (p, me, env) {
       if (!A().isAdmin(me)) return C.forbidden();
-      var st = store(env), pol = policyOf(st), items = build(env, st, pol), bytes = totalOf(items), now = env.now().toISOString(), next = at03(env.today);
-      if (next <= now) next = at03(addDays(env.today, 1));
+      var st = store(env), pol = policyOf(st), items = build(env, st, pol), bytes = totalOf(items), now = env.now().toISOString(), next = atKyiv(env.today, pol.at);
+      if (next <= now) next = atKyiv(addDays(env.today, 1), pol.at);
       return { ok: true, asOf: now, head: headOf(items, now), policy: pol, totals: { count: items.length, bytes: bytes, diskFreePct: diskFreePct(bytes) }, items: items.map(pub),
-        schedule: { at: '03:00', next: next },
+        schedule: { at: pol.at, next: next }, slack: null,   // slack — стан відправки дає лише справжній сервер
         offsite: { set: false, hint: 'Усі копії лежать на тому самому ноутбуці, що й база. Потрібен окремий диск або другий компʼютер, куди щодня копіюється тека копій.' },
         restore: { text: RESTORE, note: RESTORE_NOTE } };
     },
@@ -218,7 +238,11 @@
     admBackupPolicy: function (p, me, env) {
       if (!A().isAdmin(me)) return C.forbidden();
       var st = store(env);
-      return { ok: true, policy: policyOf(st), def: Object.assign({}, DEF), limits: JSON.parse(JSON.stringify(LIM)), changed: st.meta };
+      return { ok: true, policy: policyOf(st), def: Object.assign({ at: DEF_AT, slackOn: false, slackTo: '' }, DEF), limits: JSON.parse(JSON.stringify(LIM)), changed: st.meta };
+    },
+    admBackupSlackNow: function (p, me) {
+      if (!A().isAdmin(me)) return C.forbidden();
+      return C.fail('not_ready', 'На тестовому сайті копія в Slack не надсилається — це робить лише справжній сервер.');
     },
     admBackupPolicySave: function (p, me, env) {
       if (!A().isAdmin(me)) return C.forbidden();
@@ -228,11 +252,22 @@
         var n = typeof p[k] === 'string' && p[k].trim() !== '' ? Number(p[k].replace(',', '.')) : p[k];
         if (isInt(n, LIM[k])) v[k] = n; else errs.push({ field: k, message: MSG[k] });
       });
+      v.at = was.at; v.slackOn = was.slackOn; v.slackTo = was.slackTo;
+      if (p.at !== undefined) { var at = typeof p.at === 'string' ? p.at.trim() : ''; if (AT_RE.test(at)) v.at = at; else errs.push({ field: 'at', message: MSG_AT }); }
+      if (p.slackOn !== undefined) { if (typeof p.slackOn === 'boolean') v.slackOn = p.slackOn; else errs.push({ field: 'slackOn', message: 'Надсилати в Slack — так чи ні.' }); }
+      if (p.slackTo !== undefined) {
+        var to = typeof p.slackTo === 'string' ? p.slackTo.trim() : '';
+        if (to === '' || SLACK_TO_RE.test(to)) v.slackTo = to; else errs.push({ field: 'slackTo', message: MSG_TO });
+      }
+      if (!errs.length && v.slackOn && !v.slackTo) errs.push({ field: 'slackTo', message: MSG_TO_NEED });
       if (errs.length) return C.fail('validation', errs[0].message, errs);
       FIELDS.forEach(function (k) {
         if (v[k] !== was[k]) rows.push([LABEL[k], k === 'maxBytes' ? fmtBytes(was[k]) : String(was[k]), k === 'maxBytes' ? fmtBytes(v[k]) : String(v[k])]);
       });
-      st.policy = FIELDS.every(function (k) { return v[k] === DEF[k]; }) ? null : v;
+      if (v.at !== was.at) rows.push([LABEL.at, was.at, v.at]);
+      if (v.slackOn !== was.slackOn) rows.push([LABEL.slackOn, was.slackOn ? 'так' : 'ні', v.slackOn ? 'так' : 'ні']);
+      if (v.slackTo !== was.slackTo) rows.push([LABEL.slackTo, was.slackTo || '—', v.slackTo || '—']);
+      st.policy = FIELDS.every(function (k) { return v[k] === DEF[k]; }) && v.at === DEF_AT && !v.slackOn && !v.slackTo ? null : v;
       if (rows.length) st.meta = { at: env.now().toISOString(), by: me.id, byName: me.name, rows: rows };
       prune(st, build(env, st, policyOf(st))); save(env, st);
       A().log(env, me, 'Резервні копії', 'Правило зберігання', rows);
@@ -251,7 +286,8 @@
     var st = store(env), pol = policyOf(st), items = build(env, st, pol), bytes = totalOf(items), s = serverState(env, bytes);
     var last = items[0] || null, ver = items.map(function (x) { return x.verifiedAt; }).filter(Boolean).sort().pop() || null;
     return {
-      backups: { count: items.length, totalBytes: bytes, last: last ? { at: last.at, ok: last.ok, bytes: last.bytes } : null, lastVerifiedAt: ver, policy: pol },
+      backups: { count: items.length, totalBytes: bytes, last: last ? { at: last.at, ok: last.ok, bytes: last.bytes } : null, lastVerifiedAt: ver,
+        policy: { daily: pol.daily, weekly: pol.weekly, monthly: pol.monthly, maxBytes: pol.maxBytes } },   // без Slack-ID: «Огляд» його не показує
       server: { ok: s.health.ok && s.services.every(function (x) { return x.state === 'RUNNING'; }), uptimeSec: s.health.uptimeSec, diskFreePct: s.resources.diskFreePct,
         errors24h: s.errors24h, certDaysLeft: s.network.cert.daysLeft, services: s.services.map(function (x) { return { id: x.id, label: x.label, state: x.state }; }) }
     };

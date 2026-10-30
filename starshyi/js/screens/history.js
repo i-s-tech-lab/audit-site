@@ -4,6 +4,7 @@
   var STEP = 50, TOP = 5;   // TOP — скільки видів браку видно без гортання
   var LV = ['fix', 'repair', 'scrap'];
   var DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var AUDIT_RE = /^[A-Za-z0-9_.\-]{1,64}$/;   // номер аудиту з адреси (?audit=): AUD-РРРРММДД-ХХХХХХ або старий номер
   var KEYS = { dep: 'deps', product: 'product', defect: 'defect', worker: 'worker', auditor: 'auditor', q: 'q', mode: 'mode', order: 'order', d1: 'd1', d2: 'd2' };
   var hf = blank();
   var pin = null;   // день, зафіксований кліком на графіку: це НЕ фільтр, лише «тримати числа цього дня на екрані»
@@ -199,6 +200,7 @@
     var data = null;    // остання відповідь сервера
     var chart = null;   // контролер графіка (P.srChart.mount)
     var sig = '';       // «відбиток» даних графіка: не змінився — графік не перемальовуємо (обраний діапазон і плашка не блимають)
+    var openId = ctx.query && AUDIT_RE.test(ctx.query.audit || '') ? ctx.query.audit : '';   // аудит із посилання — відкрити один раз (v1.6)
 
     function tipHtml(an, list, title, sub) {
       var s = sumDays(list), df = an.defect;
@@ -275,6 +277,7 @@
         if (!keep || !fbox.innerHTML) fbox.innerHTML = filters(r);
         else fbox.querySelector('#hs-picked').innerHTML = pickedHtml(r);   // рядок «Обрано» оновлюємо завжди
         paint(r);
+        if (openId) { var id = openId; openId = ''; P.srChart.hide(); P.srHist.openAudit(id); }   // посилання «Відкрити в Аудиті» (v1.6)
       });
     }
     function change() { hf.limit = STEP; load(); }

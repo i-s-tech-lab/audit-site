@@ -38,7 +38,10 @@
         if (t && deptTypes[t.deptTypeId]) types[id] = { id: id, name: t.name, level: lvOf(env, id), pieces: 0 };
       });
       var workers = {};
-      listOf(st.worker).forEach(function (code) {
+      listOf(st.worker).forEach(function (entry) {
+        var cut = entry.indexOf(':'), scoped = cut > 0 && has(env.ix.loc, entry.slice(0, cut));
+        if (scoped && entry.slice(0, cut) !== loc.id) return;   // зірочка працівника з іншої локації — тут не показуємо
+        var code = scoped ? entry.slice(cut + 1) : entry;
         var w = env.ix.worker[loc.id + ':' + code];
         if (w && (!depId || w.departmentId === depId)) workers[code] = { code: code, name: w.name, pieces: 0, checked: 0 };
       });

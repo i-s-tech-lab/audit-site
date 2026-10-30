@@ -29,14 +29,34 @@
     return arr(d && d.guilty).reduce(function (s, g) { var q = toNum(g && g.qty); return s + (isInt(q) && q >= 1 ? q : 0); }, 0);
   }
 
+  var NONE = Object.create(null);   // порожній покажчик (без прототипу: «constructor» не знайдеться)
+  function look(map, k) { return typeof k === 'string' ? map[k] : undefined; }
+  P.demoValidateIndex = function (db) {
+    function M() { return Object.create(null); }
+    var X = { dep: M(), prod: M(), types: M(), locCodes: M(), depCodes: M(), worker: M() };
+    db.departments.forEach(function (d) { if (!(d.id in X.dep)) X.dep[d.id] = d; });
+    db.products.forEach(function (x) { if (!(x.id in X.prod)) X.prod[x.id] = x; });
+    db.defectTypes.forEach(function (t) { (X.types[t.deptTypeId] = X.types[t.deptTypeId] || M())[t.id] = true; });
+    db.workers.forEach(function (w) {
+      (X.locCodes[w.locationId] = X.locCodes[w.locationId] || M())[w.code] = true;
+      (X.depCodes[w.departmentId] = X.depCodes[w.departmentId] || M())[w.code] = true;
+      var k = w.locationId + ':' + w.code;
+      if (!(k in X.worker)) X.worker[k] = w;
+    });
+    return X;
+  };
+
   P.demoValidateAudit = function (payload, ctx) {
     var L = C.LIMITS, db = ctx.db, p = payload || {}, errs = [];
     function add(field, message) { errs.push({ field: field, message: message }); }
 
-    var dep = db.departments.filter(function (d) { return d.id === p.departmentId && d.locationId === p.locationId; })[0];
+    var X = ctx.idx || null;   // v1.7: готові покажчики (необовʼязково); без них — перебір довідників, результат той самий
+    var dep = X ? look(X.dep, p.departmentId) : db.departments.filter(function (d) { return d.id === p.departmentId && d.locationId === p.locationId; })[0];
+    if (X && dep && dep.locationId !== p.locationId) dep = undefined;
     if (!p.locationId || !p.departmentId || !dep) { add('departmentId', 'Оберіть локацію і відділ.'); return errs; }
     var items = arr(p.items), orders = arr(p.orders), defects = arr(p.defects), workers = arr(p.checkedWorkers);
-    var locWorkers = db.workers.filter(function (w) { return w.locationId === p.locationId; }).map(function (w) { return w.code; });
+    var locWorkers = X ? null : db.workers.filter(function (w) { return w.locationId === p.locationId; }).map(function (w) { return w.code; });
+    var locCodes = X ? (look(X.locCodes, p.locationId) || NONE) : null;
 
     if (items.length > L.maxProducts) add('items', 'Забагато виробів: не більше ' + L.maxProducts + '.');
     if (orders.length > L.maxOrders) add('orders', 'Забагато замовлень: не більше ' + L.maxOrders + '.');
@@ -66,7 +86,7 @@
 
     var pairs = {};
     items.forEach(function (it, i) {
-      var prod = db.products.filter(function (x) { return it && x.id === it.productId; })[0];
+      var prod = X ? look(X.prod, it && it.productId) : db.products.filter(function (x) { return it && x.id === it.productId; })[0];
       if (!prod || prod.deptTypeId !== dep.deptTypeId) add('items[' + i + '].productId', 'Оберіть виріб зі списку для цього відділу.');
       var key = (it && it.productId) + '|' + (it && it.orderNo || '');
       if (pairs[key]) add('items[' + i + '].productId', 'Цей виріб уже є в списку.');
@@ -81,12 +101,13 @@
     var rowItem = defects.map(function (d, j) {
       var srcId = d && d.departmentId, other = !!srcId && srcId !== dep.id, src = dep, srcBad = false;
       if (other) {
-        src = db.departments.filter(function (x) { return x.id === srcId && x.locationId === p.locationId; })[0];
+        src = X ? look(X.dep, srcId) : db.departments.filter(function (x) { return x.id === srcId && x.locationId === p.locationId; })[0];
+        if (X && src && src.locationId !== p.locationId) src = undefined;
         if (!src) { srcBad = true; add('defects[' + j + '].departmentId', MSG_SRC_DEP); }
       }
       if (!srcBad) {
-        var types = db.defectTypes.filter(function (t) { return t.deptTypeId === src.deptTypeId; }).map(function (t) { return t.id; });
-        if (types.indexOf(d && d.defectTypeId) < 0) add('defects[' + j + '].defectTypeId', MSG_DEF_TYPE);
+        var types = X ? (look(X.types, src.deptTypeId) || NONE) : db.defectTypes.filter(function (t) { return t.deptTypeId === src.deptTypeId; }).map(function (t) { return t.id; });
+        if (X ? !look(types, d && d.defectTypeId) : types.indexOf(d && d.defectTypeId) < 0) add('defects[' + j + '].defectTypeId', MSG_DEF_TYPE);
       }
       var idx = -1;
       items.forEach(function (it, i) { if (idx < 0 && d && it && it.productId === d.productId && (it.orderNo || null) === (d.orderNo || null)) idx = i; });
@@ -96,8 +117,8 @@
       guilty.forEach(function (g, k) {
         if (other) {
           var code = g ? g.workerCode : null;
-          var inSrc = !srcBad && db.workers.some(function (w) { return w.departmentId === src.id && w.code === code; });
-          var known = db.workers.filter(function (w) { return w.locationId === p.locationId && w.code === code; })[0];
+          var inSrc = !srcBad && (X ? !!look(look(X.depCodes, src.id) || NONE, code) : db.workers.some(function (w) { return w.departmentId === src.id && w.code === code; }));
+          var known = X ? (typeof code === 'string' ? X.worker[p.locationId + ':' + code] : undefined) : db.workers.filter(function (w) { return w.locationId === p.locationId && w.code === code; })[0];
           if (!g || (code !== '' && !srcBad && !inSrc)) add('defects[' + j + '].guilty[' + k + ']', 'Працівника «' + (known ? known.name : code) + '» немає у відділі, звідки брак.');
         } else if (!g || (g.workerCode !== '' && workers.indexOf(g.workerCode) < 0)) add('defects[' + j + '].guilty[' + k + ']', 'Винний має бути серед перевірених працівників.');
         var q = toNum(g && g.qty);
@@ -123,7 +144,7 @@
     }
 
     workers.forEach(function (code) {
-      if (code !== '' && locWorkers.indexOf(code) < 0) add('checkedWorkers', 'Працівника «' + code + '» немає в довіднику цієї локації. Додайте його у списку вибору.');
+      if (code !== '' && (X ? !look(locCodes, code) : locWorkers.indexOf(code) < 0)) add('checkedWorkers', 'Працівника «' + code + '» немає в довіднику цієї локації. Додайте його у списку вибору.');
     });
 
     if (typeof p.comment === 'string' && p.comment.length > L.maxComment) add('comment', 'Коментар задовгий: не більше ' + L.maxComment + ' знаків.');

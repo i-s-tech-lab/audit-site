@@ -47,6 +47,8 @@
   ];
   var KINDS = [['manual', 'Зроблені вручну'], ['daily', 'Щоденні'], ['weekly', 'Щотижневі'], ['monthly', 'Щомісячні']];
   var POLICY = [['daily', 'Щоденних копій', 'Від 1 до 31.'], ['weekly', 'Щотижневих копій', 'Від 0 до 12.'], ['monthly', 'Щомісячних копій', 'Від 0 до 24.']];
+  function mask(id) { id = String(id || ''); return id.length > 5 ? id.charAt(0) + '…' + id.slice(-3) : id ? '…' : ''; }
+  function sentText(l) { return nextText(l.at) + (l.bytes ? ' · ' + bytes(l.bytes) : ''); }
   function nextText(iso) {
     var d = Math.round((Date.parse(P.fmt.dayKey(iso) + 'T12:00:00Z') - Date.parse(P.fmt.dayKey(new Date()) + 'T12:00:00Z')) / 86400000);
     return (d <= 0 ? 'сьогодні' : d === 1 ? 'завтра' : P.fmt.date(iso)) + ', ' + P.fmt.time(iso);
@@ -89,7 +91,7 @@
         '<p class="banner__text">' + esc(h.error || 'Причину записано в журнал копій на сервері (backup.log).') + ' Спробуйте «Зробити копію зараз»; не допоможе — перевірте сервер.</p></div></div>';
       return '';
     }
-    function watch() {
+    function watch(kind) {
       if (poll) return;
       pollUntil = Date.now() + POLL_MAX_MS;
       poll = root.setInterval(function () {
@@ -97,13 +99,41 @@
         P.srv('admBackups', {}).then(function (r) {
           if (!poll || !ctx.alive() || !r.ok) return;
           data = r; draw(r);
-          if (r.running) return;
+          if (kind === 'slack' ? r.slack && r.slack.sending : r.running) return;
           root.clearInterval(poll); poll = null;
+          if (kind === 'slack') {   // v1.2: відправка в Slack закінчилась — результат
+            var sl = r.slack && r.slack.last;
+            if (sl) P.toast(sl.ok ? 'ok' : 'danger', sl.ok ? 'Копію надіслано в Slack' : 'Копію не надіслано в Slack', sl.ok ? bytes(sl.bytes) + ', зашифровано.' : (sl.error || ''));
+            return;
+          }
           var failed = r.head && r.head.state === 'failed';
           P.toast(failed ? 'danger' : 'ok', failed ? 'Копію не зроблено' : 'Копію зроблено',
             failed ? (r.head.error || '') : (r.items[0] ? bytes(r.items[0].bytes) + ', таблиць ' + r.items[0].tables + '.' : ''));
         });
       }, POLL_MS);
+    }
+    function slackCard(r) {
+      var pol = r.policy, s = r.slack, on = !!pol.slackOn, to = s ? s.to : mask(pol.slackTo), badge, rows = '';
+      if (!on) badge = '<span class="badge">вимкнено</span>';
+      else if (s && !s.keySet) badge = '<span class="badge badge--warn">увімкнено, але пароль копій не задано</span>';
+      else if (s && !s.tokenSet) badge = '<span class="badge badge--warn">увімкнено, але в сервера немає ключа Slack-бота</span>';
+      else if (s && s.sending) badge = '<span class="badge badge--info"><span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>надсилається…</span>';
+      else badge = '<span class="badge badge--ok">' + P.ic('check', 'ui-icon--sm') + 'увімкнено</span>';
+      rows += kv('Стан', badge);
+      if (on) rows += kv('Куди', esc(to || '—'));
+      if (s) {
+        rows += kv('Остання відправка', s.last ? (s.last.ok ? esc(sentText(s.last)) + ' · зашифровано'
+          : '<span class="adm-dim">не вдалася, ' + esc(nextText(s.last.at)) + ':</span> ' + esc(s.last.error || 'причина невідома')) : '<span class="adm-dim">ще не було</span>');
+        rows += kv('Пароль копій', s.keySet ? '<span class="badge badge--ok">задано</span>'
+          : '<span class="badge badge--warn">не задано</span> <span class="adm-dim">— на сервері: npm run server:backup-key</span>');
+      }
+      return '<section class="card"><div class="adm-sys-t"><h3 class="adm-card-t">' + P.ic('export', 'ui-icon--sm') + 'Копія в Slack</h3>' +
+        '<button class="btn btn--secondary btn--sm" type="button" data-act="bk-policy">' + P.ic('edit', 'ui-icon--sm') + 'Редагувати</button></div>' +
+        '<dl class="kv adm-sys-kv">' + rows + '</dl>' +
+        '<p class="hint">Після кожної копії — щоденної і після «Зробити копію зараз» — сервер надсилає її у Slack. У Slack іде лише <b>зашифрований</b> файл — відкрити його можна лише паролем копій.</p>' +
+        (real ? '<button class="btn btn--secondary btn--sm" type="button" data-act="bk-slack"' + (!on || !s || !s.keySet || s.sending || !r.items.length ? ' disabled' : '') + '>' +
+            P.ic('export', 'ui-icon--sm') + 'Надіслати останню копію в Slack зараз</button>'
+          : '<p class="hint">На тестовому сайті копія в Slack не надсилається — тут можна лише налаштувати правило.</p>') + '</section>';
     }
     function draw(r) {
       if (r.configured === false) { drawOff(r); return; }
@@ -121,9 +151,11 @@
         '<div class="adm-sys-grid">' +
           '<section class="card"><div class="adm-sys-t"><h3 class="adm-card-t">' + P.ic('settings', 'ui-icon--sm') + 'Правило зберігання' + A.help('admin.system.policy') + '</h3>' +
             '<button class="btn btn--secondary btn--sm" type="button" data-act="bk-policy">' + P.ic('edit', 'ui-icon--sm') + 'Редагувати</button></div>' +
-            '<dl class="kv adm-sys-kv">' + POLICY.map(function (f) { return kv(f[1], H.num(pol[f[0]]), 'admin.system.' + f[0]); }).join('') +
+            '<dl class="kv adm-sys-kv">' + kv('Час щоденної копії', esc(pol.at || r.schedule.at) + ' за Києвом', 'admin.system.schedule') +
+              POLICY.map(function (f) { return kv(f[1], H.num(pol[f[0]]), 'admin.system.' + f[0]); }).join('') +
               kv('Місце для всіх копій', esc(bytes(pol.maxBytes)), 'admin.system.maxBytes') + '</dl>' +
             '<p class="hint">Найновішу копію і найновішу перевірену правило не видаляє ніколи.</p></section>' +
+          slackCard(r) +
           '<section class="card"><h3 class="adm-card-t">' + P.ic(r.offsite.set ? 'success' : 'warning', 'ui-icon--sm') + 'Друга копія на іншому пристрої — ' +
             (r.offsite.set ? 'налаштовано' : 'ще не налаштовано') + A.help('admin.system.offsite') + '</h3>' +
             '<p class="hint">' + esc(r.offsite.hint) + '</p></section>' +
@@ -141,24 +173,32 @@
         if (!ctx.alive()) return;
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
         data = r; draw(r);
-        if (r.running) watch();
+        if (r.running) watch(); else if (r.slack && r.slack.sending) watch('slack');
       });
     }
     function editPolicy() {
-      var pol = data.policy;
+      var pol = data.policy, st = { slackOn: !!pol.slackOn };
       var body = '<div class="adm-form">' + POLICY.map(function (f) {
         return A.field(f[0], f[1], A.input(f[0], pol[f[0]], ' inputmode="numeric" autocomplete="off" maxlength="3"'), f[2], 'admin.system.' + f[0]);
       }).join('') +
         A.field('maxBytes', 'Місце для всіх копій, ГБ', A.input('maxGb', String(Math.round(pol.maxBytes / GB * 100) / 100).replace('.', ','), ' inputmode="decimal" autocomplete="off" maxlength="6"'),
           'Від 0,1 до 50 ГБ. Коли копії займають більше — найстаріші видаляються.', 'admin.system.maxBytes') +
-        '<p class="hint">Нове правило застосовується під час наступної копії. Найновішу копію і найновішу перевірену воно не видаляє.</p></div>';
+        '<p class="hint">Нове правило застосовується під час наступної копії. Найновішу копію і найновішу перевірену воно не видаляє.</p>' +
+        A.field('at', 'Час щоденної копії (за Києвом)', A.input('at', pol.at || data.schedule.at, ' inputmode="numeric" autocomplete="off" maxlength="5" placeholder="20:00"'),
+          'У форматі ГГ:ХХ, наприклад 20:00.', 'admin.system.schedule') +
+        '<div class="field" data-f="slackOn"><span class="label">Надсилати копію в Slack</span>' + A.seg('slackOn', [['true', 'Увімкнено'], ['false', 'Вимкнено']], String(st.slackOn)) +
+          '<span class="hint">У Slack іде лише зашифрований файл. Спершу на сервері треба задати пароль копій: npm run server:backup-key.</span></div>' +
+        A.field('slackTo', 'Куди (Slack-ID каналу чи людини)', A.input('slackTo', pol.slackTo || '', ' autocomplete="off" maxlength="21" placeholder="C…"'),
+          'Де взяти: у Slack відкрийте канал чи профіль людини → «…» → «Скопіювати ID». Канал починається з C чи G, людина — з U чи W. Бота треба додати в канал.') + '</div>';
       A.modal({ size: 'sm', title: 'Правило зберігання', sub: esc(pol.daily + ' · ' + pol.weekly + ' · ' + pol.monthly + ' · ' + bytes(pol.maxBytes)), body: body,
         foot: A.cancelBtn() + A.saveBtn('Зберегти'),
         onMount: function (el) { A.enterSubmits(el); var i = A.q(el, 'input.input'); if (i) i.select(); },
-        on: { 'adm-save': function (b, e, layer) {
+        on: { 'adm-seg': function (t, e, layer) { st.slackOn = A.segPick(layer, t) === 'true'; },
+          'adm-save': function (b, e, layer) {
           var el = layer.el, gb = Number(A.val(el, 'maxGb').trim().replace(',', '.'));
           var p = { daily: A.val(el, 'daily').trim(), weekly: A.val(el, 'weekly').trim(), monthly: A.val(el, 'monthly').trim(),
-            maxBytes: A.val(el, 'maxGb').trim() && isFinite(gb) ? Math.round(gb * GB) : '' };
+            maxBytes: A.val(el, 'maxGb').trim() && isFinite(gb) ? Math.round(gb * GB) : '',
+            at: A.val(el, 'at').trim(), slackOn: st.slackOn, slackTo: A.val(el, 'slackTo').trim().toUpperCase() };
           b.disabled = true;
           P.srv('admBackupPolicySave', p).then(function (r) {
             b.disabled = false;
@@ -205,6 +245,14 @@
       });
     });
     ctx.on('bk-policy', editPolicy);
+    ctx.on('bk-slack', function (t) {   // v1.2: «Надіслати останню копію в Slack зараз» (лише справжній сервер); відправка йде у фоні
+      t.disabled = true;
+      P.srv('admBackupSlackNow', {}).then(function (r) {
+        if (!r.ok) { t.disabled = false; if (r.code !== 'forbidden') P.toast('warn', 'Не надіслано', r.error || ''); return; }
+        P.toast('info', 'Надсилаю в Slack', r.message || '');
+        if (ctx.alive()) load();
+      });
+    });
     ctx.on('bk-more', function (t) {
       var x = find(t.getAttribute('data-id'));
       if (!x) return;

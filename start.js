@@ -9,7 +9,7 @@
     hide('.st-demo');
     hide('.st__how');
     var foot = doc.querySelector('.st__foot');
-    if (foot) foot.innerHTML = '<a href="vhid/">Перевірка входу через Slack</a>';   // старий дизайн — лише в тестовій версії
+    if (foot) foot.innerHTML = '<a href="vhid/?check=1">Перевірка входу через Slack</a>';   // старий дизайн — лише в тестовій версії
     var lead = doc.querySelector('.st__lead');
     if (lead) lead.textContent = 'Увійдіть через Slack — додаток сам відкриє ваш кабінет.';
     var list = doc.querySelector('section[aria-label="Профілі"]');

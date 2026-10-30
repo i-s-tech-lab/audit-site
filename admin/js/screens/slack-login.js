@@ -60,7 +60,7 @@
               return '<li><b>' + esc(s[0]) + '.</b> <span class="hint">' + esc(s[1]) + '</span></li>'; }).join('') + '</ol></details></section>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('access', 'ui-icon--sm') + 'Перевірка справжнього входу</h3>' +
           '<p class="hint">Окрема сторінка показує, чи працює справжній вхід: натисніть «Увійти в Аудит» у Slack — посилання відкриє її вже зі входом, і там буде видно ваше імʼя, роль і локації.</p>' +
-          '<div><a class="btn btn--secondary" href="../vhid/" target="_blank" rel="noopener">' + P.ic('login', 'ui-icon--sm') + 'Відкрити сторінку перевірки</a></div></section>' +
+          '<div><a class="btn btn--secondary" href="../vhid/?check=1" target="_blank" rel="noopener">' + P.ic('login', 'ui-icon--sm') + 'Відкрити сторінку перевірки</a></div></section>' +
         '<section class="card"><h3 class="adm-card-t">' + P.ic('login', 'ui-icon--sm') + 'Кнопка входу' + A.help('admin.slack.button') + '</h3>' +
           '<p class="hint">Одна кнопка «Увійти в Аудит» для всіх. Вона вже є в додатку «Аудит якості» у Slack (вкладка «Головна»). Тут можна надіслати ще одну її копію — щоб закріпити в каналі або показати окремій людині.</p>' +
           '<div class="adm-person__acts" style="flex-wrap:wrap"><button class="btn btn--secondary" type="button" data-act="sl-send" data-kind="channel">' + P.ic('slack', 'ui-icon--sm') + 'Надіслати в канал</button>' +

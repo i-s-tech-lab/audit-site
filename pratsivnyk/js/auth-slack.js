@@ -4,6 +4,8 @@
   var esc = P.esc || function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
   var KEY = 'audit:session';   // справжня сесія в localStorage (не P.store: той додає префікс тестових даних)
+  var AFTER_KEY = 'audit:after-login';   // куди повернутися після входу: { url: шлях з адреси, at: мс }. v1.14
+  var AFTER_TTL = 30 * 60 * 1000;        // ціль свіжа 30 хвилин (вхід через Slack — це кілька хвилин, а не години)
   var VIEW_KEY = 'audit:view-loc';   // локація, яку адмін дивиться «як профіль» (справжній режим; у тестовому це сесія адміна на демо-сервері). v1.9
   var MSG = {
     not_listed: 'Вас ще немає в списку доступу. Адміністратор уже бачить ваш запит — коли він вас додасть, натисніть «Увійти в Аудит» у Slack ще раз.',
@@ -93,7 +95,7 @@
     A.init = function () {
       if (!A.real()) return Promise.resolve();
       var h = String((env.location && env.location.hash) || ''), m = /^#login=([^&]+)/.exec(h), e = /^#login_error=([^&]+)/.exec(h);
-      if (!m && !e) return Promise.resolve();
+      if (!m && !e) { A.rememberHere(); return Promise.resolve(); }   // v1.14: сторінка без сесії запамʼятовує, куди йшли
       try { env.history.replaceState(null, '', env.location.pathname + (env.location.search || '')); } catch (x) { /* без історії — токен усе одно використаємо */ }
       if (e) {
         var code; try { code = decodeURIComponent(e[1]); } catch (x) { code = ''; }   // зіпсована адреса — звичайна помилка сервера
@@ -101,10 +103,58 @@
       }
       var token; try { token = decodeURIComponent(m[1]); } catch (x) { token = m[1]; }
       return A.call('/exchange', { token: token }).then(function (r) {
-        if (r && r.ok && r.session) { env.storage.set(KEY, { session: r.session, expiresAt: r.expiresAt || null, me: r.me || null }); return; }
+        if (r && r.ok && r.session) { env.storage.set(KEY, { session: r.session, expiresAt: r.expiresAt || null, me: r.me || null }); A.followTarget(); return; }
         if (r && Object.prototype.hasOwnProperty.call(MSG, r.code)) errorMsg = MSG[r.code];
         else if (r && r.code === 'offline') errorMsg = MSG.server;
         else errorMsg = r && typeof r.error === 'string' && r.error ? r.error : MSG.expired;
+      });
+    };
+    function hereUrl() { var l = env.location || {}; return String(l.pathname || '/') + String(l.search || '') + String(l.hash || ''); }
+    A.remember = function (url) {
+      if (!A.real()) return false;
+      try { return env.storage.set(AFTER_KEY, { url: String(url || hereUrl()), at: now() }) !== false; } catch (x) { return false; }
+    };
+    A.rememberHere = function () {
+      try {
+        var l = env.location || {};
+        if (!A.real() || A.session() || /\/vhid\/?$/.test(String(l.pathname || ''))) return;
+        var hash = String(l.hash || '');
+        if (!l.search && (hash === '' || hash === '#' || hash === '#/')) return;
+        A.remember();
+      } catch (x) { /* без памʼяті — вхід спрацює, лише без повернення */ }
+    };
+    A.takeTarget = function () {
+      var t = null;
+      try {
+        t = env.storage.get(AFTER_KEY);
+        env.storage.del(AFTER_KEY);
+        if (!t || typeof t.url !== 'string' || !t.url || t.url.length > 2000 || typeof t.at !== 'number') return null;
+        var age = now() - t.at;
+        if (age < -60000 || age > AFTER_TTL) return null;
+        var l = env.location || {}, origin = l.origin || ((l.protocol || 'https:') + '//' + (l.host || 'site.invalid'));
+        var u = new URL(t.url, origin);
+        if (u.origin !== new URL(origin).origin) return null;   // чужий сайт (або //чужий, \чужий, javascript:) — ніколи
+        var out = u.pathname + u.search + u.hash;
+        if (out.indexOf('//') === 0 || out.indexOf('/\\') === 0) return null;   // «https://свій//чужий/x» чи «/.//чужий/x» — браузер прочитав би як чужий сайт
+        return out;
+      } catch (x) { return null; }
+    };
+    A.followTarget = function () {
+      try {
+        var t = A.takeTarget(), l = env.location || {};
+        if (!t || typeof l.replace !== 'function') return false;
+        var here = String(l.pathname || '/') + String(l.search || ''), cut = t.indexOf('#'), page = cut >= 0 ? t.slice(0, cut) : t;
+        if (t === here) return false;   // уже тут (токен зі сторінки вже прибрано)
+        if (page !== here) A.leaving = true;   // справжній перехід на іншу сторінку: ця сторінка нічого свого вже не робить (див. A.ready)
+        l.replace(t);
+        return true;
+      } catch (x) { return false; }
+    };
+    A.startReady = function () {
+      var p; try { p = Promise.resolve(A.init()).catch(function () {}); } catch (x) { p = Promise.resolve(); }
+      return p.then(function () {
+        if (!A.leaving) return;
+        return new Promise(function (resolve) { var t = setTimeout(resolve, 5000); if (t && t.unref) t.unref(); });
       });
     };
     A.takeError = function () { var t = errorMsg; errorMsg = ''; return t; };
@@ -118,7 +168,7 @@
       });
     };
     A.logout = function () {
-      var done = function () { env.storage.del(KEY); return { ok: true }; };
+      var done = function () { env.storage.del(KEY); env.storage.del(AFTER_KEY); return { ok: true }; };
       if (!A.session()) return Promise.resolve(done());
       return A.call('/logout', {}).then(done, done);
     };
@@ -310,7 +360,7 @@
     }
   };
 
-  A.ready = (function () { try { return Promise.resolve(A.init()).catch(function () {}); } catch (x) { return Promise.resolve(); } })();
+  A.ready = A.startReady();
   if (A.real() && P.backend) P.backend = A.install(P.backend);
 
   if (typeof module !== 'undefined' && module.exports) module.exports = createAuthSlack;

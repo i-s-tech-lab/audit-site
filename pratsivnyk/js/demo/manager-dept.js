@@ -118,7 +118,7 @@
       var locations = env.db.locations.filter(function (l) { return !many.ids || many.ids.indexOf(l.id) >= 0; }).map(function (l) {
         var list = X.auditsIn(env, l.id, rg.from, rg.to), workDays = X.dayCount(list), made = producedBy(env, l.id, rg.from, rg.to), k = X.kdSum(env, l.id, rg.from, rg.to);
         var depts = X.depsIn(env, l.id).filter(function (d) { return !tid || d.deptTypeId === tid; }).map(function (d) { return tileOf(env, d, list, workDays, made, k, rg); })
-          .filter(function (t) { return t.active || t.audits; });
+          .filter(function (t) { return t.active; });   // v1.6: вимкнені відділи не показуємо — як у старшого
         depts.forEach(function (t) { delete t.audits; });
         return { id: l.id, name: l.name, workDays: workDays, depts: depts };
       });

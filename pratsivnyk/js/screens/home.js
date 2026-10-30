@@ -42,7 +42,8 @@
     }
     html += '<button class="ui-btn ui-btn--primary home-cta" type="button" data-act="new">' + P.ic('add') + 'Новий аудит</button>';
     if (r.last) html += '<button class="ui-btn ui-btn--secondary home-repeat" type="button" data-act="repeat" data-id="' + esc(r.last) + '">' + P.ic('repeat') + 'Повторити минулий</button>';
-    html += '<section class="ui-card" aria-labelledby="h-mine"><div class="card-head"><h2 class="card-title" id="h-mine">Мої аудити сьогодні' + P.help.btn('w.home.mine') + '</h2></div>';
+    html += '<section class="ui-card" aria-labelledby="h-mine"><div class="card-head"><h2 class="card-title" id="h-mine">Мої аудити сьогодні' + P.help.btn('w.home.mine') + '</h2>' +
+      '<button class="ui-btn ui-btn--quiet ui-btn--sm" type="button" data-act="loc-all" style="margin-left:auto">Усі аудити локації</button></div>';
     if (!mine.length) return html + '<p class="card-sub">Тут зʼявляться аудити, які ви запишете сьогодні.</p></section></div>';
     html += '<div class="totals">' + stat(f.num(mine.length), 'аудити') + stat(f.num(checked), 'перевірено, шт', 'term.checked') +
       stat(f.num(rejected) + (checked ? ' · ' + f.pct(Math.round(rejected / checked * 1000) / 10) : ''), checked ? 'брак, шт · брак, %' : 'брак, шт', checked ? 'term.rate' : 'term.rejected') + '</div>';
@@ -94,10 +95,12 @@
           if (ctx.alive()) P.shell.rerender();
         });
       });
+      P.delegate(el, 'click', '[data-act="loc-all"]', function () { P.router.go('/audits'); });
       P.delegate(el, 'click', '[data-act="new"]', function () { P.router.go('/audit/new', { loc: ctx.loc }); });
       P.delegate(el, 'click', '[data-act="repeat"]', function (e, t) { P.auditRepeat.open(t.getAttribute('data-id'), { loc: ctx.loc }); });
       var since = el.querySelector('[data-since]');
       if (since && P.sinceLast && P.sinceLast.mount) P.sinceLast.mount(since, { scope: 'auditor', locationId: ctx.loc });
+      if (P.installHint) P.installHint.mount(el, ctx.me);
       P.delegate(el, 'click', '[data-audit]', function (e, t) { P.router.go('/audit/' + t.getAttribute('data-audit')); });
       P.delegate(el, 'click', '[data-act="draft-go"]', function () { P.router.go('/audit/new', { loc: ctx.loc, draft: '1' }); });
       P.delegate(el, 'click', '[data-act="draft-drop"]', function () {

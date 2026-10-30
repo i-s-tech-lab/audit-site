@@ -93,7 +93,7 @@
       (off ? '<span class="adm-loc__off"><span class="badge adm-badge-off">' + P.ic('power', 'ui-icon--sm') + 'вимкнена</span>' + help('admin.loc.off') + '</span>' : '') +
       '<span class="dtile__meta">' + H.num(l.departments) + ' ' + plural(l.departments, ['відділ', 'відділи', 'відділів']) + ' · ' +
         H.num(l.workers) + ' ' + plural(l.workers, ['працівник', 'працівники', 'працівників']) + '</span>' +
-      '<div class="adm-loc__set"><p>' + P.ic('slack', 'ui-icon--sm') + '<span><span class="adm-dim">Slack-канал:</span> ' + (l.slackChannel ? esc(l.slackChannel) : 'не задано') + help('admin.loc.slack') + '</span></p>' +
+      '<div class="adm-loc__set"><p>' + P.ic('slack', 'ui-icon--sm') + '<span><span class="adm-dim">Slack-канал:</span> ' + (l.slackChannel ? esc(l.slackChannel) + (l.slackBot ? '' : ' · бот не пише') : 'не задано') + help('admin.loc.slack') + '</span></p>' +
         '<p>' + P.ic('clock', 'ui-icon--sm') + '<span><span class="adm-dim">Нагадування:</span> ' + esc(remText(l.reminders)) + help('admin.loc.remind') + '</span></p></div>' +
       '<div class="dtile__nums"><div><b>' + H.num(t.audits) + '</b><span>' + plural(t.audits, ['аудит', 'аудити', 'аудитів']) + ' сьогодні</span></div>' +
         '<div>' + (t.audits ? '<b>' + H.num(t.rejected) + ' шт</b> · ' + H.pct(t.pct) : '<b>—</b>') + '<span>брак, шт · брак, %' + help('admin.loc.today') + '</span></div></div>' +
@@ -122,12 +122,14 @@
       });
     }
     function openEdit(l, part) {
-      var all = !part, rem = (l && l.reminders) || { on: false, from: 8, to: 17, every: 2 }, st = { on: rem.on };
+      var all = !part, rem = (l && l.reminders) || { on: false, from: 8, to: 17, every: 2 }, st = { on: rem.on, bot: !l || l.slackBot !== false };
       var titles = { name: 'Перейменувати локацію', channel: 'Slack-канал локації', remind: 'Нагадування «запишіть аудит»' };
       var body = '<div class="adm-form">' +
         (all || part === 'name' ? field('name', 'Назва', input('name', l ? l.name : '', ' autocomplete="off" maxlength="40" placeholder="Цех Г"')) : '') +
         (all || part === 'channel' ? field('slackChannel', 'Slack-канал', input('slackChannel', l ? l.slackChannel : '', ' autocomplete="off" maxlength="80" placeholder="#якість-цех-г"'),
-          'Назва каналу, як її видно в Slack. Порожнє поле — без каналу.', 'admin.loc.slack') : '') +
+          'Назва каналу, як її видно в Slack, або його код (C0…). Порожнє поле — без каналу.', 'admin.loc.slack') +
+          '<div class="field" data-f="slackBot"><span class="label">Бот пише в цей канал</span>' + seg('slackBot', [['true', 'Так'], ['false', 'Ні']], String(st.bot)) +
+            '<span class="hint">«Ні» — бот у цьому каналі мовчить: ні постів про аудити, ні інших повідомлень.</span></div>' : '') +
         (all || part === 'remind' ? '<div class="field" data-f="remOn"><span class="label">' + (all ? 'Нагадування «запишіть аудит»' : 'Нагадування') + help('admin.loc.remind') + '</span>' + seg('remOn', [['true', 'Увімкнено'], ['false', 'Вимкнено']], String(st.on)) + '</div>' +
           '<div class="adm-rem" data-rem' + (st.on ? '' : ' hidden') + '>' + field('remFrom', 'З', hours('remFrom', 0, 23, rem.from)) + field('remTo', 'До', hours('remTo', 1, 24, rem.to)) +
             field('remEvery', 'Кожні', '<select class="input" name="remEvery">' + [1, 2, 3, 4, 6, 8, 12].map(function (n) { return '<option value="' + n + '"' + (n === rem.every ? ' selected' : '') + '>' + n + ' год</option>'; }).join('') + '</select>') + '</div>' : '') +
@@ -136,11 +138,15 @@
         foot: cancelBtn() + saveBtn(l ? 'Зберегти' : 'Додати локацію', l ? 'save' : 'add'),
         onMount: function (el) { enterSubmits(el); },
         on: {
-          'adm-seg': function (t, e, layer) { st.on = segPick(layer, t) === 'true'; q(layer.el, '[data-rem]').hidden = !st.on; },
+          'adm-seg': function (t, e, layer) {
+            var yes = segPick(layer, t) === 'true';
+            if (t.getAttribute('data-k') === 'slackBot') { st.bot = yes; return; }
+            st.on = yes; q(layer.el, '[data-rem]').hidden = !st.on;
+          },
           'adm-save': function (t, e, layer) {
             var p = l ? { id: l.id } : {}, el = layer.el;
             if (all || part === 'name') p.name = val(el, 'name');
-            if (all || part === 'channel') p.slackChannel = val(el, 'slackChannel');
+            if (all || part === 'channel') { p.slackChannel = val(el, 'slackChannel'); p.slackBot = st.bot; }
             if ((all || part === 'remind') && (l || st.on)) p.reminders = { on: st.on, from: +val(el, 'remFrom'), to: +val(el, 'remTo'), every: +val(el, 'remEvery') };
             t.disabled = true;
             P.srv('adminLocationSave', p).then(function (r) {

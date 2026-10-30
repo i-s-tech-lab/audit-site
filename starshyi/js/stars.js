@@ -8,10 +8,16 @@
   function esc(s) { return P.esc ? P.esc(s) : String(s); }
   function ic(on) { return P.ic ? P.ic(on ? 'star-on' : 'star', 'ui-icon--sm') : ''; }
   function path(kind) { return 'lists.star:' + kind; }
+  function curLoc() { return P.sr && typeof P.sr.curLoc === 'function' ? P.sr.curLoc() : null; }
+  function keyOf(kind, id) { var loc = kind === 'worker' ? curLoc() : null; return loc ? loc + ':' + id : id; }
+  function active(kind) {
+    var loc = kind === 'worker' ? curLoc() : null, pre = loc ? loc + ':' : null;
+    return all(kind).map(function (e) { return pre && e.indexOf(pre) === 0 ? e.slice(pre.length) : e; });
+  }
   function okKind(kind) { return Object.prototype.hasOwnProperty.call(KINDS, kind); }
   function okId(id) { return typeof id === 'string' && ID_RE.test(id); }
   function all(kind) { return okKind(kind) && P.prefs ? P.prefs.get(path(kind), []) || [] : []; }
-  function on(kind, id) { return okId(id) && all(kind).indexOf(id) >= 0; }
+  function on(kind, id) { return okId(id) && active(kind).indexOf(id) >= 0; }
   function label(isOn, name) { return (isOn ? 'Не стежити за «' : 'Стежити за «') + name + '»'; }
 
   function html(kind, id, name) {
@@ -23,7 +29,7 @@
 
   function sort(list, kind, idOf) {
     var set = Object.create(null);
-    all(kind).forEach(function (id) { set[id] = 1; });
+    active(kind).forEach(function (id) { set[id] = 1; });
     var a = [], b = [];
     (list || []).forEach(function (x) { (set[String(idOf(x))] ? a : b).push(x); });
     return a.concat(b);
@@ -31,14 +37,14 @@
 
   function toggle(kind, id) {
     if (!okKind(kind) || !okId(id) || !P.prefs) return null;
-    var list = all(kind), i = list.indexOf(id);
-    if (i >= 0) list.splice(i, 1);
+    var list = all(kind), mine = keyOf(kind, id), wasOn = list.indexOf(mine) >= 0 || list.indexOf(id) >= 0;
+    if (wasOn) list = list.filter(function (e) { return e !== mine && e !== id; });   // знімаємо і новий запис (з локацією), і старий (лише код)
     else {
       if (list.length >= MAX) { if (P.toast) P.toast('warn', 'Забагато позначок', 'Можна стежити не більше ' + MAX + ' позицій одного виду. Зніміть непотрібні зірочки.'); return null; }
-      list.push(id);
+      list.push(mine);
     }
     P.prefs.set(path(kind), list.length ? list : null);
-    var now = i < 0;
+    var now = !wasOn;
     refresh(kind, id, now);
     if (P.emit) P.emit('stars:changed', { kind: kind, id: id, on: now });
     return now;

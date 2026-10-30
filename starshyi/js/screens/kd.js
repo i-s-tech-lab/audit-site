@@ -24,11 +24,6 @@
   K.week = function (a, b) { return 'тиждень ' + K.rangeShort(a, b); };
   K.weekNote = function (p, lastN) { return p.current ? 'триває · день ' + p.daysDone + ' з ' + p.days : p.n === lastN ? 'останній завершений' : ''; };
 
-  K.segNav = function (on, extra) {
-    return '<div class="kd-top"><div class="seg" style="flex:none">' + [['/kd', 'По відділах'], ['/kd/list', 'Список КД'], ['/kd/stats', 'Що після дій']].map(function (x) {
-      return '<a class="seg__btn' + (x[0] === on ? ' seg__btn--on' : '') + '" href="#' + x[0] + '" style="text-decoration:none">' + x[1] + '</a>';
-    }).join('') + '</div>' + (extra || '') + '</div>';
-  };
   K.earlyRatesText = function (R, max) {
     var list = (R && R.earlyRates) || [];
     return list.slice(0, max || list.length).map(function (x) { return 'на ' + K.num(x.n) + ' шт — від ' + K.pct(x.rate); }).join(', ');

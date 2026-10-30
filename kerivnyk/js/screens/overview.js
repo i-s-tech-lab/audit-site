@@ -114,7 +114,9 @@
     render: function (ctx) {
     var sel = (ctx.query && ctx.query.loc) || last, tileRow = null;
     function load() {
-      P.srv('mgrOverview', { from: ctx.period.from, to: ctx.period.to, locationId: sel }).then(show);
+      P.srv('mgrOverview', { from: ctx.period.from, to: ctx.period.to, locationId: sel }).then(function (r) {
+        return L.ready().then(function () { return r; });   // v1.10: перший показ — після профілю (≤ 1 с), щоб блоки не «стрибали»
+      }).then(show);
     }
     function show(r) {
       if (!ctx.alive()) return;

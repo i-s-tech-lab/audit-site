@@ -636,7 +636,7 @@
       if (twin) {
         if (twin.active === false) {
           var k = r.loc.id + ':' + twin.code;
-          st.edit[k] = Object.assign(st.edit[k] || {}, { active: true }, S.canManage(me) ? {} : { pending: true, addedBy: me.id, addedByName: me.name, addedAt: env.now().toISOString() });
+          st.edit[k] = Object.assign(st.edit[k] || {}, { active: true }, S.canManage(me) ? {} : { pending: true, reenabled: true, addedBy: me.id, addedByName: me.name, addedAt: env.now().toISOString() });   // reenabled — не «новий працівник» для «З вашого останнього входу» (30.10)
           save(env, K.workers, st);
           twin = env.ix.worker[k];
           journal(env, me, r.loc.id, 'workers', 'edit', twin.name, diff([['Стан', false, true], ['Звідки', null, 'форма аудиту']]));

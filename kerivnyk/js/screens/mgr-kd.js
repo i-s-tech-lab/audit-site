@@ -28,7 +28,6 @@
   function plus(d, k) { return new Date(ms(d) + k * 86400000).toISOString().slice(0, 10); }
   function between(a, b) { return a && b ? Math.round((ms(b) - ms(a)) / 86400000) : null; }
   function wdNo(d) { return new Date(ms(d)).getUTCDay() || 7; }
-  function weekStartOf(d, wd) { return plus(d, -((wdNo(d) - wd + 7) % 7)); }
   function firstReview(d, wd) { return plus(d, (wd - wdNo(d) + 7) % 7); }
   function wdDay(d) { return WD_SHORT[new Date(ms(d)).getUTCDay()] + ' ' + H().dayShort(d); }
   function canon(s) { return P.sr.KD_STATES[s] ? s : P.sr.kdStateOf(s); }
@@ -73,12 +72,6 @@
     if (!wd) return 'Тиждень — 7 днів · ' + th + ' · розбір раз на тиждень зранку';
     return 'Тиждень — з ' + WD_FROM[wd - 1] + ' по ' + WD_TO[(wd + 5) % 7] + ' · ' + th + ' · розбір ' + WD_EACH[wd - 1] + ' зранку';
   }
-  function lastWeek(kd) {
-    var wd = kd.cycle && kd.cycle.reviewWeekday;
-    if (!wd || !kd.today) return null;
-    var cur = weekStartOf(kd.today, wd), a = plus(cur, -7), b = plus(cur, -1);
-    return { start: a, end: b, label: a.slice(5, 7) === b.slice(5, 7) ? +a.slice(8) + '–' + H().dayShort(b) : H().dayShort(a) + '–' + H().dayShort(b) };
-  }
 
   function split(parts, label) {
     var tot = parts.reduce(function (s, x) { return s + (x[0] || 0); }, 0);
@@ -90,26 +83,6 @@
     return '<div class="mgr-kdbig"><span class="mgr-kdbig__l">' + esc(label) + (key ? K.help(key) : '') + '</span><b class="mgr-kdbig__v">' + val + '</b>' +
       (sub ? '<span class="mgr-kdbig__s">' + sub + '</span>' : '') + '</div>';
   }
-  function kk(label, key, val, sub, extra) {
-    return '<div class="mgr-kk"><span class="mgr-kk__l">' + esc(label) + K.help(key) + '</span><b class="mgr-kk__v">' + val + '</b>' +
-      (sub ? '<span class="mgr-kk__s">' + sub + '</span>' : '') + (extra || '') + '</div>';
-  }
-  function kpis(kd) {
-    var s = stats(kd), c = s.closed, h = H(), e = s.effect, low = s.lowered;
-    var parts = [[c.done, 'done', 'тримається'], [c.part, 'part', 'види нижче'], [c.relapse, 'relapse', 'рецидив']];
-    var key = '<span class="mgr-kk__key"><span class="mgr-kk__ok">✓' + c.done + ' тримається</span> · <span class="mgr-kk__ok">✓' + c.part + ' види нижче</span> · <span class="mgr-kk__bad">✕' + c.relapse + ' рецидив</span>' +
-      (c.skip ? ' · не потрібна ' + c.skip : '') + '</span>';
-    var bar = '<div class="mgr-split mgr-split--sm" role="img" aria-label="Закрито: тримається ' + c.done + ', види нижче ' + c.part + ', рецидив ' + c.relapse + '">' +
-      (c.total ? parts.map(function (x) { return x[0] ? '<i style="flex-grow:' + x[0] + ';background:var(--kd-' + x[1] + ')"></i>' : ''; }).join('') : '') + '</div>' + key;
-    return '<div class="mgr-kks">' +
-      kk('Не розпочато зараз', 'mgr.kd.k.open', n(s.open), !s.open ? 'дій без плану немає' : s.openMaxDays == null ? 'без плану' :
-        'без плану · найдовше ' + (s.openMaxDays ? K.dn(s.openMaxDays) : 'відкрито сьогодні')) +
-      kk('На спостереженні зараз', 'mgr.kd.k.watch', n(s.observe), s.nextResult ? 'наступний результат — ' + esc(wdDay(s.nextResult)) : s.observe ? '' : 'очікуваних результатів немає') +
-      kk('Закрито за період', 'mgr.kd.k.closed', n(c.total), '', bar) +
-      kk('Знизили брак своїх видів', 'mgr.kd.k.lowered', low.of ? n(low.n) + ' з ' + n(low.of) : '—', low.of ? 'із закритих за період' : 'закритих за період немає') +
-      kk('Головні види браку: до → після', 'mgr.kd.k.types', e.items ? h.ba(e.before, e.after) : '—', e.items ? 'середнє по ' + n(e.items) + ' ' + P.plural(e.items, 'виду', 'видах', 'видах') + ' браку, де тиждень 1 уже минув' : 'тиждень після впровадження ще не минув') +
-      kk('Від відкриття до плану', 'mgr.kd.k.days', dd(s.daysAvg), s.daysAvg == null ? 'планів за період не впроваджено' : 'у середньому за період') + '</div>';
-  }
 
   function ago(a, today) { var d = between(a.openedAt, today); return d == null ? '' : d ? K.dn(d) : 'сьогодні'; }
   function chip(a, today, noNo) {
@@ -117,49 +90,6 @@
     var full = (P.sr.KD_STATES[s] ? P.sr.KD_STATES[s].label : s) + ' · відкрито ' + day(a.openedAt);
     return '<span class="mgr-chip mgr-chip--' + esc(s) + '" title="' + esc(a.departmentName + (a.no ? ' №' + a.no : '') + ' · ' + full) + '">' + esc(txt) + '</span>';
   }
-  function byOrder(a, b) {
-    var ra = KNOWN.indexOf(canon(a.state)), rb = KNOWN.indexOf(canon(b.state));
-    return ra - rb || (b.no || 0) - (a.no || 0) || (String(a.openedAt) < String(b.openedAt) ? 1 : -1);
-  }
-  function normBar(rate, T) {
-    var w = Math.max(0, Math.min(100, (rate || 0) / (T * 2) * 100)).toFixed(1);
-    return '<div class="mgr-nb" role="img" aria-label="Брак ' + esc(H().pct(rate)) + ', норма ' + esc(H().pct(T)) + '"><i class="' + (rate > T ? 'mgr-nb--hot' : '') + '" style="width:' + w + '%"></i><b></b></div>';
-  }
-  function deptTile(d, kd, wk) {
-    var T = kd.threshold, own = function (a) { return a.departmentId === d.id; };
-    var live = (kd.now || (kd.actions || []).filter(function (a) { return NOW.indexOf(a.state) >= 0; })).filter(own).sort(byOrder);
-    var shut = closedList(kd).filter(own).sort(byOrder);
-    var chips = (live.length ? live.map(function (a) { return chip(a, kd.today); }).join('') : '') +
-      (shut.length ? '<span class="mgr-dim mgr-dt__g">закрито за період:</span>' + shut.map(function (a) { return chip(a, kd.today); }).join('') : '');
-    return '<div class="mgr-dt' + (d.weekRate > T ? ' mgr-dt--over' : '') + '"><div class="mgr-dt__h"><b>' + esc(d.name) + '</b><span class="mgr-dim">' +
-      (live.length ? 'зараз: ' + live.length : 'зараз дій немає') + '</span></div>' +
-      '<div class="mgr-dt__p"><b class="' + (d.weekRate > T ? 'mgr-over' : '') + '">' + (d.weekRate == null ? '—' : H().pct(d.weekRate)) + '</b><span class="mgr-dim">' + (wk ? 'брак ' + esc(wk.label) : 'брак за тиждень') + '</span></div>' +
-      normBar(d.weekRate, T) + '<span class="mgr-dt__c mgr-dim">перевірено ' + n(d.weekChecked) + ' шт · норма ' + H().pct(T) + '</span>' +
-      '<div class="mgr-dt__chips">' + (chips || '<span class="mgr-dim">за період нічого не закрито</span>') + '</div></div>';
-  }
-  function deptsCard(kd) {
-    var list = (kd.depts || []).slice().sort(function (a, b) { return (b.weekRate == null ? -1 : b.weekRate) - (a.weekRate == null ? -1 : a.weekRate); }), wk = lastWeek(kd);
-    return '<section class="card mgr-gap mgr-dts"><h2 class="card-title">Відділи: брак за тиждень' + (wk ? ' ' + esc(wk.label) : '') + K.help('mgr.kd.depts') + '</h2>' +
-      (list.length ? '<div class="mgr-dtl">' + list.map(function (d) { return deptTile(d, kd, wk); }).join('') + '</div>' : '<p class="hint">Відділів немає.</p>') + '</section>';
-  }
-
-  function typesOf(a) {
-    var names = (a.items || []).map(function (it) { return it.name; });
-    if (!names.length) return '<span class="mgr-dim">видів ще немає</span>';
-    return esc(names.slice(0, 3).join(' · ')) + (names.length > 3 ? ' <span class="mgr-dim">+' + (names.length - 3) + '</span>' : '');
-  }
-  function listCard(kd) {
-    var list = (kd.actions || []).slice().sort(byOrder), H_ = H();
-    return '<section class="card mgr-gap"><h2 class="card-title">Коригуючі дії · ' + list.length + K.help('mgr.kd.actions') + '</h2>' +
-      (!list.length ? '<p class="hint">Коригуючих дій за період немає.</p>' : '<div class="mgr-kl"><div class="mgr-kl__r mgr-kl__r--h"><span>Відділ</span><span>Тиждень</span><span>Основні види браку</span><span>Стан</span><span>Усі види дії разом, %: до → після</span></div>' +
-        list.map(function (a) {
-          var s = canon(a.state);
-          return '<div class="mgr-kl__r"><span class="mgr-kl__d"><b>' + esc(a.departmentName) + (a.no ? ' №' + a.no : '') + '</b></span>' +
-            '<span class="mgr-kl__w mgr-dim">' + esc(a.weekStart ? weekRange(a.weekStart, a.weekEnd) : '—') + '</span><span class="mgr-kl__t">' + typesOf(a) + '</span>' +
-            '<span class="mgr-kl__s">' + chip(a, kd.today, true) + '</span><span class="mgr-kl__b">' + H_.ba(a.typesBefore, lastAfter(a), OPEN.indexOf(s) >= 0 || s === 'skip') + '</span></div>';
-        }).join('') + '</div>') + '</section>';
-  }
-  function weekRange(a, b) { return H().dayShort(a) + '–' + H().dayShort(b); }
 
   function periodCard(kd, scope) {
     var p = kd.period || {}, r = p.results || {}, hd = p.held || {};
@@ -252,31 +182,6 @@
       function list(keys) { return keys.map(function (k) { return '<span class="' + (t.states[k] ? '' : 'mgr-zero') + '">' + H().kdState(k, short(k) + ' · ' + t.states[k]) + '</span>'; }).join(''); }
       return '<span class="mgr-tile__kd"><span class="mgr-tile__kdh">Коригуючі дії зараз: <b>' + n(t.active) + '</b></span><span class="mgr-tile__kds">' + list(NOW) + '</span>' +
         '<span class="mgr-tile__kdh">За період: відкрито <b>' + n(t.opened) + '</b> · впроваджено <b>' + n(t.implemented) + '</b></span><span class="mgr-tile__kds">' + list(['done', 'part', 'relapse']) + '</span></span>';
-    },
-    page: function (kd, scope) {
-      if (!kd) return '<section class="card">' + H().empty('Даних про коригуючі дії немає', 'Для цієї локації їх ще не підраховано.') + '</section>';
-      return '<div class="mgr-kdpage"><div class="mgr-kdhead"><h2 class="h2">Коригуючі дії <span class="mgr-kdscope">· ' + esc(scope) + '</span></h2>' +
-        '<p class="mgr-kdrule">' + esc(ruleLine(kd)) + K.help('mgr.kd.how') + '</p></div>' + kpis(kd) + deptsCard(kd) +
-        '<div class="row"><div class="col--wide"><section class="card mgr-gap"><h2 class="card-title">По тижнях: брак, % локації' + K.help('mgr.kd.weeks') + '</h2>' +
-        ((kd.weeks || []).length ? '<div data-chart="kdweeks"></div>' : '<p class="hint">Тижнів у періоді немає.</p>') + '</section></div>' +
-        '<div class="col">' + causesCard(kd) + '</div></div>' + listCard(kd) + '</div>';
-    },
-    mount: function (el, kd, scope) {
-      var box = el.querySelector('[data-chart="kdweeks"]'), h = H();
-      if (!box || !kd) return;
-      P.srChart.mount(box, {
-        items: kd.weeks.map(function (w) {
-          return { key: w.start, x: h.dayShort(w.start) + '–' + h.dayShort(w.end), v: w.rate || 0, none: !w.checked, hot: w.rate > kd.threshold, w: w,
-            mark: w.relapse ? { text: '✕' + w.relapse, cls: 'mgr-relmark', title: 'рецидивів: ' + w.relapse } : null };
-        }),
-        height: root.innerWidth < 900 ? 200 : 240, label: 'Брак, % по тижнях · ' + scope, xAll: true,
-        line: { v: kd.threshold, label: 'норма — ' + h.pct(kd.threshold) },
-        tip: function (it) {
-          var w = it.w;
-          return P.srChart.tip({ title: K.span(w.start, w.end), sub: scope + (w.current ? ' · тиждень ще триває' : ''), rows: [['Брак, %', h.pct(w.rate), w.rate > kd.threshold ? 'danger' : ''], ['Перевірено', n(w.checked) + ' шт'],
-            ['Відкрито коригуючих дій', n(w.opened)], ['Впроваджено дій', n(w.implemented)], [AFTER1, n(w.belowAfter)], ['Рецидивів', n(w.relapse), w.relapse ? 'danger' : '']] });
-        }
-      });
     },
     month: function (kd, scope) {
       if (!kd) return '<section class="card">' + H().empty('Даних про коригуючі дії немає', 'Для цієї локації їх ще не підраховано.') + '</section>';

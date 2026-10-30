@@ -20,7 +20,7 @@
         var today = audits.filter(function (a) { return a.locationId === l.id && a.day === day; });
         var checked = today.reduce(function (s, a) { return s + C.checkedOf(a); }, 0);
         var rejected = today.reduce(function (s, a) { return s + C.rejectedOf(a); }, 0);
-        return { id: l.id, name: l.name, active: l.active !== false, slackChannel: l.slackChannel || null, reminders: l.reminders || null,
+        return { id: l.id, name: l.name, active: l.active !== false, slackChannel: l.slackChannel || null, slackBot: l.slackBot !== false, reminders: l.reminders || null,
           departments: env.db.departments.filter(function (d) { return d.locationId === l.id && d.active !== false; }).length,
           workers: env.db.workers.filter(function (w) { return w.locationId === l.id && w.active !== false; }).length,
           today: { audits: today.length, checked: checked, rejected: rejected, pct: C.pct(rejected, checked) } };

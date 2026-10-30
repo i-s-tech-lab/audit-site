@@ -3,6 +3,7 @@
   var P = root.P, esc = P.esc, K = P.mlKit, doc = root.document;
   var MAX = 10;   // MAX_RECIPIENTS у mail-core.mjs
   var LIMIT = 'Отримувачів уже 10 — це найбільше. Щоб додати нового, приберіть когось хрестиком.';
+  var CH_ID = /^[CG](?=[A-Z0-9]*\d)[A-Z0-9]{8,14}$/, LOC_WORDS = 'канал локації';   // ID каналу Slack (validChannelId у mail-core.mjs; обовʼязково є цифра)
 
   function create(o) {
     var d = o.draft, data = o.data, ix = o.ix, q = '', hl = 0, items = [], open = false;
@@ -10,15 +11,28 @@
 
     function known() {
       var m = {};
-      (data.items || []).forEach(function (r) { (r.to || []).forEach(function (t) { if (t.type === 'channel') m[t.name] = (m[t.name] || 0) + 1; }); });
+      (data.items || []).forEach(function (r) { (r.to || []).forEach(function (t) { if (t.type === 'channel' && t.name) m[t.name] = (m[t.name] || 0) + 1; }); });
       return m;
     }
     function picked(t) {
-      return d.to.some(function (x) { return x.type === t.type && (t.type === 'channel' ? String(x.name).toLowerCase() === String(t.name).toLowerCase() : x.id === t.id); });
+      return d.to.some(function (x) {
+        if (x.type !== t.type) return false;
+        if (t.type === 'locChannel') return true;
+        if (t.type === 'channel') return t.id ? x.id === t.id : x.name != null && String(x.name).toLowerCase() === String(t.name).toLowerCase();
+        return x.id === t.id;
+      });
     }
     function suggest() {
       var s = q.trim(), isCh = s.charAt(0) === '#', term = s.replace(/^#+/, '').toLowerCase(), g = [], err = '', foot = '';
       if (d.to.length >= MAX) return { groups: [], err: LIMIT };
+      if (!picked({ type: 'locChannel' }) && (!s || (isCh && !term) || (!isCh && term.length > 1 && LOC_WORDS.indexOf(term) === 0))) {
+        g.push({ title: 'Канал із налаштувань «Локації»', items: [{ k: 'loc', v: 'locChannel', av: '#', t: 'Канал локації (з налаштувань «Локації»)', s: 'у кожної локації свій канал — повідомлення піде в канал тієї локації, про яку цифри' }] });
+      }
+      var idm = !isCh && CH_ID.test(s) ? s : '';
+      if (idm) {
+        if (picked({ type: 'channel', id: idm })) err = 'Канал ' + idm + ' уже серед отримувачів — двічі один канал не додається.';
+        else g.push({ title: 'Канал за ID', items: [{ k: 'chid', v: idm, av: '+', t: 'Додати канал за ID ' + idm, s: 'ID каналу зі Slack — Slack → назва каналу → внизу вкладки About' }] });
+      }
       if (isCh || !s) {
         var m = known(), ch = Object.keys(m).filter(function (n) { return n.indexOf(term) >= 0 && !picked({ type: 'channel', name: n }); }).sort();
         if (ch.length) g.push({ title: 'Канали з інших розсилок', items: ch.slice(0, 6).map(function (n) {
@@ -31,7 +45,7 @@
         else if (!known()[norm]) g.push({ title: 'Новий канал', items: [{ k: 'ch', v: norm, av: '+', t: 'Додати канал #' + norm, s: 'якщо такий канал є в Slack' }] });
         foot = 'Щоб повідомлення дійшло, бот «Аудит» має бути в каналі: у Slack відкрийте канал і напишіть /invite @Аудит.';
       }
-      if (!isCh) {
+      if (!isCh && !idm) {
         var match = function (name) { return !term || String(name).toLowerCase().indexOf(term) >= 0; };
         var us = (data.users || []).filter(function (u) { return match(u.name) && !picked({ type: 'user', id: u.id }); });
         var ad = (data.addressees || []).filter(function (a) { return a.active !== false && !(data.users || []).some(function (u) { return u.id === a.id; }) && match(a.name) && !picked({ type: 'user', id: a.id }); });
@@ -70,7 +84,7 @@
       if (!x) return;
       if (d.to.length >= MAX) { draw(); return; }
       q = ''; hl = 0;
-      o.onAdd(x.k === 'ch' ? { type: 'channel', name: x.v } : { type: 'user', id: x.v });
+      o.onAdd(x.k === 'ch' ? { type: 'channel', name: x.v } : x.k === 'chid' ? { type: 'channel', id: x.v } : x.k === 'loc' ? { type: 'locChannel' } : { type: 'user', id: x.v });
     }
 
     return {
@@ -84,7 +98,7 @@
           '<input class="input" id="rz-to-q" data-rz-to-q value="' + esc(q) + '" autocomplete="off" maxlength="81" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rz-dd"' +
             ' placeholder="Напишіть #назву-каналу або імʼя людини — зʼявляться підказки">' +
           '<div class="rz-dd" id="rz-dd" role="listbox" data-rz-dd hidden></div>' +
-          '<span class="hint">Канал пишіть так, як він називається в Slack, з «#»: <b>#якість-цехів</b>. Бот «Аудит» має бути в цьому каналі (у Slack: <b>/invite @Аудит</b>). ' +
+          '<span class="hint">Канал пишіть так, як він називається в Slack, з «#»: <b>#якість-цехів</b> — або впишіть його ID (<b>C0123…</b>). Хочете, щоб розсилка йшла в канал кожної локації, — оберіть <b>Канал локації</b> (його задає адмін у «Локації»). Бот «Аудит» має бути в цьому каналі (у Slack: <b>/invite @Аудит</b>). ' +
             'Людину шукайте за імʼям — серед тих, хто має доступ до кабінетів, і серед адресатів розсилок («Розсилки → Адресати»).</span></div>';
       },
       input: function (t) { q = t.value; hl = 0; open = true; draw(); },

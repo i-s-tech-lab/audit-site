@@ -154,6 +154,7 @@
       ctx.el.innerHTML = '<div class="kb mkd">' + locBar(r, v) + X.periodBar(r, function (n) { return href(id, n, v); }) + X.kdFromNote(r) +
         '<h1 class="mkd-h1">' + esc(r.location.name) + ' · коригуючі дії</h1>' + views(r, v) + inner + '</div>';
       X.fitSegs(ctx.el);
+      X.scrollToday(ctx.el);   // v1.5: на телефоні «Дії по тижнях» відкриті біля «сьогодні»
     });
   } });
 })(window);

@@ -136,6 +136,14 @@
       sg.textContent = '';
     });
   };
+  X.scrollToday = function (el) {
+    Array.prototype.forEach.call(el.querySelectorAll('.kb-scroll'), function (sc) {
+      var mark = sc.querySelector('.kb-tl__today');
+      if (!mark || sc.scrollWidth <= sc.clientWidth + 1) return;
+      var shift = mark.getBoundingClientRect().left - sc.getBoundingClientRect().left;   // де риска відносно видимого краю
+      sc.scrollLeft = Math.max(0, sc.scrollLeft + shift - sc.clientWidth * 0.7);
+    });
+  };
   X.timeline = function (tl, T) {
     if (!tl || !tl.weeks || !tl.weeks.length) return '';
     var total = dd(tl.from, tl.to) + 1;

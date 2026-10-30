@@ -121,6 +121,8 @@
       var my = ++req, body = view.box('an-body');
       if (body) body.classList.add('an-busy');   // відділ перемкнули — старі числа тьмяніють, доки не прийдуть нові
       P.srv('srAnalytics', { locationId: ctx.loc.id, from: ctx.period.from, to: ctx.period.to, departmentId: view.dep }).then(function (r) {
+        return X.layout.ready().then(function () { return r; });   // v1.9: перший показ — після профілю (≤ 1 с), щоб блоки не «стрибали»
+      }).then(function (r) {
         if (!ctx.alive() || my !== req) return;
         if (!r.ok) {
           ctx.el.innerHTML = r.code === 'not_found' && view.dep ? h.empty('Такого відділу в цій локації немає', 'Посилання веде на відділ, якого немає в «' + ctx.loc.name + '».') +

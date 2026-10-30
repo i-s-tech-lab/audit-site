@@ -6,11 +6,24 @@
   function lvlBadge(l) { return l ? '<span class="ui-badge ui-badge--' + (l === 'scrap' ? 'danger' : l === 'repair' ? 'warn' : 'info') + '">' + esc(P.AF.lvlLabel(l)) + '</span>' : ''; }
   function stat(v, label, help) { return '<div class="total"><span class="total__val">' + v + '</span><span class="total__label">' + label + P.help.btn(help) + '</span></div>'; }
 
+  function getAudit(id) {
+    return Promise.resolve().then(function () { return P.backend.call('auditGet', { id: id }); }).then(function (r) {
+      r = r || { ok: false, code: 'server', error: 'Порожня відповідь.' };
+      if (r.ok === false && r.code === 'auth') P.emit('auth:required', r);
+      return r;
+    }, function (e) { return { ok: false, code: 'server', error: String((e && e.message) || e) }; });
+  }
+  function foreignState() {
+    return P.state.empty('lock', 'Цей аудит — не з вашої локації', 'Ви бачите аудити лише своєї локації. Список — за кнопкою нижче.',
+      '<button class="ui-btn ui-btn--primary" type="button" data-act="loc-list">' + P.ic('list') + 'Аудити моєї локації</button>');
+  }
+
   P.screen('/audit/:id', {
-    back: '/home',
+    back: function (ctx) { return ctx.query && ctx.query.from === 'loc' ? '/audits' : '/home'; },
     title: function (ctx) { return { title: 'Аудит', sub: ctx.params.id }; },
     render: function (ctx) {
-      return P.srv('auditGet', { id: ctx.params.id }).then(function (r) {
+      return getAudit(ctx.params.id).then(function (r) {
+        if (!r.ok && r.code === 'forbidden') return foreignState();
         if (!r.ok) return r.code === 'not_found' ? P.state.empty('search', 'Аудит не знайдено', 'Можливо, посилання неправильне.') : P.state.error('Не вдалося відкрити аудит', r.error);
         var a = r.audit, left = a.canEdit && a.editableUntil ? Math.max(0, Math.ceil((Date.parse(a.editableUntil) - Date.now()) / 60000)) : 0;
         if (ctx.alive()) P.shell.setTitle({ title: f.time(a.createdAt) + ' · ' + a.departmentName, sub: (a.locationId !== ctx.loc ? a.locationName + ' · ' : '') + a.id });
@@ -37,11 +50,13 @@
           '<section class="ui-card"><h2 class="card-title">Перевірені працівники' + (helpers ? P.help.btn('term.helper') : '') + '</h2>' + (workers ? '<div class="chips-input">' + workers + '</div>' : '<p class="card-sub">—</p>') + '</section>' +
           (a.comment ? '<section class="ui-card"><h2 class="card-title">Коментар</h2><p class="ui-text-sm">' + esc(a.comment) + '</p></section>' : '') +
           (left ? '<button class="ui-btn ui-btn--primary home-cta" type="button" data-act="edit">' + P.ic('edit') + 'Виправити · ще ' + left + ' хв</button>'
+            : !a.canEdit && a.auditorId !== ctx.me.id ? '<p class="card-sub">Записав(ла) ' + esc(a.auditorName) + ' о ' + f.time(a.createdAt) + '. Виправити такий аудит може лише його автор.</p>'
             : '<p class="card-sub">Записано о ' + f.time(a.createdAt) + '. Виправити можна було ' + (a.editWindowMin || 15) + ' хв після запису — цей час минув.' + P.help.btn('term.editWindow') + '</p>') + '</div>';
       });
     },
     mount: function (el, ctx) {
       P.delegate(el, 'click', '[data-act="retry"]', function () { P.shell.rerender(); });
+      P.delegate(el, 'click', '[data-act="loc-list"]', function () { P.router.go('/audits'); });
       P.delegate(el, 'click', '[data-act="edit"]', function () { P.router.go('/audit/' + ctx.params.id + '/edit'); });
       P.delegate(el, 'click', '[data-ph-i]', function (e, t) { P.AF.photoView(shots, Number(t.getAttribute('data-ph-i')) || 0); });
     }

@@ -84,6 +84,7 @@
       var e = obj(L.edit[l.id]); isLoc[l.id] = 1;
       if (typeof e.name === 'string' && e.name) l.name = e.name;
       if (has(e, 'slackChannel')) l.slackChannel = e.slackChannel || null;
+      if (has(e, 'slackBot')) l.slackBot = e.slackBot !== false;   // v1.12: «Бот пише в цей канал»; правки немає — поле з бази (перенесення зі старої системи)
       if (has(e, 'reminders')) l.reminders = e.reminders ? clone(e.reminders) : null;
       if (e.active === false) l.active = false;
     });
@@ -116,7 +117,8 @@
   function channel(v) {
     var s = squash(v);
     if (!s) return { v: null };
-    if (/^[A-Z][A-Z0-9]{6,}$/.test(s)) return { err: 'Впишіть назву каналу, як її видно в Slack, — наприклад, #якість-цех-а.' };
+    if (/^[CG][A-Z0-9]{8,14}$/.test(s)) return { v: s };   // 30.10 (рецензія): ті самі межі, що validChannelId розсилок — інакше канал прийнявся б, а розсилка його відкинула
+    if (/^[A-Z][A-Z0-9]{6,}$/.test(s)) return { err: 'Це не схоже на код каналу (він починається з C чи G). Впишіть назву каналу, як її видно в Slack, — наприклад, #якість-цех-а.' };
     s = s.toLowerCase(); if (s.charAt(0) !== '#') s = '#' + s;
     if (!/^#[a-z0-9а-яєіїґ_-]{1,79}$/.test(s)) return { err: 'Назва каналу — літери, цифри, дефіс чи «_», без пробілів: #якість-цех-а.' };
     return { v: s };
@@ -148,6 +150,7 @@
         else patch.name = name;
       }
       if (p.slackChannel !== undefined) { var ch = channel(p.slackChannel); if (ch.err) errs.push({ field: 'slackChannel', message: ch.err }); else patch.slackChannel = ch.v; }
+      if (p.slackBot !== undefined) { if (typeof p.slackBot !== 'boolean') errs.push({ field: 'slackBot', message: 'Оберіть: бот пише в цей канал чи ні.' }); else patch.slackBot = p.slackBot; }
       if (p.reminders !== undefined) { var rm = reminders(p.reminders); if (rm.errs) errs = errs.concat(rm.errs); else patch.reminders = rm.v; }
       if (p.active !== undefined) { if (typeof p.active !== 'boolean') errs.push({ field: 'active', message: 'Оберіть: увімкнена чи вимкнена.' }); else patch.active = p.active; }
       if (errs.length) return verr(errs);
@@ -161,11 +164,13 @@
       } else {
         if (has(patch, 'name') && patch.name !== loc.name) rows.push(['Назва', loc.name, patch.name]);
         if (has(patch, 'slackChannel') && patch.slackChannel !== (loc.slackChannel || null)) rows.push(['Slack-канал', loc.slackChannel, patch.slackChannel]);
+        if (has(patch, 'slackBot') && patch.slackBot !== (loc.slackBot !== false)) rows.push(['Бот пише в канал', loc.slackBot !== false ? 'так' : 'ні', patch.slackBot ? 'так' : 'ні']);
         if (has(patch, 'reminders') && remText(patch.reminders) !== remText(loc.reminders)) rows.push(['Нагадування «запишіть аудит»', remText(loc.reminders), remText(patch.reminders)]);
         if (has(patch, 'active') && patch.active !== (loc.active !== false)) rows.push(['Стан', loc.active !== false ? 'увімкнена' : 'вимкнена', patch.active ? 'увімкнена' : 'вимкнена']);
       }
       if (has(patch, 'reminders') && !loc) rows.push(['Нагадування «запишіть аудит»', null, remText(patch.reminders)]);
       if (has(patch, 'slackChannel') && !loc && patch.slackChannel) rows.push(['Slack-канал', null, patch.slackChannel]);
+      if (has(patch, 'slackBot') && !loc && patch.slackBot === false) rows.push(['Бот пише в канал', null, 'ні']);
       st.edit[id] = Object.assign(obj(st.edit[id]), patch);
       env.storage.set(K.locs, st);
       log(env, me, 'Локації', title, rows);
