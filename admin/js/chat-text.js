@@ -3,13 +3,21 @@
   var P = root.P, doc = root.document;
   var makers = {};   // назва екрана → fn() → його власний текст для чату
 
+  var FILE_EXT = ('js mjs cjs ts json txt md css html htm enc dump exe ps1 psm1 bat cmd sql zip sha256 sig log csv tsv png jpg jpeg gif svg ' +
+    'webp pdf gs xlsx xls docx yml yaml toml ini cfg conf env sh py map lock tar gz pem crt key bak tmp').split(' ');
+
   function scrub(t) {
     return String(t)
       .replace(/\b(?:https?:\/\/|www\.)[^\s«»"'<>]+/gi, '[посилання]')
+      .replace(/\bx(?:ox[a-z]|app)-[A-Za-z0-9-]+/g, '[ключ]')
       .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[пошта]')
       .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, '[адреса]')
-      .replace(/\b(?:[a-z0-9-]+\.)+(?:com|net|org|ua|io|dev|app|local|lan|corp|biz|info|cloud|site|online|tech|pro)\b/gi, '[адреса]')
-      .replace(/\b[A-Za-z0-9_-]{40,}\b/g, '[код]');
+      .replace(/\[?\b[0-9a-f]{0,4}(?::[0-9a-f]{0,4})*::[0-9a-f:]*\b\]?(?::\d+)?|\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b/gi, '[адреса]')
+      .replace(/\blocalhost(?::\d+)?\b/gi, '[адреса]')
+      .replace(/\b(?:[a-z0-9-]+\.)+([a-z]{2,24})\b/gi, function (m, tld) { return FILE_EXT.indexOf(tld.toLowerCase()) >= 0 ? m : '[адреса]'; })
+      .replace(/простір «[^»]*»/g, 'простір «[назва]»')
+      .replace(/\b[A-Za-z0-9_]{25,}\b/g, '[код]')
+      .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[код]');
   }
 
   function screenText() {

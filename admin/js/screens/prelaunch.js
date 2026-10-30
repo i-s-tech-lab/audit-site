@@ -3,11 +3,13 @@
   var P = root.P, esc = P.esc, H = P.sr.h, A = P.adm;
   var STATE = { ok: ['гаразд', 'ok', 'success'], warn: ['варто перевірити', 'warn', 'warning'], bad: ['потрібна дія', 'danger', 'error'], info: ['довідково', '', 'info'] };
   var GROUP_IC = { server: 'power', slack: 'slack', data: 'table', people: 'people', mail: 'notification', backups: 'backup', watchdog: 'clock' };
-  var RANK = { bad: 0, warn: 1 };
+  var RANK = { bad: 0, warn: 1, info: 2 };
 
   function st(x) { return STATE[x.state] || STATE.info; }
   function stateIc(x) { var s = st(x); return '<span class="adm-pl-ic adm-pl-ic--' + esc(STATE[x.state] ? x.state : 'info') + '" title="' + esc(s[0]) + '">' + P.ic(s[2], 'ui-icon--sm') + '</span>'; }
-  function needsTodo(x) { return !!x.todo && (x.state === 'bad' || x.state === 'warn'); }
+  function needsTodo(x) { return !!x.todo && x.state !== 'ok'; }
+  function isProblem(x) { return x.state === 'bad' || x.state === 'warn'; }
+  function rank(x) { return Object.prototype.hasOwnProperty.call(RANK, x.state) ? RANK[x.state] : 2; }   // невідомий стан — як довідковий
 
   function cell(x) {
     var inner = stateIc(x) + '<span class="adm-pl-cell__txt"><b>' + esc(x.title) + '</b><span class="adm-pl-val" title="' + esc(x.value) + '">' + esc(x.value) + '</span></span>' +
@@ -20,7 +22,8 @@
     var list = items.filter(function (x) { return x.group === g.id; });
     if (!list.length) return '';
     var bad = list.filter(function (x) { return x.state === 'bad'; }).length, warn = list.filter(function (x) { return x.state === 'warn'; }).length;
-    var allOk = list.every(function (x) { return x.state === 'ok'; });
+    var judged = list.filter(function (x) { return x.state !== 'info'; });   // довідкові не оцінюються — «гаразд» від них не залежить
+    var allOk = judged.length > 0 && judged.every(function (x) { return x.state === 'ok'; });
     var tag = bad ? H.badge(bad + ' ' + A.plural(bad, ['потрібна дія', 'потрібні дії', 'потрібних дій']), 'danger')
       : warn ? H.badge(warn + ' варто перевірити', 'warn') : allOk ? H.badge('гаразд', 'ok') : '';
     return '<div class="adm-pl-og"><div class="adm-pl-og__h">' + P.ic(GROUP_IC[g.id] || 'info', 'ui-icon--sm') + '<b>' + esc(g.label) + '</b>' + A.help('admin.prelaunch.' + g.id) + tag + '</div>' +
@@ -42,18 +45,20 @@
   function todoCard(data) {
     var labels = {}; data.groups.forEach(function (g) { labels[g.id] = g.label; });
     var list = data.items.map(function (x, i) { return [x, i]; }).filter(function (p) { return needsTodo(p[0]); })
-      .sort(function (a, b) { return (RANK[a[0].state] - RANK[b[0].state]) || (a[1] - b[1]); }).map(function (p) { return p[0]; });
-    return '<section class="card adm-pl-card"><h3 class="adm-card-t">' + P.ic('warning', 'ui-icon--sm') + 'Що зробити' + (list.length ? ' · ' + list.length : '') + A.help('admin.prelaunch.todo') + '</h3>' +
-      (list.length ? '<div class="adm-pl-rows">' + list.map(function (x) { return todoRow(x, labels[x.group] || ''); }).join('') + '</div>'
-        : '<p class="hint">Нічого: усі перевірки гаразд або довідкові.</p>') + '</section>';
+      .sort(function (a, b) { return (rank(a[0]) - rank(b[0])) || (a[1] - b[1]); }).map(function (p) { return p[0]; });
+    var n = list.filter(isProblem).length;
+    return '<section class="card adm-pl-card"><h3 class="adm-card-t">' + P.ic('warning', 'ui-icon--sm') + 'Що зробити' + (n ? ' · ' + n : '') + A.help('admin.prelaunch.todo') + '</h3>' +
+      (n ? '' : '<p class="hint">Нічого термінового: усі перевірки гаразд або довідкові.</p>') +
+      (list.length ? '<div class="adm-pl-rows">' + list.map(function (x) { return todoRow(x, labels[x.group] || ''); }).join('') + '</div>' : '') + '</section>';
   }
+  function chanText(ch) { return ch === undefined ? 'не вдалося прочитати' : ch || 'не задано'; }
   function channelCard(ch) {
     return '<section class="card adm-pl-card adm-pl-chan"><h3 class="adm-card-t">' + P.ic('notification', 'ui-icon--sm') + 'Канал «важливе»' + A.help('admin.prelaunch.important') + '</h3>' +
       '<p class="hint">Сюди сервер пише лише важливе: людина натиснула «Увійти» і чекає на доступ, або сайт не відповідає. Більше нічого.</p>' +
-      '<div class="adm-pl-chan__line"><span class="adm-dim">Код каналу</span> ' + (ch ? '<b class="adm-sys-mono">' + esc(ch) + '</b>' : '<b>не задано</b>') +
+      '<div class="adm-pl-chan__line"><span class="adm-dim">Код каналу</span> ' + (ch ? '<b class="adm-sys-mono">' + esc(ch) + '</b>' : '<b>' + esc(chanText(ch)) + '</b>') +
         A.pen('pl-edit', '', 'Редагувати · Канал «важливе»') + '</div>' +
       '<div class="adm-pl-chan__btns"><button class="btn btn--secondary btn--sm" type="button" data-act="pl-test"' + (ch ? '' : ' disabled') + '>' + P.ic('notification', 'ui-icon--sm') + 'Надіслати пробне</button>' +
-        (ch ? '' : '<span class="hint">Спершу впишіть код каналу (олівець).</span>') + '</div></section>';
+        (ch ? '' : '<span class="hint">' + (ch === undefined ? 'Натисніть «Перевірити ще раз».' : 'Спершу впишіть код каналу (олівець).') + '</span>') + '</div></section>';
   }
   var MARK = { ok: '✓', bad: '✗', warn: '⚠', info: 'i' };
   function chatText(data, channel) {
@@ -66,13 +71,13 @@
       out.push('', g.label.toUpperCase());
       list.forEach(function (x) { out.push((MARK[x.state] || 'i') + ' ' + x.title + ' — ' + x.value); });
     });
-    var todo = data.items.filter(needsTodo).sort(function (a, b) { return RANK[a.state] - RANK[b.state]; });
+    var todo = data.items.filter(needsTodo).sort(function (a, b) { return rank(a) - rank(b); });
     if (todo.length) {
       var labels = {}; data.groups.forEach(function (g) { labels[g.id] = g.label; });
       out.push('', 'ЩО ЗРОБИТИ');
-      todo.forEach(function (x) { out.push(MARK[x.state] + ' ' + (labels[x.group] || '') + ' · ' + x.title + ': ' + x.todo); });
+      todo.forEach(function (x) { out.push((MARK[x.state] || 'i') + ' ' + (labels[x.group] || '') + ' · ' + x.title + ': ' + x.todo); });
     }
-    out.push('', 'Канал «важливе»: ' + (channel || 'не задано'));
+    out.push('', 'Канал «важливе»: ' + chanText(channel));
     return out.join('\n');
   }
   function demoBanner() {
@@ -100,7 +105,7 @@
       Promise.all([P.srv('admPrelaunch', {}), P.srv('admImportant', {})]).then(function (rs) {
         if (!ctx.alive()) return;
         if (!rs[0].ok) { ctx.el.innerHTML = H.error(rs[0]); return; }
-        data = rs[0]; channel = rs[1].ok ? rs[1].channel : null;
+        data = rs[0]; channel = rs[1].ok ? rs[1].channel : undefined;
         draw();
       });
     }
