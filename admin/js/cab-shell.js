@@ -51,7 +51,7 @@
     var head = strip() +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(TITLE) + '</h1>' +
       '<p class="hdr__sub">Усі локації · ' + esc(S.h.dayLong(today())) + '</p></div>' +
-      '<div class="hdr__tools">' + (P.hdrTools ? P.hdrTools.html({ search: true, link: ROLE === 'manager', news: ROLE === 'manager' }) : '') + (P.cabPlus ? P.cabPlus.button(plusItems()) : '') + (ROLE === 'admin' && P.cabBackup ? P.cabBackup.html() : '') +
+      '<div class="hdr__tools">' + (P.hdrTools ? P.hdrTools.html({ search: true, link: ROLE === 'manager', news: ROLE === 'manager', chat: ROLE === 'admin' }) : '') + (P.cabPlus ? P.cabPlus.button(plusItems()) : '') + (ROLE === 'admin' && P.cabBackup ? P.cabBackup.html() : '') +
       '<button class="tool" type="button" data-act="cab-refresh" title="Оновити дані" aria-label="Оновлено о ' + hhmm + ' — оновити дані"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="cab-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials(me.name)) + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>';
     if (SIDE) {   // ліве меню (≥ 900 px) або кнопка «Розділи» (вужче); решта сторінки — справа від меню. v1.6

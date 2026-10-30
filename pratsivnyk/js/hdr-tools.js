@@ -14,6 +14,7 @@
     }
     if (o.search && fns.search) out += btn('hdr-search', 'search', 'Пошук (Ctrl+K)');
     if (o.link && fns.link) out += btn('hdr-link', 'link', 'Скопіювати посилання на цей екран');
+    if (o.chat && fns.chat) out += btn('hdr-chat', 'export', 'Текст для чату: скопіювати те, що на екрані');
     if (o.news && fns.news) out += btn('hdr-news', 'whats-new', 'Що нового', '<span class="hdr-tool__dot"' + (dotOn ? '' : ' hidden') + '></span>');
     return out ? '<span class="hdr-tools">' + out + '</span>' : '';
   }
@@ -67,6 +68,7 @@
       if (a === 'hdr-search' && fns.search) fns.search();
       else if (a === 'hdr-link') share();
       else if (a === 'hdr-news' && fns.news) fns.news();
+      else if (a === 'hdr-chat' && fns.chat) fns.chat();
     });
     doc.addEventListener('keydown', function (e) {
       if (!fns.search || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
