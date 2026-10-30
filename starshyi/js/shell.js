@@ -57,7 +57,7 @@
     return demoStrip('Тестова версія · усі імена й цифри вигадані · дані живуть лише в цьому браузері') +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(loc ? loc.name : '') + '</h1>' +
       '<p class="hdr__sub">Сторінка старшого аудитора · ' + esc(S.h.dayLong(today())) + '</p></div>' +
-      '<div class="hdr__tools">' + (plusList().length ? '<button class="plus" type="button" data-act="sr-plus" aria-label="Додати">' + P.ic('add') + '<span class="sr-hide-phone">Додати</span></button>' : '') +
+      '<div class="hdr__tools">' + (P.hdrTools ? P.hdrTools.html({ search: true, link: true, news: true }) : '') + (plusList().length ? '<button class="plus" type="button" data-act="sr-plus" aria-label="Додати">' + P.ic('add') + '<span class="sr-hide-phone">Додати</span></button>' : '') +
       '<button class="tool" type="button" data-act="sr-refresh" title="Перечитати дані" aria-label="Оновлено о ' + hhmm + ' — перечитати"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="sr-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials ? P.initials(me.name) : '') + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>' +
       '<div class="sr-tabsbar"><nav class="wrap tabs" aria-label="Розділи">' + shownTabs().map(function (t) {
@@ -139,9 +139,9 @@
     S.menu(anchor, { width: 360, onMount: function (el) { P.profileSwitch.bind(el); }, body:
       '<div style="display:flex;gap:12px;align-items:center;padding:8px 12px"><span class="avatar" style="width:48px;height:48px">' + esc(P.initials(me.name)) + '</span>' +
       '<div style="min-width:0"><b>' + esc(me.name) + '</b><p class="hint">Slack: підключено' + (me.slackId ? ' · ' + esc(P.authSlack.maskId(me.slackId)) : '') + '</p></div></div>' +
-      '<div style="padding:4px 12px 8px;display:flex;flex-direction:column;gap:6px"><span class="badge badge--brand" style="align-self:flex-start">' + esc(me.roleLabel) + ' · ' + esc(loc ? loc.name : '') + '</span>' +
+      '<div style="padding:4px 12px 8px;display:flex;flex-direction:column;gap:6px"><span class="badge badge--brand" style="align-self:flex-start">' + esc(me.ownRoleLabel ? me.ownRoleLabel + ' · дивитесь як ' + me.roleLabel.toLowerCase() : me.roleLabel) + ' · ' + esc(loc ? loc.name : '') + '</span>' +
       '<span class="hint">Вхід через Slack · пароль не потрібен</span></div>' +
-      (me.admin ? '<div class="menu__sep"></div><div style="padding:8px 12px">' + P.profileSwitch.html(me) + '</div>' : '') +
+      (P.profileSwitch.html(me) ? '<div class="menu__sep"></div><div style="padding:8px 12px">' + P.profileSwitch.html(me) + '</div>' : '') +
       '<div class="menu__sep"></div><div style="padding:8px 12px"><div class="seg" role="group" aria-label="Тема">' +
       '<button class="seg__btn' + (dark ? '' : ' seg__btn--on') + '" type="button" data-act="th" data-v="light">' + P.ic('theme-light', 'ui-icon--sm') + 'Світла</button>' +
       '<button class="seg__btn' + (dark ? ' seg__btn--on' : '') + '" type="button" data-act="th" data-v="dark">' + P.ic('theme-dark', 'ui-icon--sm') + 'Темна</button></div></div>' +
@@ -205,6 +205,27 @@
       '<b>' + esc(m.name || m.roleLabel) + ', вам ще не призначили жодної локації.</b> Попросіть адміністратора додати її у «Люди й доступи».</p></div></div>' +
       '<button class="btn" type="button" data-act="sr-logout">' + P.ic('logout') + 'Вийти</button></main>';
   }
+  function hasLoc(list, id) { return !!(list && list.some(function (l) { return l.id === id; })); }
+  function linkLoc() { var q = P.router.current().query || {}; return typeof q.loc === 'string' && q.loc ? q.loc : null; }
+  function pickLoc(m, want) {
+    var by = function (id) { return m.locations.filter(function (l) { return l.id === id; })[0]; };
+    return (want && by(want)) || by(m.defaultLocationId) || m.locations[0];
+  }
+  S.shareTarget = function () {
+    if (!cur || !me) return null;
+    var r = P.router.current(), m = P.router.match(r.path), def = m && m.screen;
+    if (!def || def.share === false) return null;
+    var t = typeof def.share === 'function' ? def.share(cur) : { path: r.path, query: Object.assign({}, r.query) };
+    if (!t) return null;
+    var q = Object.assign({}, t.query || {});
+    if (def.period !== false) { q.from = cur.period.from; q.to = cur.period.to; }
+    if (loc) q.loc = loc.id;
+    return { app: 'starshyi', path: t.path || r.path, query: q,
+      label: t.label || ('«' + (def.title || 'Кабінет старшого') + '» · ' + (loc ? loc.name : '') + (def.period !== false ? ' · ' + S.h.dayShort(q.from) + '–' + S.h.dayShort(q.to) : '')) };
+  };
+  if (P.hdrTools) P.hdrTools.on('link', S.shareTarget);
+  S.curLoc = function () { return loc ? loc.id : null; };
+
   function boot() {
     S.closeAll();
     var as = /[?&]as=([^&#]+)/.exec(root.location.search || '');
@@ -212,10 +233,17 @@
     P.authSlack.ready.then(function () { return P.srv('authMe', {}); }).then(function (r) {
       var m = r && r.ok ? r.me : null;
       if (m && (m.role === 'senior_auditor' || m.role === 'admin')) {
-        me = m; loc = me.locations.filter(function (l) { return l.id === me.defaultLocationId; })[0] || me.locations[0];
+        var want = linkLoc();
+        if (want && !hasLoc(m.locations, want) && hasLoc(m.allLocations, want) && !boot.switched) {
+          boot.switched = true;
+          P.srv('authAdminView', { locationId: want }).then(boot);
+          return;
+        }
+        me = m; loc = pickLoc(me, want);
+        if (want && !hasLoc(me.locations, want)) P.toast('warn', 'Посилання — на іншу локацію', 'Її у вас немає. Показуємо вашу: ' + (loc ? loc.name : '') + '.');
         if (!loc) { me = null; noLocScreen(m); return; }
         render(); refreshKdCount();
-        if (P.prefs) P.prefs.load(me.id).then(function () { P.prefs.applyTheme('cab'); });   // v1.16: тема з профілю людини
+        if (P.prefs) P.prefs.load(me.id).then(function () { P.prefs.applyTheme('cab'); if (P.news && P.news.refresh) P.news.refresh(); });   // v1.16: тема з профілю людини; v1.17 — крапка «Що нового»
         return;
       }
       loginScreen(m ? 'Ви увійшли як «' + m.roleLabel + '». Кабінет старшого — для старших аудиторів.' : (r && !r.ok && r.code !== 'auth' ? 'Не вдалося перевірити вхід — перевірте звʼязок і спробуйте ще раз.' : P.authSlack.takeError()));

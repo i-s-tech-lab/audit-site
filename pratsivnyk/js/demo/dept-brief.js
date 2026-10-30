@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   var P = root.P = root.P || {}, C = P.demoCommon, S = P.demoSenior;
-  var DAYS = 30, TOP = 5, LOST_AFTER = 7;   // вікно історії, скільки рядків у кожному списку, «давно» — понад 7 днів
+  var DAYS = 30, TOP = 5, LOST_AFTER = 7;   // вікно історії (за замовчуванням), скільки рядків у кожному списку, «давно» — понад 7 днів
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   function daysBetween(a, b) { return Math.round((P.demoDates.parseDay(b) - P.demoDates.parseDay(a)) / 86400000); }
   function top(map, n) {
@@ -22,7 +22,12 @@
       if (!C.hasLoc(me, locId) && !C.canRecordAt(me, locId, ix)) return C.forbidden();
       var dep = has(ix.dep, p.departmentId) ? ix.dep[p.departmentId] : null;
       if (!dep || dep.locationId !== locId || dep.active === false) return C.fail('not_found', 'Відділ не знайдено.');
-      var day = env.day(), from = P.demoDates.addDays(day, -(DAYS - 1));
+      var days = DAYS;
+      if (p.days != null) {
+        days = Number(p.days);
+        if (!Number.isInteger(days) || days < 1 || days > DAYS) return C.fail('validation', 'Кількість днів — ціле число від 1 до ' + DAYS + '.');
+      }
+      var day = env.day(), from = P.demoDates.addDays(day, -(days - 1));
       var all = env.audits().filter(function (a) { return a.locationId === locId; });
 
       var today = all.filter(function (a) { return a.departmentId === dep.id && a.day === day; })
@@ -57,7 +62,7 @@
         .sort(function (a, b) { return b.daysAgo - a.daysAgo || (a.name < b.name ? -1 : 1); }).slice(0, TOP);
 
       var kd = P.demoKd && P.demoKd.deptNow ? P.demoKd.deptNow(env, locId, dep.id) : null;
-      return { ok: true, location: { id: locId, name: ix.loc[locId].name }, department: { id: dep.id, name: dep.name }, day: day, days: DAYS,
+      return { ok: true, location: { id: locId, name: ix.loc[locId].name }, department: { id: dep.id, name: dep.name }, day: day, days: days,
         today: today,
         norm: { target: target, checked: todayChecked, left: target == null ? null : Math.max(0, target - todayChecked) },
         checked30: checked30,

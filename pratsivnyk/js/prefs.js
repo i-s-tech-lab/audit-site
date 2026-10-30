@@ -4,7 +4,8 @@
   var THEME_KEY = { cab: 'theme:sr', worker: 'theme' };   // ключі P.store, які читає вбудований скрипт index.html
   var DELAY_MS = 600;
 
-  var prefs = { theme: {}, order: {} }, loading = null, pending = null, timer = null;
+  var ROOTS = { theme: 1, order: 1, lists: 1 };   // v1.2
+  var prefs = { theme: {}, order: {}, lists: {} }, loading = null, pending = null, timer = null;
   var whoLoaded = null, touched = Object.create(null);
 
   function split(path) { var i = String(path).indexOf('.'); return i < 0 ? [String(path), null] : [path.slice(0, i), path.slice(i + 1)]; }
@@ -16,9 +17,8 @@
   }
   function merge(src) {
     if (!src || typeof src !== 'object') return;
-    var keep = { theme: prefs.theme, order: prefs.order };
-    prefs.theme = src.theme && typeof src.theme === 'object' ? src.theme : {};
-    prefs.order = src.order && typeof src.order === 'object' ? src.order : {};
+    var keep = { theme: prefs.theme, order: prefs.order, lists: prefs.lists };
+    Object.keys(ROOTS).forEach(function (k) { prefs[k] = src[k] && typeof src[k] === 'object' ? src[k] : {}; });
     Object.keys(touched).forEach(function (path) {
       var p = split(path), v = keep[p[0]] ? keep[p[0]][p[1]] : undefined;
       if (v === undefined) delete prefs[p[0]][p[1]]; else prefs[p[0]][p[1]] = v;
@@ -40,7 +40,7 @@
     },
     set: function (path, value) {
       var p = split(path);
-      if ((p[0] !== 'theme' && p[0] !== 'order') || !p[1]) return;
+      if (!Object.prototype.hasOwnProperty.call(ROOTS, p[0]) || !p[1]) return;
       touched[path] = 1;
       pending = pending || {};
       pending[p[0]] = pending[p[0]] || {};
@@ -62,7 +62,7 @@
       if (P.store && THEME_KEY[app]) P.store.set(THEME_KEY[app], t);
       P.prefs.set('theme.' + app, t);
     },
-    _reset: function () { prefs = { theme: {}, order: {} }; loading = null; pending = null; touched = Object.create(null); whoLoaded = null; if (timer) clearTimeout(timer); timer = null; },
+    _reset: function () { prefs = { theme: {}, order: {}, lists: {} }; loading = null; pending = null; touched = Object.create(null); whoLoaded = null; if (timer) clearTimeout(timer); timer = null; },
     _flush: flush
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -207,9 +207,10 @@
           var prev = env.storage.get(VIEW_KEY);
           env.storage.set(VIEW_KEY, loc);
           return A.app('meAs', {}).then(function (r) {
-            if (r && r.ok) return r;
+            var m = r && r.ok && r.me, mine = m && (m.allLocations || m.locations || []).some(function (l) { return l.id === loc; });
+            if (m && mine && (!m.viewLocationId || m.viewLocationId === loc)) return r;
             if (typeof prev === 'string' && prev) env.storage.set(VIEW_KEY, prev); else env.storage.del(VIEW_KEY);   // сервер не прийняв локацію — лишається попередня
-            return r;
+            return r && !r.ok ? r : { ok: false, code: 'forbidden', error: 'Цієї локації у вас немає.' };
           });
         }
         if (A.appFn(fn)) return A.app(fn, payload);

@@ -134,7 +134,9 @@
   }
   function platesView(r, list) { return '<div class="mkd-plates">' + list.map(function (f) { return f(r); }).join('') + '</div>'; }
 
-  P.cab.screen('/kd/loc/:id', { tab: 'kd', title: 'Коригуючі дії', period: false, render: function (ctx) {
+  P.cab.screen('/kd/loc/:id', { tab: 'kd', title: 'Коригуючі дії', period: false,
+    share: function (ctx) { return ctx.params && ctx.params.id ? { path: '/kd', query: { loc: ctx.params.id }, label: '«Коригуючі дії» старшого · ця локація', period: false } : null; },
+    render: function (ctx) {
     var id = ctx.params.id, w = X.weeks(ctx.query), q = ctx.query || {};
     var v = q.v === 'effect' || q.v === 'work' ? q.v : 'main';
     X.bind(ctx, id);

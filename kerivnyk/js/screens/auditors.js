@@ -63,7 +63,9 @@
   }
 
   P.cab.tab({ id: 'auditors', label: 'Аудитори', ic: 'people', path: '/auditors', order: 30, real: 'mgrAuditors' });
-  P.cab.screen('/auditors', { tab: 'auditors', title: 'Аудитори', period: true, render: function (ctx) {
+  P.cab.screen('/auditors', { tab: 'auditors', title: 'Аудитори', period: true,
+    share: function () { return st.locs.length === 1 ? { path: '/people/auditors', query: { loc: st.locs[0] }, label: '«Люди · аудитори» старшого · обрана локація · період із шапки' } : null; },
+    render: function (ctx) {
     var req = 0, data = null;
     function load() {
       var my = ++req, box = ctx.el.querySelector('#mgr-al');

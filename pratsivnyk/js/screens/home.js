@@ -33,7 +33,7 @@
   function view(r, ctx) {
     var draft = draftOf(ctx.me, ctx.loc), mine = r.myToday || [], checked = 0, rejected = 0;
     mine.forEach(function (a) { checked += a.checked || 0; rejected += a.rejected || 0; });
-    var html = '<div class="stack">' + queueBanners(ctx.me);
+    var html = '<div class="stack"><div data-since></div>' + queueBanners(ctx.me);
     if (draft) {
       html += '<div class="ui-banner ui-banner--warn">' + P.ic('clock') + '<div class="ui-banner__body"><p class="ui-banner__title">Чернетка аудиту' + P.help.btn('w.draft') + '</p>' +
         '<p class="ui-banner__text">' + esc(draft.summary || 'Чернетка') + ' · ' + f.time(new Date(draft.savedAt)) + '</p></div>' +
@@ -41,17 +41,20 @@
         '<button class="ui-btn ui-btn--quiet ui-btn--sm" type="button" data-act="draft-drop">Видалити</button></div></div>';
     }
     html += '<button class="ui-btn ui-btn--primary home-cta" type="button" data-act="new">' + P.ic('add') + 'Новий аудит</button>';
+    if (r.last) html += '<button class="ui-btn ui-btn--secondary home-repeat" type="button" data-act="repeat" data-id="' + esc(r.last) + '">' + P.ic('repeat') + 'Повторити минулий</button>';
     html += '<section class="ui-card" aria-labelledby="h-mine"><div class="card-head"><h2 class="card-title" id="h-mine">Мої аудити сьогодні' + P.help.btn('w.home.mine') + '</h2></div>';
     if (!mine.length) return html + '<p class="card-sub">Тут зʼявляться аудити, які ви запишете сьогодні.</p></section></div>';
     html += '<div class="totals">' + stat(f.num(mine.length), 'аудити') + stat(f.num(checked), 'перевірено, шт', 'term.checked') +
       stat(f.num(rejected) + (checked ? ' · ' + f.pct(Math.round(rejected / checked * 1000) / 10) : ''), checked ? 'брак, шт · брак, %' : 'брак, шт', checked ? 'term.rate' : 'term.rejected') + '</div>';
     html += '<div class="mini-list">' + mine.map(function (a) {
       var left = minutesLeft(a.editableUntil);
-      return '<button class="mini-item' + (left ? ' mini-item--edit' : '') + '" type="button" data-audit="' + esc(a.id) + '">' + P.ic('audit') +
+      return '<div class="mini-row"><button class="mini-item' + (left ? ' mini-item--edit' : '') + '" type="button" data-audit="' + esc(a.id) + '">' + P.ic('audit') +
         '<span class="mini-item__main"><span class="mini-item__title">' + f.time(a.createdAt) + ' · ' + esc(a.departmentName) +
           (a.locationId && a.locationId !== ctx.loc ? ' · ' + esc(a.locationName) : '') + '</span>' +   // аудит в іншій локації — з її назвою (v2.4)
         '<span class="mini-item__meta">перевірено ' + f.num(a.checked) + ' шт · брак ' + f.num(a.rejected) + ' шт (' + f.pct(a.pct) + ')</span></span>' +
-        (left ? '<span class="ui-badge ui-badge--info">ще ' + left + ' хв, щоб виправити</span>' : P.ic('chevron-right')) + '</button>';
+        (left ? '<span class="ui-badge ui-badge--info">ще ' + left + ' хв, щоб виправити</span>' : P.ic('chevron-right')) + '</button>' +
+        '<button class="ui-btn ui-btn--quiet ui-btn--sm mini-row__repeat" type="button" data-act="repeat" data-id="' + esc(a.id) + '" title="Повторити" aria-label="Повторити аудит ' +
+        f.time(a.createdAt) + ' · ' + esc(a.departmentName) + '">' + P.ic('repeat', 'ui-icon--sm') + '<span class="mini-row__txt">Повторити</span></button></div>';
     }).join('') + '</div></section></div>';
     return html;
   }
@@ -92,6 +95,9 @@
         });
       });
       P.delegate(el, 'click', '[data-act="new"]', function () { P.router.go('/audit/new', { loc: ctx.loc }); });
+      P.delegate(el, 'click', '[data-act="repeat"]', function (e, t) { P.auditRepeat.open(t.getAttribute('data-id'), { loc: ctx.loc }); });
+      var since = el.querySelector('[data-since]');
+      if (since && P.sinceLast && P.sinceLast.mount) P.sinceLast.mount(since, { scope: 'auditor', locationId: ctx.loc });
       P.delegate(el, 'click', '[data-audit]', function (e, t) { P.router.go('/audit/' + t.getAttribute('data-audit')); });
       P.delegate(el, 'click', '[data-act="draft-go"]', function () { P.router.go('/audit/new', { loc: ctx.loc, draft: '1' }); });
       P.delegate(el, 'click', '[data-act="draft-drop"]', function () {

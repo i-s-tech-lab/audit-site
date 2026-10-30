@@ -1,0 +1,32 @@
+
+
+
+.since { display: flex; align-items: flex-start; gap: 8px; box-sizing: border-box; max-width: 100%; margin: 0 0 12px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.since__ic { display: inline-flex; flex: none; margin-top: 2px; color: var(--text-3); }
+.since__txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.since__head { font-weight: 600; color: var(--text-2); }
+.since__part { color: var(--text-2); }
+button.since__part { display: inline; min-height: 32px; margin: 0; padding: 4px 2px; background: none; border: 0; border-bottom: 1px dashed var(--brand); border-radius: 0; font: inherit; color: var(--brand); cursor: pointer; }
+button.since__part:hover { border-bottom-style: solid; }
+button.since__part:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.since__sep { margin: 0 6px; font-style: normal; color: var(--text-3); }
+.since__row { margin-top: 6px; }
+.since__loc { color: var(--text-2); }
+.since .hq { flex: none; }
+@media (max-width: 600px) {
+  .since { padding: 10px; font-size: 13px; }
+  button.since__part { min-height: 40px; padding: 8px 2px; }
+}
+
+
+.news { display: flex; flex-direction: column; gap: 12px; }
+.news__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-3); font-size: 13px; }
+.news__empty { margin: 0; padding: 24px 0; text-align: center; color: var(--text-3); }
+.news__item { box-sizing: border-box; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); }
+.news__item--big { border-color: var(--brand); box-shadow: inset 4px 0 0 var(--brand); }
+.news__meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.news__date { font-size: 12px; color: var(--text-3); }
+.news__new { padding: 1px 8px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 11px; font-weight: 600; line-height: 1.5; }
+.news__title { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.news__list { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.5; color: var(--text-2); }
+.news__list li + li { margin-top: 4px; }

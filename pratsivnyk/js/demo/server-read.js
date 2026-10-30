@@ -55,6 +55,32 @@
     return s.checked < target ? 'progress' : 'ok';
   }
 
+  var RECENT_DAYS = 7, RECENT_MAX = 5;
+
+  function myRecent(me, env, loc) {
+    var from = P.demoDates.addDays(env.day(), -(RECENT_DAYS - 1));
+    return env.audits().filter(function (a) { return a.auditorId === me.id && a.day >= from && (!loc || a.locationId === loc); }).sort(C.newestFirst);
+  }
+
+  function recentOf(me, env, locId, deps, products, orders, workers) {
+    var okProd = {}, okOrd = {}, okWk = {}, out = {};
+    products.forEach(function (x) { okProd[x.id] = true; });
+    orders.forEach(function (x) { okOrd[x.no] = true; });
+    workers.forEach(function (x) { okWk[x.code] = true; });
+    deps.forEach(function (d) { out[d.id] = { products: [], orders: [], workers: [] }; });
+    function add(list, v, ok) {
+      if (v && Object.prototype.hasOwnProperty.call(ok, v) && list.indexOf(v) < 0 && list.length < RECENT_MAX) list.push(v);
+    }
+    myRecent(me, env, locId).forEach(function (a) {
+      var r = out[a.departmentId];
+      if (!r) return;
+      a.items.forEach(function (i) { add(r.products, i.productId, okProd); });
+      a.orders.forEach(function (o) { add(r.orders, o, okOrd); });
+      a.checkedWorkers.forEach(function (c) { add(r.workers, c, okWk); });
+    });
+    return out;
+  }
+
   var api = {
     homeAuditor: function (p, me, env) {
       var r = resolveLoc(p, me, env); if (r.err) return r.err;
@@ -78,13 +104,14 @@
         });
       var myToday = env.audits().filter(function (a) { return a.auditorId === me.id && a.day === day; }).sort(C.newestFirst).map(function (a) {
         var s = summary(a, env);
-        return { id: s.id, createdAt: s.createdAt, locationId: s.locationId, locationName: s.locationName, departmentName: s.departmentName,
-          checked: s.checked, rejected: s.rejected, pct: s.pct, editableUntil: s.editableUntil };
+        return { id: s.id, createdAt: s.createdAt, locationId: s.locationId, locationName: s.locationName, departmentId: s.departmentId,
+          departmentName: s.departmentName, checked: s.checked, rejected: s.rejected, pct: s.pct, editableUntil: s.editableUntil };
       });
+      var lastOne = myRecent(me, env, null)[0];
       var t = sumAudits(today);
       return { ok: true, location: { id: r.loc.id, name: r.loc.name }, day: day, criticalPct: critical,
         totals: { audits: t.audits, checked: t.checked, rejected: t.rejected, pct: t.pct },
-        departments: departments, wishes: wishes, myToday: myToday };
+        departments: departments, wishes: wishes, myToday: myToday, last: lastOne ? lastOne.id : null };
     },
 
     auditFormContext: function (p, me, env) {
@@ -97,16 +124,19 @@
       var orders = db.orders.filter(function (o) { return o.locationId === r.loc.id && o.firstDay <= day && on(o); })
         .sort(function (a, b) { return a.lastDay < b.lastDay ? 1 : a.lastDay > b.lastDay ? -1 : a.no < b.no ? 1 : -1; }).slice(0, 50);
       var canAdd = !!me.can.recordAudit && (P.demoApis || []).some(function (a) { return Object.prototype.hasOwnProperty.call(a, 'workerQuickAdd'); });
+      var ctxProducts = db.products.filter(function (x) { return types[x.deptTypeId] && on(x); })
+        .map(function (x) { return { id: x.id, name: x.name, deptTypeId: x.deptTypeId }; });
+      var ctxWorkers = db.workers.filter(function (w) { return w.locationId === r.loc.id && on(w); })
+        .map(function (w) { return { code: w.code, name: w.name, departmentId: w.departmentId }; });
       return { ok: true, location: { id: r.loc.id, name: r.loc.name }, limits: Object.assign({}, C.LIMITS), canAddWorker: canAdd,
         locations: db.locations.filter(function (l) { return l.active !== false || l.id === r.loc.id; }).map(function (l) { return { id: l.id, name: l.name }; }),
         departments: deps.map(function (d) { return { id: d.id, name: d.name, deptTypeId: d.deptTypeId }; }),
-        products: db.products.filter(function (x) { return types[x.deptTypeId] && on(x); })
-          .map(function (x) { return { id: x.id, name: x.name, deptTypeId: x.deptTypeId }; }),
+        products: ctxProducts,
         defectTypes: db.defectTypes.filter(function (x) { return types[x.deptTypeId] && on(x); })
           .map(function (x) { return { id: x.id, name: x.name, deptTypeId: x.deptTypeId, severity: x.severity, level: x.level || 'fix' }; }),
-        workers: db.workers.filter(function (w) { return w.locationId === r.loc.id && on(w); })
-          .map(function (w) { return { code: w.code, name: w.name, departmentId: w.departmentId }; }),
+        workers: ctxWorkers,
         orders: orders.map(function (o) { return { no: o.no, customer: o.customer, lastDay: o.lastDay }; }),
+        recent: recentOf(me, env, r.loc.id, deps, ctxProducts, orders, ctxWorkers),
         orderBlocks: db.orderBlocks.filter(function (b) { return b.locationId === r.loc.id; })
           .map(function (b) { return { id: b.id, name: b.name, orders: b.orders.slice() }; }),
         norms: deps.map(function (d) {
@@ -167,6 +197,16 @@
       audit.editWindowMin = C.LIMITS.editWindowMin;   // для текстів «виправити можна N хвилин» (правило адміністратора)
       audit.criticalPct = env.db.settings.criticalPct;   // критичний рівень браку (правило адміністратора) — для позначки «понад норму»
       return { ok: true, audit: audit };
+    },
+
+    auditorWeek: function (p, me, env) {
+      var D = P.demoDates, day = env.day(), mon = D.addDays(day, -((D.dow(day) + 6) % 7)), prevMon = D.addDays(mon, -7);
+      var mine = env.audits().filter(function (a) { return a.auditorId === me.id; });
+      function span(from, to) {
+        var s = sumAudits(mine.filter(function (a) { return a.day >= from && a.day <= to; }));
+        return { from: from, to: to, audits: s.audits, checked: s.checked, rejected: s.rejected };
+      }
+      return { ok: true, week: span(mon, day), prev: span(prevMon, D.addDays(mon, -1)) };
     }
   };
 

@@ -1,0 +1,15 @@
+
+.hdr-tools { display: inline-flex; align-items: center; gap: 4px; }
+.hdr-tool { position: relative; justify-content: center; }
+.tool.hdr-tool { width: 40px; padding: 0; }
+.hdr-tool__dot {
+  position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--brand); box-shadow: 0 0 0 2px var(--surface);
+}
+.hdr-tool__dot[hidden] { display: none; }
+
+@media (max-width: 560px) {
+  .hdr:has(.hdr-tools) { flex-wrap: wrap; row-gap: 4px; }
+  .hdr:has(.hdr-tools) > .hdr__titles { flex: 1 1 100%; }
+  .hdr:has(.hdr-tools) > .hdr__tools { flex: 1 1 100%; justify-content: flex-end; }
+}

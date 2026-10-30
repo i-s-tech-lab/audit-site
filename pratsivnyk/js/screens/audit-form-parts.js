@@ -45,11 +45,6 @@
     return help ? '<div class="ui-field"><span class="ui-label">' + label + P.help.btn(help) + '</span>' + inp + '</div>'
       : '<label class="ui-field"><span class="ui-label">' + label + '</span>' + inp + '</label>';
   }
-  function deptNorm(n) {
-    var left = n.sampleTarget - n.todayChecked;
-    return left > 0 ? '<span class="pick-btn__sub">Ще перевірити: <b>' + f.num(left) + ' шт</b></span>'
-      : '<span class="pick-btn__sub pick-btn__sub--ok">' + P.ic('check', 'ui-icon--sm') + 'Норму виконано</span>';
-  }
   AF.blockOf = function (F, no) { return (F.ctx.orderBlocks || []).filter(function (b) { return b.orders.indexOf(no) >= 0; })[0] || null; };
   function blockLine(b, mark) {
     return b.orders.map(function (o) { return o === mark ? '<mark class="hl">' + esc(o) + '</mark>' : esc(o); }).join(', ');
@@ -66,14 +61,11 @@
   }
 
   function secDept(F) {
-    var norms = {};
-    (F.ctx.norms || []).forEach(function (n) { norms[n.departmentId] = n; });
     var body = '<div class="pick-grid">' + F.ctx.departments.map(function (d) {
-      var n = norms[d.id], locked = F.editId && !AF.moved(F) && d.id !== F.departmentId;
-      return '<button type="button" class="pick-btn" data-a="dept" data-v="' + esc(d.id) + '" aria-pressed="' + (F.departmentId === d.id) + '"' + (locked ? ' disabled' : '') + '>' + esc(d.name) +
-        (n && n.sampleTarget ? deptNorm(n) : '') + '</button>';
-    }).join('') + '</div>' + err(F, 'departmentId');
-    return sec(F, 'departmentId', 1, 'Відділ', AF.moved(F) ? 'Аудит переїде в «' + F.ctx.location.name + '». Оберіть відділ цієї локації.' : F.editId ? 'У записаному аудиті відділ не змінюється.' : 'Де перевіряєте. Під відділом видно, скільки ще перевірити сьогодні.', body, !!F.departmentId, '', F.editId ? '' : 'w.form.deptLeft');
+      var locked = F.editId && !AF.moved(F) && d.id !== F.departmentId;
+      return '<button type="button" class="pick-btn" data-a="dept" data-v="' + esc(d.id) + '" aria-pressed="' + (F.departmentId === d.id) + '"' + (locked ? ' disabled' : '') + '>' + esc(d.name) + '</button>';
+    }).join('') + '</div>' + AF.briefHtml(F) + err(F, 'departmentId');
+    return sec(F, 'departmentId', 1, 'Відділ', AF.moved(F) ? 'Аудит переїде в «' + F.ctx.location.name + '». Оберіть відділ цієї локації.' : F.editId ? 'У записаному аудиті відділ не змінюється.' : 'Де перевіряєте.', body, !!F.departmentId);
   }
   function secOrders(F) {
     var body = '<div class="chips-input">' + F.orders.map(function (o) {
@@ -186,7 +178,6 @@
     var t = AF.totals(F);
     return '<div class="action-bar"><p class="action-bar__sum">Перевірено <b>' + f.num(t.checked) + '</b> шт · брак <b>' + f.num(t.rejected) + '</b> шт' +
       (t.pct != null ? ' (<b>' + f.pct(t.pct) + '</b>)' : '') + (t.other ? '<br>з них <b>' + f.num(t.other) + '</b> шт — брак іншого відділу' : '') + P.help.btn('w.form.sum') + '</p>' +
-      (F.departmentId ? '<button type="button" class="brief-fab" data-a="brief" aria-label="Рекомендація по відділу «' + esc((AF.dept(F, F.departmentId) || {}).name || '') + '»">?</button>' : '') +
       '<button type="button" class="ui-btn ui-btn--primary" data-a="save"' + (F.saving ? ' disabled' : '') + '>' +
       (F.saving ? '<span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>Записую…' : P.ic('save') + (F.editId ? 'Зберегти зміни' : 'Записати аудит')) + '</button></div>';
   }

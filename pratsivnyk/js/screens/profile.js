@@ -1,6 +1,24 @@
 (function (root) {
   'use strict';
-  var P = root.P, esc = P.esc;
+  var P = root.P, esc = P.esc, f = P.fmt;
+
+  function weekLine(label, w) {
+    return '<p class="week-line">' + label + ': <b>' + f.num(w.audits) + '</b> ' + P.plural(w.audits, 'аудит', 'аудити', 'аудитів') +
+      ' · перевірено <b>' + f.num(w.checked) + '</b> шт · брак <b>' + f.num(w.rejected) + '</b> шт</p>';
+  }
+  function loadWeek(host) {
+    host.innerHTML = '<p class="card-sub" role="status">Завантажую…</p>';
+    P.srv('auditorWeek').then(function (r) {
+      if (!host.isConnected) return;   // вийшли з профілю, поки чекали
+      if (!r.ok) {
+        host.innerHTML = '<p class="err" role="alert">' + P.ic('error') + esc('Не вдалося завантажити. ' + (r.error || '')) + '</p>' +
+          '<button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" data-act="week-retry">' + P.ic('refresh') + 'Спробувати ще раз</button>';
+        return;
+      }
+      host.innerHTML = (r.week.audits || r.prev.audits) ? weekLine('З понеділка', r.week) + weekLine('Минулий тиждень', r.prev)
+        : '<p class="card-sub">За цей і минулий тиждень аудитів ще не було.</p>';
+    });
+  }
 
   function slackLine(me) { return 'Slack: підключено' + (me.slackId ? ' · ' + P.authSlack.maskId(me.slackId) : ''); }
 
@@ -12,9 +30,10 @@
       return '<div class="stack">' +
         '<section class="ui-card"><div class="card-head"><span class="avatar">' + esc(P.initials(me.name)) + '</span>' +
         '<div class="grow"><h2 class="card-title">' + esc(me.name) + '</h2><p class="card-sub">' + esc(slackLine(me)) + '</p></div></div>' +
-        '<dl class="kv"><dt>Роль</dt><dd>' + (me.admin ? 'Адміністратор · дивитесь як працівник' : 'Аудитор') + '</dd><dt>Локація</dt><dd>' + esc(P.shell.locName(ctx.loc)) + '</dd>' +
+        '<dl class="kv"><dt>Роль</dt><dd>' + (me.ownRoleLabel ? esc(me.ownRoleLabel) + ' · дивитесь як аудитор' : me.admin ? 'Адміністратор · дивитесь як працівник' : 'Аудитор') + '</dd><dt>Локація</dt><dd>' + esc(P.shell.locName(ctx.loc)) + '</dd>' +
         '<dt>Вхід' + P.help.btn('w.profile.session') + '</dt><dd>' + (me.admin ? 'Slack' : 'Slack · раз на ' + ((me.rules && me.rules.sessionDays) || 7) + ' ' + P.plural((me.rules && me.rules.sessionDays) || 7, 'день', 'дні', 'днів')) + '</dd></dl></section>' +
-        (me.admin ? '<section class="ui-card">' + P.profileSwitch.html(me) + '</section>' : '') +
+        '<section class="ui-card"><div class="card-head"><h2 class="card-title">Мій тиждень' + P.help.btn('w.profile.week') + '</h2></div><div data-week></div></section>' +
+        (P.profileSwitch.html(me) ? '<section class="ui-card">' + P.profileSwitch.html(me) + '</section>' : '') +
         '<section class="ui-card"><h2 class="card-title">Тема</h2><div class="ui-seg" role="group" aria-label="Тема">' +
         '<button class="ui-seg__btn" type="button" data-theme-set="dark" aria-pressed="' + dark + '">' + P.ic('theme-dark') + 'Темна</button>' +
         '<button class="ui-seg__btn" type="button" data-theme-set="light" aria-pressed="' + !dark + '">' + P.ic('theme-light') + 'Світла</button></div></section>' +
@@ -27,6 +46,9 @@
     },
     mount: function (el) {
       P.profileSwitch.bind(el);
+      var week = el.querySelector('[data-week]');
+      if (week) loadWeek(week);
+      P.delegate(el, 'click', '[data-act="week-retry"]', function () { var h = el.querySelector('[data-week]'); if (h) loadWeek(h); });
       P.delegate(el, 'change', '[data-act="sim-offline"]', function (e, t) {
         P.offline.setSimulated(t.checked);
         P.toast('ok', t.checked ? 'Звʼязок вимкнено (імітація)' : 'Звʼязок повернувся (імітація вимкнена)',

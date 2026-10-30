@@ -1,7 +1,20 @@
 (function (root) {
   'use strict';
-  var P = root.P, esc = P.esc, H = P.sr.h, K = P.mgr;
+  var P = root.P, esc = P.esc, H = P.sr.h, K = P.mgr, OV = P.mgrOv;
   var AUD = ['аудит', 'аудити', 'аудитів'];
+
+  var nb = null;   // нові блоки поточного показу екрана (overview-blocks.js): onShow малює блок, щойно його повернули з буфера
+  var L = P.blockLayout.create({ key: 'mgr:ov', prefix: 'ov-', act: 'ov-layout', title: 'Блоки «Огляду»', help: K.help('mgr.ov.blocks'),
+    blocks: [
+      { id: 'sum', name: 'За період — підсумок', cls: 'card mgr-gap' },
+      { id: 'days', name: 'Брак за днями', cls: 'card mgr-gap' },
+      { id: 'cmp', name: 'Було → стало', cls: 'card mgr-gap' },
+      { id: 'kd', name: 'Коригуючі дії', cls: '' },
+      { id: 'compare', name: 'Порівняння двох періодів', cls: 'card mgr-gap' },
+      { id: 'nocheck', name: 'Дні без перевірок', cls: 'card mgr-gap', buffer: true, desc: 'Скільки днів кожен відділ обраної локації був без жодної перевірки' },
+      { id: 'per100', name: 'Брак на 100 перевірених', cls: 'card mgr-gap', buffer: true, desc: 'Відділи всіх локацій: скільки браку на кожні 100 перевірених штук' }
+    ],
+    onShow: function (id) { if (nb) nb.show(id); } });
 
   function tile(id, name, o, prev, on, days) {
     return '<div class="mgr-tile' + (on ? ' mgr-tile--on' : '') + '" data-tile-id="' + esc(id) + '" data-tile-name="' + esc(name) + '">' +
@@ -18,8 +31,8 @@
     var n = r.totals.days;
     return '<section class="mgr-tiles" aria-label="Локація">' +
       r.locations.map(function (l) { return tile(l.id, l.name, l, l.prev, sel === l.id, n); }).join('') + '</section>' +
-      '<p class="hint mgr-tiles__key">Плитка перемикає всю сторінку на локацію' + K.help('mgr.tiles') + ' · смужка — рівні браку' + K.help('term.levels') + ': ' +
-      K.LV.map(function (k) { return H.lvl(k); }).join(' ') + ' · «було → стало»' + K.help('mgr.was') + ' · коригуючі дії зараз' + K.help('mgr.kd.now') + '</p>';
+      '<div class="ov-bar"><p class="hint mgr-tiles__key">Плитка перемикає всю сторінку на локацію' + K.help('mgr.tiles') + ' · смужка — рівні браку' + K.help('term.levels') + ': ' +
+      K.LV.map(function (k) { return H.lvl(k); }).join(' ') + ' · «було → стало»' + K.help('mgr.was') + ' · коригуючі дії зараз' + K.help('mgr.kd.now') + '</p>' + L.button() + '</div>';
   }
   function sumLocs(list) {
     var o = { audits: 0, checked: 0, rejected: 0, levels: { fix: 0, repair: 0, scrap: 0 } };
@@ -31,26 +44,26 @@
     return o;
   }
 
-  function summary(r, scope) {
+  function summary(r, scope, bx) {
     var t = r.totals, p = r.prev, n = t.days;
     function cell(label, key, val, prev) {
       return '<div class="mgr-sum__i"><span class="mgr-sum__l">' + esc(label) + K.help(key) + '</span><b class="mgr-sum__v">' + val + '</b>' +
         '<span class="mgr-sum__p">попередні ' + K.dn(n) + ' — <b>' + prev + '</b></span></div>';
     }
     var lv = K.total(t.levels);
-    return '<section class="card mgr-gap"><div><h2 class="h2">За період · ' + esc(scope) + '</h2><p class="h2-sub">' + esc(K.span(r.from, r.to)) + ' · ' + K.dn(n) +
-      ' · ' + esc(K.asOf(r.asOf)) + ' · під кожним числом — те саме за ' + esc(K.span(p.from, p.to)) + K.help('mgr.prev') + '</p></div>' +
+    return OV.wrap('<h2 class="h2">За період · ' + esc(scope) + '</h2><p class="h2-sub">' + esc(K.span(r.from, r.to)) + ' · ' + K.dn(n) +
+      ' · ' + esc(K.asOf(r.asOf)) + ' · під кожним числом — те саме за ' + esc(K.span(p.from, p.to)) + K.help('mgr.prev') + '</p>', bx) +
       '<div class="mgr-sum">' + cell('Аудитів', 'term.audit', H.num(t.audits), H.num(p.audits)) +
       cell('Днів з аудитами', 'mgr.daysWithAudits', t.daysWithAudits + ' з ' + n, p.daysWithAudits + ' з ' + n) +
       cell('Перевірено, шт', 'term.checked', H.num(t.checked), H.num(p.checked)) + cell('Брак, шт', 'term.rejected', H.num(t.rejected), H.num(p.rejected)) +
       cell('Брак, %', 'term.rate', K.rate(t.pct, r.criticalPct), H.pct(p.pct)) + '</div>' +
       '<div class="mgr-gap mgr-gap--sm"><p class="group-label" style="padding:0">Рівні браку · ' + H.num(lv) + ' шт' + K.help('term.levels') + '</p>' +
-      (lv ? K.levels(t.levels, 14) : '<p class="hint">Браку за період не знайдено.</p>') + '</div></section>';
+      (lv ? K.levels(t.levels, 14) : '<p class="hint">Браку за період не знайдено.</p>') + '</div>';
   }
 
-  function daysCard(r, scope) {
-    var head = '<div><h2 class="card-title">Брак за днями, % від перевіреного' + K.help('mgr.daysChart') + '</h2><p class="hint">' + esc(scope) + ' · ' + esc(K.span(r.from, r.to)) +
-      ' · колір — рівень браку · наведіть на день або торкніться — його числа · протягніть мишею — сума кількох днів</p></div>';
+  function daysCard(r, scope, bx) {
+    var head = OV.wrap('<h2 class="card-title">Брак за днями, % від перевіреного' + K.help('mgr.daysChart') + '</h2><p class="hint">' + esc(scope) + ' · ' + esc(K.span(r.from, r.to)) +
+      ' · колір — рівень браку · наведіть на день або торкніться — його числа · протягніть мишею — сума кількох днів</p>', bx);
     if (!r.totals.audits) return head + H.empty('Аудитів за період не було', scope + ' · ' + K.span(r.from, r.to));
     return head + '<div class="legend">' + K.LV.map(function (k) { return H.lvl(k); }).join('') +
       '<span class="mgr-key"><i class="mgr-key__dash"></i>критичний рівень — ' + r.criticalPct + '%' + K.help('term.critical') + '</span>' +
@@ -75,25 +88,30 @@
     });
   }
 
-  function compareCard(r, scope) {
+  function compareCard(r, scope, bx) {
     var t = r.totals, p = r.prev, n = t.days;
     function row(label, prev, cur) { return '<div class="mgr-cmp__r"><span>' + label + '</span><span>' + K.was(prev, cur) + '</span></div>'; }
-    return '<div><h2 class="card-title">Порівняння з попереднім періодом (' + K.dn(n) + ')' + K.help('mgr.was') + '</h2><p class="hint">' + esc(scope) + ' · було — ' + esc(K.span(p.from, p.to)) +
-      ' · стало — ' + esc(K.span(r.from, r.to)) + '</p></div><div class="mgr-cmp">' +
+    return OV.wrap('<h2 class="card-title">Порівняння з попереднім періодом (' + K.dn(n) + ')' + K.help('mgr.was') + '</h2><p class="hint">' + esc(scope) + ' · було — ' + esc(K.span(p.from, p.to)) +
+      ' · стало — ' + esc(K.span(r.from, r.to)) + '</p>', bx) + '<div class="mgr-cmp">' +
       row('Брак, %', H.pct(p.pct), H.pct(t.pct)) + row('Брак, шт', H.num(p.rejected), H.num(t.rejected)) +
       row('Перевірено, шт', H.num(p.checked), H.num(t.checked)) + row('Аудитів', H.num(p.audits), H.num(t.audits)) +
       row('Днів з аудитами', p.daysWithAudits + ' з ' + n, t.daysWithAudits + ' з ' + n) +
       K.LV.map(function (k) { return row(H.lvl(k) + ', шт', H.num(p.levels[k]), H.num(t.levels[k])); }).join('') + '</div>';
   }
 
-  function kdLink(loc) {
-    return '<a class="card mgr-kdlink" href="#/kd/loc/' + encodeURIComponent(loc.id) + '">' + P.ic('corrective', 'ui-icon--sm') +
-      '<span>Коригуючі дії цієї локації — на вкладці «Коригуючі дії» ›</span></a>';
+  function kdLink(loc, bx) {
+    return '<div class="card mgr-kdlink ov-kd"><a class="ov-kd__a" href="#/kd/loc/' + encodeURIComponent(loc.id) + '">' + P.ic('corrective', 'ui-icon--sm') +
+      '<span>Коригуючі дії цієї локації — на вкладці «Коригуючі дії» ›</span></a>' + bx + '</div>';
   }
 
   P.cab.tab({ id: 'overview', label: 'Огляд', ic: 'chart', path: '/overview', order: 10, real: 'mgrOverview' });
   var last = '';   // остання обрана локація (повертаючись на вкладку без ?loc= — та сама)
-  P.cab.screen('/overview', { tab: 'overview', title: 'Огляд', period: true, render: function (ctx) {
+  P.cab.screen('/overview', { tab: 'overview', title: 'Огляд', period: true,
+    share: function (ctx) {
+      var loc = (ctx.query && ctx.query.loc) || last;
+      return loc ? { path: '/analytics', query: { loc: loc }, label: '«Аналітика» старшого · обрана локація · період із шапки' } : null;
+    },
+    render: function (ctx) {
     var sel = (ctx.query && ctx.query.loc) || last, tileRow = null;
     function load() {
       P.srv('mgrOverview', { from: ctx.period.from, to: ctx.period.to, locationId: sel }).then(show);
@@ -110,17 +128,35 @@
       if (!r.location) { ctx.el.innerHTML = '<section class="card">' + H.empty('Локацій ще немає', 'Коли адміністратор додасть локацію, тут зʼявляться її числа.') + '</section>'; return; }   // жодної локації
       var scope = r.location.name;
       last = r.location.id;
-      ctx.el.innerHTML = '<div class="mgr-page">' + tiles(r, sel) + summary(r, scope) + kdLink(r.location) +
-        '<div class="row"><section class="card col--wide mgr-gap">' + daysCard(r, scope) + '</section>' +
-        '<section class="card col mgr-gap">' + compareCard(r, scope) + '</section></div></div>';
+      ctx.el.innerHTML = '<div class="mgr-page"><div id="ov-since"></div>' + tiles(r, sel) + '<div id="ov-body" class="ov-body">' + L.frame() + '</div></div>';
+      var body = ctx.el.querySelector('#ov-body');
+      fill(body, 'sum', summary(r, scope, L.box('sum')));
+      fill(body, 'days', daysCard(r, scope, L.box('days')));
+      fill(body, 'cmp', compareCard(r, scope, L.box('cmp')));
+      fill(body, 'kd', kdLink(r.location, L.box('kd')));
+      L.bindPage(body);
       mountChart(ctx.el, r, scope);
       mountTiles();
+      mountSince();
+      nb = OV.mount(ctx, { loc: r.location, period: { from: r.from, to: r.to }, visible: L.visible,
+        box: { compare: L.box('compare'), nocheck: L.box('nocheck'), per100: L.box('per100') } });
+      ctx.on('ov-layout', function (t) { L.open(t, body); });
+      if (P.prefs) P.prefs.load().then(function () { if (ctx.alive()) { L.late(body); nb.start(); } });   // налаштування могли прийти пізніше за перше малювання
+      else nb.start();
+    }
+    function fill(body, id, html) { var el = body.querySelector('#ov-' + id); if (el) el.innerHTML = html; }
+    function mountSince() {
+      var el = ctx.el.querySelector('#ov-since');
+      if (el && P.sinceLast && P.sinceLast.mount) P.sinceLast.mount(el, { scope: 'manager', link: function (kind, locId) {
+        return kind === 'audits' ? { path: '/overview', query: { loc: locId } } : { path: '/kd/loc/' + locId };
+      } });
     }
     function mountTiles() {
       var row = ctx.el.querySelector('.mgr-tiles');
       if (tileRow) tileRow.destroy();
       tileRow = row ? P.tileRow.mount(row, { scope: 'mgr:ov', item: '.mgr-tile', idAttr: 'data-tile-id', active: '.mgr-tile--on', minWidth: 260, max: 6, fill: true, label: 'локацію' }) : null;
     }
+    nb = null;
     load();
     ctx.on('mgr-loc', function (t) { var id = t.getAttribute('data-id'); if (id !== sel) ctx.go('/overview', { loc: id }); });
   } });

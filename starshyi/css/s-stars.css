@@ -1,0 +1,51 @@
+
+
+
+.srs-star {
+  display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; padding: 0; vertical-align: middle;
+  border: 0; border-radius: var(--r-md); background: transparent; color: var(--text-3); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.srs-star:hover, .srs-star:focus-visible { background: var(--surface-2); color: var(--text); }
+.srs-star--on, .srs-star--on:hover, .srs-star--on:focus-visible { color: var(--brand); }
+@media (pointer: coarse) { .srs-star { width: 40px; height: 40px; } }
+
+
+.srs-row { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--line); }
+.srs-row:first-child { border-top: 0; }
+.srs-row > :first-child { flex: 1; min-width: 0; }
+.srs-row > .an-hbar, .srs-row > .row-item { border-top: 0; }
+@media (max-width: 720px) {   
+  .srs-row > .an-hbar { grid-template-columns: 22px minmax(0, 1fr) 36px 40px !important; gap: 6px; }
+  .srs-row > .an-hbar--nr { grid-template-columns: minmax(0, 1fr) 36px 40px !important; }
+}
+
+
+.srs-name { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+.srs-name > .srs-star { width: 32px; height: 32px; margin: -4px 0; }
+.srs-name > :not(.srs-star) { min-width: 0; }
+.srs-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.srs-title > .card-title { flex: 0 1 auto; }
+
+
+.srs-prods { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.srs-prod { display: inline-flex; align-items: center; gap: 2px; min-width: 0; font-size: 16px; color: var(--text-2); }
+
+
+.an-bh { align-items: flex-start; }
+.an-bh > .bl-box { margin-left: auto; }
+@media (max-width: 720px) {
+  
+  .an-bh { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 8px; }
+  .an-bh > :first-child { grid-column: 1; grid-row: 1; min-width: 0 !important; }
+  .an-bh > .bl-box { grid-column: 2; grid-row: 1; margin-left: 0; }
+  .an-bh > :not(:first-child):not(.bl-box) { grid-column: 1 / -1; justify-self: start; max-width: 100%; }
+}
+
+
+#an-watch { display: flex; flex-direction: column; gap: 12px; }
+.srw { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 24px; }
+.srw__col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.srw .row-item { min-height: 52px; }
+.srw .row-item__title { overflow-wrap: anywhere; }
+.srw__empty { margin: 0; padding: 4px 0; color: var(--text-2); }

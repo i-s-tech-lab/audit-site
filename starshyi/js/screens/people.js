@@ -23,9 +23,9 @@
 
   function workersCard(r) {
     var q = pf.q.trim().toLowerCase(), crit = r.criticalPct;
-    var list = r.workers.filter(function (w) {
+    var list = P.srStars.sort(r.workers.filter(function (w) {
       return (!pf.dep || w.departmentId === pf.dep) && (!q || w.name.toLowerCase().indexOf(q) >= 0 || w.code.toLowerCase().indexOf(q) >= 0);
-    });
+    }), 'worker', function (w) { return w.code; });   // v1.9: позначені зірочкою — першими
     var shown = list.slice(0, pf.shown), left = list.length - shown.length, days = A.diff(r.from, r.to) + 1;
     var dep = r.departments.filter(function (d) { return d.id === pf.dep; })[0];
     var body = list.length ? '<div class="tbl-box"><table class="tbl"><thead><tr><th>Працівник</th><th>Відділ</th><th class="n">Аудитів' + A.q('sr.pp.audits') + '</th>' +
@@ -33,7 +33,7 @@
       '<th style="width:180px">Рівні браку' + A.q('term.levels') + '</th><th class="n">Брак, %' + A.q('sr.pp.rate') + '</th></tr></thead><tbody>' +
       shown.map(function (w) {
         return '<tr data-act="pp-worker" data-code="' + esc(w.code) + '"' + (w.active ? '' : ' style="color:var(--text-3)"') + '>' +
-          '<td><b>' + esc(w.name) + '</b>' + (w.active ? '' : '<span class="sub">вимкнено в довіднику</span>') + '</td><td>' + esc(w.departmentName) + '</td>' +
+          '<td><span class="srs-name"><b>' + esc(w.name) + '</b>' + P.srStars.html('worker', w.code, w.name) + '</span>' + (w.active ? '' : '<span class="sub">вимкнено в довіднику</span>') + '</td><td>' + esc(w.departmentName) + '</td>' +
           '<td class="n">' + w.audits + (w.helperAudits ? '<span class="sub">допомога: ' + w.helperAudits + '</span>' : '') + '</td><td class="n">' + w.withDefects + '</td>' +
           '<td class="n">' + h.num(w.checked) + '</td><td class="n"><b>' + h.num(w.pieces) + '</b></td>' +
           '<td>' + h.stack(w.levels, 12) + '</td><td class="n">' + rateCell(w.rate, crit) + '</td></tr>';
@@ -155,6 +155,7 @@
   P.sr.screen('/people', { tab: 'people', title: 'Люди', render: function (ctx) {
     var data = null;
     function drawList() { var box = ctx.el.querySelector('#pp-list'); if (box) box.innerHTML = workersCard(data); }
+    P.srStars.late(function () { return ctx.alive(); }, function () { if (data) drawList(); });   // v1.9: профіль із зірочками прийшов пізніше за перше малювання
     P.srv('srPeopleWorkers', { locationId: ctx.loc.id, from: ctx.period.from, to: ctx.period.to }).then(function (r) {
       if (!ctx.alive()) return;
       if (!r.ok) { ctx.el.innerHTML = h.error(r); return; }

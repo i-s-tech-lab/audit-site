@@ -99,7 +99,10 @@
     }
   };
 
-  var PARTS = ['today', 'period', 'orders'];   // частини екрана: кожна вміє draw(view) і bind(view)
+  var PARTS = ['today', 'period', 'orders', 'watch'];   // частини екрана: кожна вміє draw(view) і bind(view)   (v1.8: + 'watch')
+  function sinceLink(kind) {
+    return kind === 'audits' ? { path: '/history' } : kind === 'workersAdded' ? { path: '/manage/workers' } : { path: '/kd' };
+  }
   P.sr.screen('/analytics', { tab: 'analytics', title: 'Аналітика', render: function (ctx) {
     var req = 0;
     var view = { ctx: ctx, dep: (ctx.query && ctx.query.dep) || '', data: null, pick: pick,
@@ -107,9 +110,11 @@
       scope: function () { return view.data && view.data.department ? view.data.department.name : 'Усі відділи'; } };
 
     function frame() {
-      ctx.el.innerHTML = '<section class="an-switch" aria-label="Відділ"><div id="an-tiles" class="an-tiles"></div>' +
+      ctx.el.innerHTML = '<div id="an-since"></div><section class="an-switch" aria-label="Відділ"><div id="an-tiles" class="an-tiles"></div>' +
         '<div class="an-switch__bar"><div id="an-tiles-key"></div>' + X.layout.button() + '</div></section>' +
         '<div id="an-body" class="an-body">' + X.layout.frame() + '</div>';
+      X.layout.bindPage(view.box('an-body'));   // v1.7: коробка в заголовку блоку ховає його в буфер (block-layout.js)
+      if (P.sinceLast && P.sinceLast.mount) P.sinceLast.mount(view.box('an-since'), { scope: 'senior', locationId: ctx.loc.id, link: sinceLink });
       if (P.prefs) P.prefs.load().then(function () { if (ctx.alive()) X.layout.late(view.box('an-body')); });
     }
     function load() {
@@ -137,6 +142,7 @@
       load();
     }
     PARTS.forEach(function (k) { X[k].bind(view); });
+    P.srStars.late(function () { return ctx.alive(); }, function () { if (view.data && view.box('an-body')) PARTS.forEach(function (k) { X[k].draw(view); }); });
     ctx.on('an-dep', function (t) { pick(t.getAttribute('data-id')); });
     ctx.on('an-layout', function (t) { X.layout.open(t, view.box('an-body')); });   // v1.6: меню «Порядок блоків»
     ctx.on('an-fold', function (t) { A.foldToggle(t); });                            // v1.6: «Розгорнути / Згорнути» довгого списку

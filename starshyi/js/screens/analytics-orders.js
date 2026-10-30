@@ -14,14 +14,14 @@
       return !q || o.no.toLowerCase().indexOf(q) >= 0 || (o.customer || '').toLowerCase().indexOf(q) >= 0 || o.products.some(function (p) { return p.toLowerCase().indexOf(q) >= 0; });
     });
     if (s && s.k !== 'no' && !r.departments.some(function (d) { return d.id === s.k; })) s = ui.osort = null;   // відділ з іншої локації — сортування знімаємо
-    if (!s) return list;                                                                                            // «без сортування»: останній аудит зверху
+    if (!s) return P.srStars.sort(list, 'order', function (o) { return o.no; });                                    // «без сортування»: останній аудит зверху (v1.5: позначені зірочкою — першими)
     var sign = s.dir === 'asc' ? 1 : -1;
-    return list.slice().sort(function (a, b) {
+    return P.srStars.sort(list.slice().sort(function (a, b) {
       if (s.k === 'no') return (a.no < b.no ? -1 : a.no > b.no ? 1 : 0) * sign;
       var x = a.cells[s.k], y = b.cells[s.k];
       if (!x || !y) return x ? -1 : y ? 1 : 0;
       return (x.checked - y.checked) * sign;
-    });
+    }), 'order', function (o) { return o.no; });
   }
   function sortBtn(k, label) {
     var dir = ui.osort && ui.osort.k === k ? ui.osort.dir : '';
@@ -40,7 +40,7 @@
     box.innerHTML = wrap('an:orders', list.length, '<div class="tbl-box"><table class="tbl an-otbl"><thead><tr><th' + sortAttr('no') + '>' + sortBtn('no', 'Замовлення') + '</th>' +
       r.departments.map(function (d) { return '<th class="n' + (sel === d.id ? ' an-ocol--on' : '') + '"' + sortAttr(d.id) + '>' + sortBtn(d.id, d.name) + '</th>'; }).join('') + '</tr></thead><tbody class="fold__list">' +
       (list.length ? list.map(function (o) {
-        return '<tr data-act="an-order" data-no="' + esc(o.no) + '"><td><b>' + hl(o.no, q) + '</b><span class="sub">' + hl(o.products.join(', '), q) + (o.customer ? ' · ' + hl(o.customer, q) : '') + '</span></td>' +
+        return '<tr data-act="an-order" data-no="' + esc(o.no) + '"><td><span class="srs-name"><b>' + hl(o.no, q) + '</b>' + P.srStars.html('order', o.no, 'замовлення ' + o.no) + '</span><span class="sub">' + hl(o.products.join(', '), q) + (o.customer ? ' · ' + hl(o.customer, q) : '') + '</span></td>' +
           r.departments.map(function (d) {
             var c = o.cells[d.id], on = sel === d.id ? ' an-ocol--on' : '';
             return c ? '<td class="n an-oc' + on + '"><span class="an-oc__k">перевірено</span> <b>' + h.num(c.checked) + ' шт</b>' + (c.planPct == null ? '' : ' · ' + A.pct0(c.planPct) + ' плану') +
@@ -51,8 +51,8 @@
   }
   function draw(view) {
     var r = view.data, box = view.box('an-orders');
-    var head = '<div class="card-head"><div style="flex:1"><h2 class="card-title">Аналітика по замовленнях' + A.q('sr.an.orders') + '</h2><p class="hint">Замовлення з аудитами за ' + esc(A.span(r.from, r.to)) + '. ' +
-      'Числа — стан замовлення на зараз. % плану = перевірено у відділі ÷ план відділу на замовлення (немає плану — цифри «% плану» немає). «—» — у відділі аудитів цього замовлення не було. Натисніть рядок — вікно замовлення.</p></div></div>';
+    var head = '<div class="card-head an-bh"><div style="flex:1;min-width:0"><h2 class="card-title">Аналітика по замовленнях' + A.q('sr.an.orders') + '</h2><p class="hint">Замовлення з аудитами за ' + esc(A.span(r.from, r.to)) + '. ' +
+      'Числа — стан замовлення на зараз. % плану = перевірено у відділі ÷ план відділу на замовлення (немає плану — цифри «% плану» немає). «—» — у відділі аудитів цього замовлення не було. Натисніть рядок — вікно замовлення.</p></div>' + (X.layout ? X.layout.box('orders') : '') + '</div>';
     if (!r.orders.length) { box.innerHTML = head + h.empty('Аудитів по замовленнях за період не було', A.span(r.from, r.to)); return; }
     if (!view.box('an-oq')) {
       box.innerHTML = '<div id="an-ohead"></div><div class="an-obar"><div class="search an-osearch">' + h.ic('search', 'icon') +

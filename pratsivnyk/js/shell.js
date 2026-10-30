@@ -30,7 +30,7 @@
   }
   function applyProfileTheme() {
     if (!P.prefs || P.embed) return;
-    P.prefs.load(S.me && S.me.id).then(function () { var t = P.prefs.applyTheme('worker'); if (t) metaTheme(t); });
+    P.prefs.load(S.me && S.me.id).then(function () { var t = P.prefs.applyTheme('worker'); if (t) metaTheme(t); if (P.news && P.news.refresh) P.news.refresh(); });
   }
   P.shell.home = function () { return '/home'; };
 
@@ -82,6 +82,7 @@
     app().innerHTML = strip() +
       '<header class="app-top"><button class="icon-btn" type="button" data-act="back" hidden aria-label="Назад">' + P.ic('arrow-left') + '</button>' +
       '<div class="app-top__titles"><h1 class="app-top__title" id="top-title">Аудит</h1><p class="app-top__sub" id="top-sub"></p></div>' +
+      (P.hdrTools ? P.hdrTools.html({ news: true, cls: 'icon-btn' }) : '') +
       '<button class="avatar-btn" type="button" data-act="profile" aria-label="Мій профіль">' + esc(P.initials(S.me.name)) + '</button></header>' +
       '<main class="app-main" id="main" tabindex="-1"></main>';
   }

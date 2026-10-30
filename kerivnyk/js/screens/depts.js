@@ -132,7 +132,13 @@
   }
 
   P.cab.tab({ id: 'depts', label: 'Відділи', ic: 'department', path: '/depts', order: 20, real: 'mgrDeptTiles' });
-  P.cab.screen('/depts', { tab: 'depts', title: 'Відділи', period: true, render: function (ctx) {
+  P.cab.screen('/depts', { tab: 'depts', title: 'Відділи', period: true,
+    share: function (ctx) {
+      var on = ctx.el && ctx.el.querySelector('.mgr-dtile--on'), blk = on && on.closest('[data-dpblock]');
+      if (on && blk) return { path: '/analytics', query: { loc: blk.getAttribute('data-dpblock'), dep: on.getAttribute('data-tile-id') }, label: '«Аналітика» старшого · обраний відділ · період із шапки' };
+      return st.locs.length === 1 ? { path: '/analytics', query: { loc: st.locs[0] }, label: '«Аналітика» старшого · обрана локація · період із шапки' } : null;
+    },
+    render: function (ctx) {
     var req = 0, last = null, rows = [];
     var dp = { id: null, row: null, data: null, err: null, req: 0, allP: false, allD: false };
     function find(r, id) {

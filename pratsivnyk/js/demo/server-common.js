@@ -70,6 +70,25 @@
       };
     },
 
+    RANK: { auditor: 1, senior_auditor: 2, manager: 3, admin: 4 },
+    lowerRoles: function (role) {
+      var r = C.RANK[role] || 0;
+      return Object.keys(C.RANK).filter(function (k) { return C.RANK[k] < r; }).sort(function (a, b) { return C.RANK[b] - C.RANK[a]; });
+    },
+    viewLower: function (u, ix, role, locId) {
+      if (!(C.RANK[role] < C.RANK[u.role])) return C.buildMe(u, ix);
+      var me = C.buildMe(u, ix), one = role === 'auditor' || role === 'senior_auditor';
+      var loc = u.locationIds.indexOf(locId) >= 0 && Object.prototype.hasOwnProperty.call(ix.loc, locId) ? locId : u.locationIds[0];
+      if (!loc || !Object.prototype.hasOwnProperty.call(ix.loc, loc)) return me;
+      me.ownRole = u.role; me.ownRoleLabel = P.demoDict.roleLabels[u.role];
+      me.allLocations = me.locations; me.viewLocationId = loc;
+      me.role = role; me.roleLabel = P.demoDict.roleLabels[role]; me.can = C.canOf(role);
+      me.access = C.accessFor({ role: role, active: u.active, canAddPeople: u.canAddPeople });
+      if (one) me.locations = [{ id: loc, name: ix.loc[loc].name }];
+      me.defaultLocationId = one ? loc : me.locations[0].id;
+      return me;
+    },
+
     viewAs: function (u, ix, role, locId) {
       var me = C.buildMe(u, ix), one = role === 'auditor' || role === 'senior_auditor';
       var loc = Object.prototype.hasOwnProperty.call(ix.loc, locId) ? locId : u.locationIds[0];   // лише справжня локація (не службове імʼя обʼєкта)

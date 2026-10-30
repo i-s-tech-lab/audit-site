@@ -51,7 +51,7 @@
     var head = strip() +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(TITLE) + '</h1>' +
       '<p class="hdr__sub">Усі локації · ' + esc(S.h.dayLong(today())) + '</p></div>' +
-      '<div class="hdr__tools">' + (P.cabPlus ? P.cabPlus.button(plusItems()) : '') + (ROLE === 'admin' && P.cabBackup ? P.cabBackup.html() : '') +
+      '<div class="hdr__tools">' + (P.hdrTools ? P.hdrTools.html({ search: true, link: ROLE === 'manager', news: ROLE === 'manager' }) : '') + (P.cabPlus ? P.cabPlus.button(plusItems()) : '') + (ROLE === 'admin' && P.cabBackup ? P.cabBackup.html() : '') +
       '<button class="tool" type="button" data-act="cab-refresh" title="Оновити дані" aria-label="Оновлено о ' + hhmm + ' — оновити дані"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="cab-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials(me.name)) + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>';
     if (SIDE) {   // ліве меню (≥ 900 px) або кнопка «Розділи» (вужче); решта сторінки — справа від меню. v1.6
@@ -94,6 +94,17 @@
   }
   C.render = render;
 
+  C.shareTarget = function () {
+    if (!cur || ROLE !== 'manager') return null;
+    var r = P.router.current(), m = P.router.match(r.path), def = m && m.screen;
+    var t = def && typeof def.share === 'function' ? def.share(cur) : null;
+    if (!t) return null;
+    var q = Object.assign({}, t.query || {});
+    if (t.period !== false) { q.from = cur.period.from; q.to = cur.period.to; }
+    return { app: 'starshyi', path: t.path, query: q, label: t.label || 'кабінет старшого' };
+  };
+  if (P.hdrTools && ROLE === 'manager') P.hdrTools.on('link', C.shareTarget);
+
   function reloadData() { return P.srv('demoReload', {}).then(function () { render(); }); }
   C.reloadData = reloadData;
   var pending = null;
@@ -116,8 +127,8 @@
     S.menu(anchor, { width: 360, onMount: function (el) { P.profileSwitch.bind(el); }, body:
       '<div style="display:flex;gap:12px;align-items:center;padding:8px 12px"><span class="avatar" style="width:48px;height:48px">' + esc(P.initials(me.name)) + '</span>' +
       '<div style="min-width:0"><b>' + esc(me.name) + '</b><p class="hint">Slack: підключено' + (me.slackId ? ' · ' + esc(P.authSlack.maskId(me.slackId)) : '') + '</p></div></div>' +
-      '<div style="padding:4px 12px 8px"><span class="badge badge--brand">' + esc(me.roleLabel) + ' · усі локації</span></div>' +
-      (me.admin ? '<div class="menu__sep"></div><div style="padding:8px 12px">' + P.profileSwitch.html(me) + '</div>' : '') +
+      '<div style="padding:4px 12px 8px"><span class="badge badge--brand">' + esc(me.ownRoleLabel ? me.ownRoleLabel + ' · дивитесь як ' + me.roleLabel.toLowerCase() : me.roleLabel) + ' · усі локації</span></div>' +
+      (P.profileSwitch.html(me) ? '<div class="menu__sep"></div><div style="padding:8px 12px">' + P.profileSwitch.html(me) + '</div>' : '') +
       '<div class="menu__sep"></div><div style="padding:8px 12px"><div class="seg" role="group" aria-label="Тема">' +
       '<button class="seg__btn' + (dark ? '' : ' seg__btn--on') + '" type="button" data-act="th" data-v="light">' + P.ic('theme-light', 'ui-icon--sm') + 'Світла</button>' +
       '<button class="seg__btn' + (dark ? ' seg__btn--on' : '') + '" type="button" data-act="th" data-v="dark">' + P.ic('theme-dark', 'ui-icon--sm') + 'Темна</button></div></div>' +
@@ -152,7 +163,7 @@
       if (m && m.role === ROLE) {
         me = m; render();
         if (P.cabBackup && ROLE === 'admin') P.cabBackup.start();   // v1.6: позначка копій — одразу й далі кожні 5 хв
-        if (P.prefs) P.prefs.load(me.id).then(function () { P.prefs.applyTheme('cab'); });   // v1.6: тема з профілю людини
+        if (P.prefs) P.prefs.load(me.id).then(function () { P.prefs.applyTheme('cab'); if (P.news && P.news.refresh) P.news.refresh(); });   // v1.6: тема з профілю людини; v1.7 — крапка «Що нового»
         return;
       }
       me = null; if (P.cabBackup) P.cabBackup.stop();

@@ -26,7 +26,7 @@
       var r = data, t = r.type, days = r.days, N = days.length;
       var head = '<div class="card-head" style="flex-wrap:wrap"><a class="btn btn--secondary btn--sm" href="' + back + '">' + h.ic('arrow-left', 'ui-icon--sm') + 'До аналітики</a>' +
         '<div style="flex:1;min-width:240px"><p class="hint">Вид браку · ' + (r.rank ? r.rank + ' місце з ' + r.typesCount + ' за кількістю штук' : 'за період не знайдено') + ' · ' + esc(A.span(r.from, r.to)) + '</p>' +
-        '<h2 class="card-title" style="font-size:24px">' + esc(t.name) + '</h2><span class="lvl lvl--' + esc(t.level) + ' an-lvlwrap">' + esc(P.sr.LEVELS[t.level]) + ' · ' + A.LV_NEXT[t.level] + '</span></div>' +
+        '<div class="srs-title"><h2 class="card-title" style="font-size:24px">' + esc(t.name) + '</h2>' + P.srStars.html('type', t.id, t.name) + '</div><span class="lvl lvl--' + esc(t.level) + ' an-lvlwrap">' + esc(P.sr.LEVELS[t.level]) + ' · ' + A.LV_NEXT[t.level] + '</span></div>' +
         '<div class="an-dnum"><b>' + h.num(r.pieces) + ' шт</b><span class="sub">за ' + X.dn(N) + ' · ' + h.pct(r.share) + ' усього браку (' + h.num(r.pieces) + ' ÷ ' + h.num(r.allPieces) + ' шт)' + A.q('sr.an.defShare') + '</span>' +
         '<span class="sub">попередні ' + X.dn(N) + ' — ' + h.num(r.prev.pieces) + ' шт</span></div></div>';
       if (!r.pieces) {
@@ -38,7 +38,8 @@
       var facts = '<div class="an-sum an-sum--3"><div class="an-sum__i"><span class="an-sum__l">Днів із цим браком' + A.q('sr.an.daysWithDefect') + '</span><b class="an-sum__v">' + withIt.length + ' з ' + audited + '</b><span class="an-sum__p">днів з аудитами в локації</span></div>' +
         '<div class="an-sum__i"><span class="an-sum__l">Найбільше за день</span><b class="an-sum__v">' + h.num(top.pieces) + ' шт</b><span class="an-sum__p">' + esc(A.dshort(top.day)) + '</span></div>' +
         '<div class="an-sum__i"><span class="an-sum__l">За період і попередній</span><b class="an-sum__v">' + h.num(r.pieces) + ' шт</b><span class="an-sum__p">попередні ' + X.dn(N) + ' (' + esc(A.span(r.prev.from, r.prev.to)) + ') — <b>' + h.num(r.prev.pieces) + ' шт</b></span></div></div>';
-      var dmax = r.depts.length ? r.depts[0].pieces : 1, wmax = r.workers.length ? r.workers[0].pieces : 1, wTop = r.workers.slice(0, 8), rest = r.workers.slice(8);
+      var dmax = r.depts.length ? r.depts[0].pieces : 1, wmax = r.workers.length ? r.workers[0].pieces : 1;
+      var wSorted = P.srStars.sort(r.workers, 'worker', function (w) { return w.code; }), wTop = wSorted.slice(0, 8), rest = wSorted.slice(8);   // v1.3: позначені — першими
       var cols = 'minmax(0, 1fr) minmax(0, 0.7fr) 44px';
       var side = '<div class="col" style="display:flex;flex-direction:column;gap:12px">' +
         '<div class="facts"><p class="group-label" style="padding:0">Рівень браку' + A.q('term.levels') + '</p><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
@@ -48,10 +49,12 @@
         }).join('') + '</div>' +
         '<div class="facts"><p class="group-label" style="padding:0">У кого цей брак, шт · натисніть — картка працівника' + A.q('sr.an.defWorkers') + '</p><div>' + wTop.map(function (w) {
           var sub = w.helperPieces ? '<span class="badge an-help">допомога</span> ' + (w.helperPieces === w.pieces ? 'усі штуки' : h.num(w.helperPieces) + ' шт із ' + h.num(w.pieces)) + ' — в іншому відділі' : '';
-          return A.hbar({ name: w.name, sub: sub, share: w.pieces / wmax, n: w.pieces, cols: cols, act: w.code ? 'an-worker' : '', attrs: ' data-code="' + esc(w.code) + '"' });
+          return '<div class="srs-row">' + A.hbar({ name: w.name, sub: sub, share: w.pieces / wmax, n: w.pieces, cols: cols, act: w.code ? 'an-worker' : '', attrs: ' data-code="' + esc(w.code) + '"' }) + P.srStars.html('worker', w.code, w.name) + '</div>';
         }).join('') + '</div>' + (rest.length ? '<p class="hint">Ще ' + A.n(rest.length, 'людина', 'людини', 'людей') + ' — ' + h.num(rest.reduce(function (s, w) { return s + w.pieces; }, 0)) + ' шт.</p>' : '') + '</div></div>';
-      var products = '<div class="facts"><p class="group-label" style="padding:0">На яких виробах, шт</p><p class="hint" style="font-size:16px;color:var(--text-2)">' +
-        esc(r.products.map(function (p) { return p.name + ' — ' + p.pieces; }).join(' · ')) + '</p></div>';
+      var products = '<div class="facts"><p class="group-label" style="padding:0">На яких виробах, шт</p><div class="srs-prods">' +
+        P.srStars.sort(r.products, 'product', function (p) { return p.name; }).map(function (p) {
+          return '<span class="srs-prod">' + esc(p.name + ' — ' + p.pieces) + P.srStars.html('product', p.name, p.name) + '</span>';
+        }).join('') + '</div></div>';
       var rows = r.rows.slice(0, shown), left = r.rows.length - rows.length;
       var table = '<section class="card"><div class="card-head"><div style="flex:1"><h2 class="card-title">Записи: ' + esc(t.name.toLowerCase()) + '</h2><p class="hint">Нові зверху · показано ' + rows.length + ' з ' +
         A.n(r.rows.length, 'запису', 'записів', 'записів') + ' · натисніть рядок — увесь аудит</p></div></div><div class="tbl-box"><table class="tbl"><thead><tr><th>Дата</th><th>Відділ</th><th>Виріб</th><th>Працівник</th><th class="n">Брак, шт</th></tr></thead><tbody>' +
@@ -93,6 +96,7 @@
       }
       data = r; draw();
     });
+    P.srStars.late(function () { return ctx.alive(); }, function () { if (data) draw(); });   // v1.3: профіль із зірочками прийшов пізніше за перше малювання
     ctx.on('an-more', function () { shown += STEP; draw(); });
     ctx.on('an-unpick', function () { pin = { day: null, range: null }; if (chart) chart.clear(); drawPick(); });
     ctx.on('an-aud', function (t) { if (P.srHist) P.srHist.openAudit(t.getAttribute('data-id')); });

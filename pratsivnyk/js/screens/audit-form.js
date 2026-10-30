@@ -18,7 +18,9 @@
   function ownGuilty() { return F.workers.length === 1 ? [{ workerCode: F.workers[0], qty: '' }] : []; }
   function typeFor(d) { var dep = AF.dept(F, d && d.other ? d.departmentId : F.departmentId); return dep && dep.deptTypeId; }
   function active(form) { return F && F === form && F.alive && F.alive() && el && el.isConnected; }
-  function draw() { el.innerHTML = F.done ? AF.doneView(F, F.done) : AF.view(F); locHead(); }
+  function draw() { el.innerHTML = F.done ? AF.doneView(F, F.done) : AF.view(F); locHead(); briefSync(); }
+  function paintBrief() { var host = el.querySelector('[data-dept-info]'); if (host) host.outerHTML = AF.briefHtml(F); }
+  function briefSync() { AF.briefSync(F, function (form) { if (active(form)) paintBrief(); }); }
   function drawSummary() { var bar = el.querySelector('.action-bar'); if (bar) bar.outerHTML = AF.summaryHtml(F); }
   function changed(redraw) { F.errors = {}; if (redraw) draw(); else drawSummary(); AF.draft.save(F); }
 
@@ -123,11 +125,28 @@
 
   function pick(opts, apply) { var form = F; return P.picker(opts).then(function (v) { if (v && active(form)) apply(v); }); }
   function ask(o, apply) { var form = F; return P.confirm(o).then(function (ok) { if (ok && active(form)) apply(); }); }
+  function recentIds(depId, kind) {
+    var r = F.ctx.recent && F.ctx.recent[depId];
+    return r && Array.isArray(r[kind]) ? r[kind] : [];
+  }
+  function withRecent(opts, ids, restGroup) {
+    var head = opts.filter(function (o) { return o.value === NONE; }), rest = opts.filter(function (o) { return o.value !== NONE; });
+    var recent = [];
+    ids.forEach(function (id) {
+      var o = rest.filter(function (x) { return x.value === id; })[0];
+      if (o && recent.indexOf(o) < 0) recent.push(o);
+    });
+    return head.concat(recent.map(function (o) { return Object.assign({}, o, { group: 'Нещодавні' }); }),
+      rest.filter(function (o) { return recent.indexOf(o) < 0; }).map(function (o) {
+        return recent.length && !o.group && restGroup ? Object.assign({}, o, { group: restGroup }) : o;
+      }));
+  }
   function pickProduct(it) {
     var t = typeFor(null);
     if (!t) return P.toast('warn', 'Спершу оберіть відділ');
     return pick({ title: 'Виріб', value: it.productId, placeholder: 'Пошук виробу',
-      options: F.ctx.products.filter(function (p) { return p.deptTypeId === t; }).map(function (p) { return { value: p.id, title: p.name }; }) },
+      options: withRecent(F.ctx.products.filter(function (p) { return p.deptTypeId === t; }).map(function (p) { return { value: p.id, title: p.name }; }),
+        recentIds(F.departmentId, 'products'), 'Усі вироби') },
       function (v) { it.productId = v; changed(true); });
   }
   function depName(id) { var d = AF.dept(F, id); return d ? d.name : ''; }
@@ -138,7 +157,7 @@
       else if (depName(w.departmentId)) other.push({ value: w.code, title: w.name, meta: depName(w.departmentId), group: 'Інші відділи — допомога' });
     });
     other.sort(function (a, b) { return a.meta < b.meta ? -1 : a.meta > b.meta ? 1 : 0; });
-    return [UNKNOWN_OPT].concat(own, other);
+    return withRecent([UNKNOWN_OPT].concat(own, other), recentIds(F.departmentId, 'workers'));
   }
   function setWorkers(v) {
     F.workers = v;
@@ -231,7 +250,7 @@
       var used = F.orders, opts = [];
       F.ctx.orderBlocks.forEach(function (b) { if (used.indexOf(b.name) < 0) opts.push({ value: b.name, title: b.name, list: b.orders, group: 'Блоки замовлень' }); });
       F.ctx.orders.forEach(function (o) { if (used.indexOf(o.no) < 0) opts.push({ value: o.no, title: o.no, group: 'Замовлення' }); });
-      pick({ title: 'Замовлення', cols: 2, options: opts, placeholder: 'Номер замовлення або блоку', emptyText: 'Замовлень поки немає' }, function (v) {
+      pick({ title: 'Замовлення', cols: 2, options: withRecent(opts, recentIds(F.departmentId, 'orders')), placeholder: 'Номер замовлення або блоку', emptyText: 'Замовлень поки немає' }, function (v) {
         if (F.orders.length >= F.ctx.limits.maxOrders || F.orders.indexOf(v) >= 0) return;
         F.orders.push(v);
         if (F.orders.length === 1) F.items.forEach(function (i) { if (!i.orderNo) i.orderNo = v; });
@@ -335,8 +354,9 @@
       var src = d.departmentId, sn = depName(src);
       pick({ title: 'Винний', search: true, cols: 2, value: g.workerCode || NONE, placeholder: WORKER_PH, hint: F.ctx.canAddWorker ? 'Немає в списку — впишіть у пошук і додайте.' : '',
         create: !F.ctx.canAddWorker ? null : [{ id: 'own', label: function (q) { return 'Додати «' + q + '» у відділ «' + sn + '»'; } }],
-        options: [UNKNOWN_OPT].concat(F.ctx.workers.filter(function (w) { return w.departmentId === src; })
-          .map(function (w) { return { value: w.code, title: w.name }; })) },
+        options: withRecent([UNKNOWN_OPT].concat(F.ctx.workers.filter(function (w) { return w.departmentId === src; })
+          .map(function (w) { return { value: w.code, title: w.name }; })),
+          recentIds(F.departmentId, 'workers').concat(recentIds(src, 'workers')), 'Усі працівники') },
         function (v) {
           if (v && v.create) return quickAdd(v.q, src).then(function (w) {
             if (!w) return;
@@ -359,7 +379,7 @@
       var inp = el.querySelector('[data-in="gqty"][data-k="' + d.key + '"][data-j="' + (d.guilty.length - 1) + '"]');
       if (inp) inp.focus();
     },
-    brief: function () { if (F.departmentId) AF.openBrief(F); },
+    'brief-retry': function () { AF.briefRetry(F); paintBrief(); briefSync(); },
     'g-add': function (t) { var d = defByKey(t.getAttribute('data-k')); if (d && d.other) { d.guilty.push({ workerCode: '', qty: '' }); changed(true); } },
     'g-del': function (t) { var d = defByKey(t.getAttribute('data-k')); if (d && d.guilty.length > 1) { d.guilty.splice(Number(t.getAttribute('data-j')), 1); changed(true); } },
     'draft-continue': function () {
@@ -414,6 +434,35 @@
     el.addEventListener('input', onInput);
     el.addEventListener('change', onPhotoFile);
     locHead();
+    briefSync();
+  }
+
+  function dropRepeatQuery() {
+    var h = root.location.hash, i = h.indexOf('?');
+    if (!root.history || !root.history.replaceState || i < 0) return;
+    var rest = h.slice(i + 1).split('&').filter(function (kv) { return kv && !/^(rep|take)=/.test(kv); });
+    root.history.replaceState(null, '', root.location.pathname + root.location.search + h.slice(0, i) + (rest.length ? '?' + rest.join('&') : ''));
+  }
+  function applyRepeat(a, take) {
+    var want = String(take || '').split(',');
+    if (want.indexOf('d') >= 0 && AF.dept(F, a.departmentId)) F.departmentId = a.departmentId;
+    if (want.indexOf('o') >= 0) {
+      var known = {};
+      F.ctx.orders.forEach(function (o) { known[o.no] = true; });
+      (a.orders || []).forEach(function (o) {
+        if (known[o] && F.orders.indexOf(o) < 0 && F.orders.length < F.ctx.limits.maxOrders) F.orders.push(o);
+      });
+    }
+    var dep = AF.dept(F, F.departmentId);
+    if (want.indexOf('p') >= 0 && dep) {
+      (a.items || []).forEach(function (it) {
+        var p = AF.product(F, it.productId);
+        if (!p || p.deptTypeId !== dep.deptTypeId || F.items.length >= F.ctx.limits.maxProducts) return;
+        F.items.push({ key: P.uid('it'), productId: p.id, qty: '', rejected: '',
+          orderNo: it.orderNo && F.orders.indexOf(it.orderNo) >= 0 ? it.orderNo : (F.orders.length === 1 ? F.orders[0] : null) });
+      });
+    }
+    if (!F.items.length) F.items = [newItem()];
   }
 
   P.screen('/audit/new', {
@@ -432,7 +481,16 @@
         if (draft) { F.pendingDraft = draft; F.lockDraft = true; }
         if (q.dep && AF.dept(F, q.dep)) F.departmentId = q.dep;
         F.items = [newItem()];
-        return AF.view(F);
+        if (!q.rep) return AF.view(F);
+        dropRepeatQuery();
+        if (draft) { P.toast('info', 'Спершу вирішіть, що робити з чернеткою', 'Минулий аудит не підставлено.'); return AF.view(F); }
+        var form = F;
+        return P.srv('auditGet', { id: q.rep }).then(function (r) {
+          if (!ctx.alive() || F !== form) return '';
+          if (r.ok) { F.items = []; applyRepeat(r.audit, q.take); }
+          else if (r.code !== 'forbidden') P.toast('warn', 'Не вдалося підставити минулий аудит', r.error || '');
+          return AF.view(F);
+        });
       });
     },
     mount: mount

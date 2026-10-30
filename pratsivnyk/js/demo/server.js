@@ -3,7 +3,10 @@
   var P = root.P = root.P || {};
   var C = P.demoCommon;
   var OPEN_FNS = { demoUsers: 1, authDemoLogin: 1, authMe: 1, demoMeta: 1, demoReset: 1, authDemoUnknown: 1 };
-  var REAL_FORBIDDEN = { authDemoLogin: 1, authDemoUnknown: 1, demoReset: 1, authAdminView: 1 };
+  var REAL_FORBIDDEN = { authDemoLogin: 1, authDemoUnknown: 1, demoReset: 1, authAdminView: 1, authDemoDescend: 1 };
+  var SESSION_OF_ROLE = { auditor: ['demo:me', 'demo:loggedAt'], senior_auditor: ['demo:me:sr', 'demo:me:sr:at'],
+    manager: ['demo:me:mgr', 'demo:me:mgr:at'], admin: ['demo:me:adm', 'demo:me:adm:at'] };
+  var KEY_VIEW_LOC = 'demo:view-loc';   // v1.13: локація, яку людина дивиться в профілі нижче: { userId, locationId }
   var REAL_FORBIDDEN_MSG = 'У справжньому додатку тестового входу немає — увійдіть через Slack.';
   function realMode() { return !!(P.config && P.config.backend === 'supabase'); }
   var KEY_ADMIN = 'demo:admin';
@@ -101,7 +104,14 @@
     function currentMe() {
       if (adminS) return C.viewAs(env.ix.user[adminS.userId], env.ix, VIEW_ROLE, adminS.locationId);
       if (meId && now().getTime() - Date.parse(loggedAt) > C.SESSION_DAYS * 86400000) dropSession();
-      return meId ? C.buildMe(env.ix.user[meId], env.ix) : null;
+      if (!meId) return null;
+      var u = env.ix.user[meId];
+      if (VIEW_ROLE && C.RANK[VIEW_ROLE] < C.RANK[u.role]) return C.viewLower(u, env.ix, VIEW_ROLE, viewLoc(meId));
+      return C.buildMe(u, env.ix);
+    }
+    function viewLoc(userId) {
+      var v = storage.get(KEY_VIEW_LOC, null);
+      return v && typeof v === 'object' && v.userId === userId && typeof v.locationId === 'string' ? v.locationId : null;
     }
 
     var own = {
@@ -128,8 +138,24 @@
         return { ok: true, me: currentMe() };
       },
       authMe: function () { return { ok: true, me: currentMe() }; },
+      authDemoDescend: function (p) {
+        if (adminS) return { ok: true };
+        if (!meId) return C.auth();
+        var u = env.ix.user[meId], keys = has(SESSION_OF_ROLE, p.role) ? SESSION_OF_ROLE[p.role] : null;
+        if (!keys || !(C.RANK[p.role] <= C.RANK[u.role])) return C.forbidden();
+        storage.set(keys[0], meId); storage.set(keys[1], loggedAt || now().toISOString());
+        if (typeof p.locationId === 'string' && u.locationIds.indexOf(p.locationId) >= 0) storage.set(KEY_VIEW_LOC, { userId: meId, locationId: p.locationId });
+        return { ok: true };
+      },
       authAdminView: function (p) {
-        if (!adminS) return C.forbidden();
+        if (!adminS) {
+          if (!meId) return C.auth();
+          var u = env.ix.user[meId];
+          if (!(C.RANK[u.role] > 1)) return C.forbidden();
+          if (typeof p.locationId !== 'string' || u.locationIds.indexOf(p.locationId) < 0) return C.forbidden();   // чужа локація — «Немає прав»
+          storage.set(KEY_VIEW_LOC, { userId: meId, locationId: p.locationId });
+          return { ok: true, me: currentMe() };
+        }
         if (typeof p.locationId !== 'string' || !has(env.ix.loc, p.locationId)) return C.fail('not_found', 'Такої локації немає — оновіть сторінку.');
         adminS = { userId: adminS.userId, locationId: p.locationId };
         storage.set(KEY_ADMIN, adminS);
@@ -138,6 +164,10 @@
       authLogout: function () {
         noteLogin('logout', adminS ? adminS.userId : meId);
         if (adminS) { adminS = null; storage.del(KEY_ADMIN); SITE_SESSIONS.forEach(function (k) { storage.del(k); }); }
+        else if (meId) Object.keys(SESSION_OF_ROLE).forEach(function (r) {
+          var k = SESSION_OF_ROLE[r];
+          if (storage.get(k[0], null) === meId) { storage.del(k[0]); storage.del(k[1]); }
+        });
         dropSession();
         return { ok: true };
       },
@@ -179,8 +209,10 @@
     function meOfUser(userId, view) {
       var u = typeof userId === 'string' && has(env.ix.user, userId) ? env.ix.user[userId] : null;
       if (!u || u.accessOff) return null;
-      var asRole = u.role === 'admin' && view && typeof view.role === 'string' && has(P.demoDict.roleLabels, view.role) ? view.role : null;
-      return asRole ? C.viewAs(u, env.ix, asRole, view.locationId) : C.buildMe(u, env.ix);
+      var asRole = view && typeof view.role === 'string' && has(P.demoDict.roleLabels, view.role) ? view.role : null;
+      if (asRole && u.role === 'admin') return C.viewAs(u, env.ix, asRole, view.locationId);
+      if (asRole && C.RANK[asRole] < C.RANK[u.role]) return C.viewLower(u, env.ix, asRole, view.locationId);
+      return C.buildMe(u, env.ix);
     }
     function handleAs(userId, view, fn, payload) {
       if (typeof fn !== 'string' || has(own, fn)) return C.fail('not_found', 'Цієї дії немає. Оновіть сторінку.');
