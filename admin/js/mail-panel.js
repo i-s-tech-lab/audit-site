@@ -182,7 +182,10 @@
     act(btn, function () {
       return P.mailProbe.call('saveChannel', { channelId: form.querySelector('[name="channelId"]').value }).then(function (r) {
         if (!r.ok) { showErrors(q('[data-mail-err="channelId"]'), r); return; }
-        editChannel = false; P.toast('ok', 'Тестовий канал: #' + (r.channelName || r.channelId)); load(true);
+        editChannel = false;
+        if (r.unchecked) P.toast('warn', 'Тестовий канал збережено без перевірки', 'У бота немає дозволу перевірити канал. Напишіть у каналі /invite і оберіть бота — інакше пробна розсилка туди не дійде.');
+        else P.toast('ok', 'Тестовий канал: #' + (r.channelName || r.channelId));
+        load(true);
       });
     });
   }
