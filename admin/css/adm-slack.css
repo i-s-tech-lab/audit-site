@@ -1,0 +1,15 @@
+
+
+.adm-sl-card { min-width: 0; }
+.adm-sl-bot { display: flex; align-items: center; flex-wrap: wrap; gap: 4px var(--sp-2); margin-bottom: var(--sp-2); }
+.adm-sl-rows { display: flex; flex-direction: column; }
+.adm-sl-row { display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) 0; border-top: 1px solid var(--line); min-width: 0; }
+.adm-sl-row:first-child { border-top: 0; padding-top: var(--sp-1); }
+.adm-sl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.adm-sl-top { display: flex; align-items: center; flex-wrap: wrap; gap: 4px var(--sp-2); }
+.adm-sl-val { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.adm-sl-row .icon-btn { flex: none; }
+.adm-sl-confirm { margin-top: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--warn-soft); }
+.adm-sl-warn { display: flex; gap: var(--sp-2); margin: 0 0 var(--sp-2); font-size: var(--fs-sm); }
+.adm-sl-warn .ui-icon { flex: none; color: var(--warn); margin-top: 2px; }
+.adm-sl-tick { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }

@@ -16,6 +16,8 @@
       .replace(/\blocalhost(?::\d+)?\b/gi, '[адреса]')
       .replace(/\b(?:[a-z0-9-]+\.)+([a-z]{2,24})\b/gi, function (m, tld) { return FILE_EXT.indexOf(tld.toLowerCase()) >= 0 ? m : '[адреса]'; })
       .replace(/простір «[^»]*»/g, 'простір «[назва]»')
+      .replace(/\bT[A-Z0-9]{8,12}\b/g, '[простір]')
+      .replace(/\b\d{8,14}\.\d{8,14}\b/g, '[client id]')
       .replace(/\b[A-Za-z0-9_]{25,}\b/g, '[код]')
       .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[код]');
   }

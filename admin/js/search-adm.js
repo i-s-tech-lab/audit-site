@@ -22,7 +22,8 @@
     tab('status', 'Стан', '/status', ['стан', 'сервер']),
     tab('backups', 'Резервні копії', '/backups', ['копія', 'резервна копія', 'база']),
     tab('server', 'Сервер', '/server', ['сервер', 'ресурси']),
-    tab('prelaunch', 'Перед запуском', '/prelaunch', ['перевірки', 'запуск', 'готовність', 'канал важливе', 'сторож'])
+    tab('prelaunch', 'Перед запуском', '/prelaunch', ['перевірки', 'запуск', 'готовність', 'канал важливе', 'сторож']),
+    tab('slackcfg', 'Налаштування Slack', '/slack-settings', ['slack', 'бот', 'ключ', 'токен', 'секрет', 'client id', 'signing secret'])
   ];
 
   function q(id) { return String(id).replace(/["\\]/g, '\\$&'); }
