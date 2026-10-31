@@ -54,7 +54,6 @@
         ctx.el.classList.remove('kd-busy');
         if (!r.ok) { data = null; ctx.el.innerHTML = '<div class="kb"><a class="kb-out kb-back" href="#/kd">← Усі відділи</a>' + P.sr.h.error(r) + '</div>'; return; }
         data = r;
-        if (B.kdWait(r)) { ctx.el.innerHTML = '<div class="kb"><a class="kb-out kb-back" href="#/kd">← Усі відділи</a>' + B.kdFromNote(r) + '</div>'; return; }
         ctx.el.innerHTML = '<div class="kb">' + B.compactBar(r, r.dept.id) + B.ruleLine(B.weekOf(r.tiles) && B.weekOf(r.tiles).start, r.threshold, null, { list: '#/kd/list?dep=' + encodeURIComponent(r.dept.id), after: '#/kd/stats?dep=' + encodeURIComponent(r.dept.id) }) + B.kdFromNote(r) + B.tiles(r, r.dept.id) +
           kdRow(r, !!(r.kd && (r.actives.length || key))) + (r.kd && (r.actives.length || key) ? page(r) : empty(r)) + '</div>';
         B.mountCompact(ctx);

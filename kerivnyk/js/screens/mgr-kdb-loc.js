@@ -150,7 +150,6 @@
       }
       var X2 = X.plates;
       var inner = v === 'effect' ? platesView(r, [X2.p1, X2.p2, X2.p3, X2.p4]) : v === 'work' ? platesView(r, [X2.p5, X2.p6, X2.p7, X2.p8, X2.p9]) : mainView(r);
-      if (X.kdWait(r)) { ctx.el.innerHTML = '<div class="kb mkd">' + locBar(r, v) + X.kdFromNote(r) + '</div>'; return; }
       ctx.el.innerHTML = '<div class="kb mkd">' + locBar(r, v) + X.periodBar(r, function (n) { return href(id, n, v); }) + X.kdFromNote(r) +
         '<h1 class="mkd-h1">' + esc(r.location.name) + ' · коригуючі дії</h1>' + views(r, v) + inner + '</div>';
       X.fitSegs(ctx.el);

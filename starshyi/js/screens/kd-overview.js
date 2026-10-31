@@ -13,7 +13,6 @@
       if (!ctx.alive()) return;
       if (!r.ok) { ctx.el.innerHTML = H().error(r); return; }
       data = r;
-      if (B.kdWait(r)) { ctx.el.innerHTML = '<div class="kb">' + B.ruleLine(r.week && r.week.start, r.threshold, 'main') + B.kdFromNote(r) + '</div>'; return; }
       ctx.el.innerHTML = '<div class="kb">' + B.compactBar(r, null) + B.ruleLine(r.week && r.week.start, r.threshold, 'main') + B.kdFromNote(r) + B.tiles(r, null) + B.tilesLegend(r) +
         counters(r) + timeline(r) +
         '<div class="kb-g2"><div class="kb-col">' + weekCard(r) + effCard(r) + '</div><div class="kb-col">' + queueCard(r) + causesCard(r) + '</div></div>' + workCard(r) + '</div>';

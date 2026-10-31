@@ -75,7 +75,6 @@
       if (!r.ok) { ctx.el.innerHTML = P.sr.h.error(r); return; }
       if (!r.locations || !r.locations.length) { ctx.el.innerHTML = '<section class="card">' + P.sr.h.empty('Локацій ще немає', 'Коли адміністратор додасть локацію, тут зʼявляться її коригуючі дії.') + '</section>'; return; }
       first = r.locations[0].id;
-      if (X.kdWait(r)) { ctx.el.innerHTML = '<div class="kb mkd">' + X.kdFromNote(r) + '</div>'; return; }
       ctx.el.innerHTML = '<div class="kb mkd">' + X.periodBar(r, function (n) { return '#/kd' + (n !== 8 ? '?w=' + n : ''); }) + X.kdFromNote(r) +
         '<div class="mkd-locs">' + r.locations.map(function (l) { return locCard(l, r); }).join('') + '</div>' +
         X.legend([['<i class="mkd-osw mkd-o1"></i>', 'тримається'], ['<i class="mkd-osw mkd-o2"></i>', 'її види нижче, ніж до дії'], ['<i class="mkd-osw mkd-o3"></i>', 'старший позначив «не потрібно»'],
