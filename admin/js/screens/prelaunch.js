@@ -15,8 +15,8 @@
     var inner = stateIc(x) + '<span class="adm-pl-cell__txt"><b>' + esc(x.title) + '</b><span class="adm-pl-val" title="' + esc(x.value) + '">' + esc(x.value) + '</span></span>' +
       '<span class="ui-sr-only">' + esc(st(x)[0]) + '</span>';
     return needsTodo(x)
-      ? '<button class="adm-pl-cell adm-pl-cell--go" type="button" data-act="pl-go" data-id="' + esc(x.id) + '" title="Що зробити">' + inner + '</button>'
-      : '<div class="adm-pl-cell">' + inner + '</div>';
+      ? '<button class="adm-pl-cell adm-pl-cell--go adm-pl-cell--' + esc(x.state) + '" type="button" data-act="pl-go" data-id="' + esc(x.id) + '" title="Що зробити">' + inner + '</button>'
+      : '<div class="adm-pl-cell adm-pl-cell--' + esc(STATE[x.state] ? x.state : 'info') + '">' + inner + '</div>';
   }
   function overGroup(g, items) {
     var list = items.filter(function (x) { return x.group === g.id; });
@@ -26,8 +26,9 @@
     var allOk = judged.length > 0 && judged.every(function (x) { return x.state === 'ok'; });
     var tag = bad ? H.badge(bad + ' ' + A.plural(bad, ['потрібна дія', 'потрібні дії', 'потрібних дій']), 'danger')
       : warn ? H.badge(warn + ' варто перевірити', 'warn') : allOk ? H.badge('гаразд', 'ok') : '';
-    return '<div class="adm-pl-og"><div class="adm-pl-og__h">' + P.ic(GROUP_IC[g.id] || 'info', 'ui-icon--sm') + '<b>' + esc(g.label) + '</b>' + A.help('admin.prelaunch.' + g.id) + tag + '</div>' +
-      list.map(cell).join('') + '</div>';
+    var worst = bad ? 'bad' : warn ? 'warn' : allOk ? 'ok' : 'info';   // колір смуги плитки
+    return '<div class="adm-pl-og adm-pl-og--' + worst + '"><div class="adm-pl-og__h">' + P.ic(GROUP_IC[g.id] || 'info', 'ui-icon--sm') + '<b>' + esc(g.label) + '</b>' + A.help('admin.prelaunch.' + g.id) + tag + '</div>' +
+      '<div class="adm-pl-og__list">' + list.map(cell).join('') + '</div></div>';
   }
   function overview(data) {
     var legend = ['ok', 'bad', 'warn', 'info'].map(function (k) { return '<span>' + stateIc({ state: k }) + esc(STATE[k][0]) + '</span>'; }).join('');
