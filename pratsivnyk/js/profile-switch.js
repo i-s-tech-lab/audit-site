@@ -5,7 +5,7 @@
   var PROFILES = [
     { role: 'auditor', label: 'Аудитор', sub: 'Запис аудитів · вигляд для телефона', path: '../pratsivnyk/', ic: 'audit', loc: true },
     { role: 'senior_auditor', label: 'Старший аудитор', sub: 'Аналітика, коригуючі дії, керування', path: '../starshyi/', ic: 'chart', loc: true },
-    { role: 'manager', label: 'Керівник', sub: 'Усі локації · статистика, відділи, звіт за місяць', path: '../kerivnyk/', ic: 'cockpit' },
+    { role: 'manager', label: 'Керівник', sub: 'Ваші локації · статистика, відділи, звіт за місяць', path: '../kerivnyk/', ic: 'cockpit' },
     { role: 'admin', label: 'Адміністратор', sub: 'Усі локації · люди й доступи, правила, розсилки', path: '../admin/', ic: 'key' }
   ];
   function byRole(role) { return PROFILES.filter(function (p) { return p.role === role; })[0] || null; }

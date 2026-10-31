@@ -23,6 +23,10 @@
         '<span class="hint">' + r.people + ' ' + A.plural(r.people, ['людина', 'людини', 'людей']) + '</span></div>' +
         data.rights.map(function (x) {
           var on = r.can[x.key], diff = on !== r.base[x.key];
+          if (r.id === 'manager' && x.key === 'viewAllLocations') {   // v1.5: право дається людині, а не ролі — перемикача немає
+            return '<div class="adm-right"><div class="adm-right__main"><b>' + esc(x.label) + '</b>' +
+              '<span class="hint">задається кожному керівнику окремо — «Люди й доступи»</span></div></div>';
+          }
           var ctl = r.locked ? '<span class="adm-lockic" title="Адміністратор має всі права завжди">' + P.ic('lock', 'ui-icon--sm') + '</span>'
             : A.sw(on, 'rt-set', da('role', r.id) + da('key', x.key), (on ? 'Можна' : 'Не можна') + ' · ' + r.label + ' · ' + x.label);
           return '<div class="adm-right"><div class="adm-right__main"><b>' + esc(x.label) + '</b>' +

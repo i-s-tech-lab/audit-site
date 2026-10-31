@@ -78,7 +78,7 @@
 
   function call(action, payload) {
     payload = payload || {};
-    if (!has(REAL, action)) return P.srv(action, payload);   // перегляд — завжди вигадані цифри з демо-сервера
+    if (!has(REAL, action)) return P.srv(action, payload);   // перегляд: на нашому сервері цифри з бази (двигун), на тестовому сайті — вигадані (демо-сервер)
     if (!P.mailProbe || !P.mailProbe.has()) return Promise.resolve(authFail());
     if (action === 'mlRules') return rules(payload);
     if (action === 'mlAddrList') return addrList(payload);
@@ -86,11 +86,11 @@
   }
 
   function loginHtml(message) {
-    var steps = ['Відкрийте <b>supabase.com</b> → ваш проєкт → <b>Edge Functions → Secrets</b>.',
-      'Код — це значення секрету <b>MAIL_ADMIN_CODE</b>. Ви задавали його самі, коли вмикали розсилку (від 20 знаків).',
-      'Забули код — задайте в Supabase новий: він діє одразу, перевстановлювати нічого не треба.'];
+    var steps = ['<b>На самому сервері</b> відкрийте PowerShell від імені адміністратора: Пуск → PowerShell → правою кнопкою → «Запуск від імені адміністратора».',
+      'Вставте по черзі три рядки (після кожного — Enter): <b>cd C:\\AuditServer\\update\\current</b>, потім <b>&amp; "C:\\Program Files\\nodejs\\node.exe" tools\\mail-code.mjs</b> (код на екран не друкується — його вже покладено в буфер обміну), потім <b>Restart-Service audit-server -Force</b>.',
+      'Тут же, <b>на сервері</b>, вставте код у поле «Код розсилки» (Ctrl+V). Через AnyDesk буфер на інший компʼютер не передається. Старий код після цього не діє.'];
     return '<div class="rz-code"><section class="card rz-code__main"><h3 class="h2">Відкрити розсилки</h3>' +
-      '<p><b>Правила розсилок лежать у Supabase</b>, а сайт відкритий для всіх, хто знає адресу. Тому, щоб бачити й змінювати розсилки, потрібен <b>код розсилки</b>.</p>' +
+      '<p><b>Правила розсилок лежать на сервері</b>. Щоб бачити й змінювати розсилки, потрібен <b>код розсилки</b>.</p>' +
       '<form class="rz-code__form" data-ml-login><label class="field"><span class="label">Код розсилки</span>' +
       '<input class="input" type="password" name="code" autocomplete="off" placeholder="Код розсилки" aria-label="Код розсилки" required></label>' +
       '<div data-ml-err>' + errHtml(message) + '</div>' +

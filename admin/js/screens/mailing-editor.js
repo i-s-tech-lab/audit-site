@@ -161,7 +161,7 @@
         '<div class="rz-side" data-rz-prev></div><div data-rz-wait></div>' +
         '<div class="rz-side"><span class="rz-side__t">Перевірити перед збереженням</span><button class="btn btn--secondary" type="button" data-act="rz-test">' + P.ic('slack', 'ui-icon--sm') +
           'Надіслати пробне в ' + (K.chan() ? '#' + esc(K.chan()) : 'тестовий канал') + '</button><p class="hint" data-rz-sendnote></p></div></aside></div>',
-      foot: '<p class="hint rz-ed__foot">Зміни ще не збережено. Правило збережеться в Supabase одразу після «Зберегти».</p><button class="btn btn--quiet" type="button" data-ov-close>Скасувати</button>' +
+      foot: '<p class="hint rz-ed__foot">Зміни ще не збережено. Правило збережеться на сервері одразу після «Зберегти».</p><button class="btn btn--quiet" type="button" data-ov-close>Скасувати</button>' +
         '<button class="btn btn--primary" type="button" data-act="rz-save">' + P.ic('save', 'ui-icon--sm') + 'Зберегти розсилку</button>',
       onMount: function (el) {
         q(el, '.modal').className += ' rz-modal';

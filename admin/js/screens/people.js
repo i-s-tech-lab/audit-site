@@ -5,6 +5,7 @@
   var DELEG = ['senior_auditor', 'manager'];   // ролі, яким адмін може дати право «Додавати людей»
   var T = P.admPeopleTexts;   // тексти й помічники форми людини (people-texts.js)
   var STATE_TEXT = T.STATE_TEXT;
+  var D = P.admPeopleDel;     // видалення людини, запити, сповіщення керівника (people-deletes.js)
 
   function subnav(cur) {
     return '<nav class="pills adm-subnav" aria-label="Розділи вкладки">' + [['people', '/people', 'Люди'], ['rights', '/people/rights', 'Що може роль']].map(function (s) {
@@ -42,7 +43,7 @@
         '<span class="adm-person__meta">Slack ' + esc(u.slackId) + ' · ' + esc(locs) + (u.lastAuditAt ? ' · останній аудит ' + esc(A.ago(u.lastAuditAt)) : '') + by + '</span></div>' +
         '<div class="adm-person__acts">' + (u.isMe ? '<span class="adm-dim adm-lockic" title="Свій доступ змінює інший адміністратор">' + P.ic('lock', 'ui-icon--sm') + '</span>'
           : A.sw(u.active, 'pp-access', da('id', u.id), (u.active ? 'Доступ увімкнено' : 'Доступ вимкнено') + ' · ' + u.name)) +
-          A.pen('pp-edit', da('id', u.id), 'Редагувати · ' + u.name) + '</div></div>';
+          A.pen('pp-edit', da('id', u.id), 'Редагувати · ' + u.name) + D.rowBtns(u) + '</div></div>';
     }
     function drawList() {
       var box = q(ctx.el, '[data-pp-list]'); if (!box) return;
@@ -54,7 +55,7 @@
       var on = data.items.filter(function (u) { return u.active; }).length;
       if (flt.loc && !data.locations.some(function (l) { return l.id === flt.loc; })) flt.loc = '';
       ctx.el.innerHTML = '<section class="adm-col">' +
-        A.head('Люди й доступи', on + ' з доступом · ' + (data.items.length - on) + ' вимкнено · ' + A.asOf(), T.todayHint(data.access, A.btnNew('pp-new', 'Додати людину'))) + subnav('people') +
+        A.head('Люди й доступи', on + ' з доступом · ' + (data.items.length - on) + ' вимкнено · ' + A.asOf(), T.todayHint(data.access, A.btnNew('pp-new', 'Додати людину'))) + subnav('people') + del.slot() +
         '<div class="adm-tools"><label class="search adm-search">' + P.ic('search', 'icon') + '<input class="input input--search" type="search" data-input="pp-q" value="' + esc(flt.q) + '" placeholder="Імʼя або Slack ID" aria-label="Пошук людини"></label>' +
           '<select class="input adm-select" data-change="pp-loc" aria-label="Локація"><option value="">Усі локації</option>' + data.locations.map(function (l) {
             return '<option value="' + esc(l.id) + '"' + (l.id === flt.loc ? ' selected' : '') + '>' + esc(l.name) + (l.active ? '' : ' (вимкнена)') + '</option>'; }).join('') + '</select></div>' +
@@ -65,13 +66,13 @@
           (flt.by ? '<button class="chip-pick chip-pick--on" type="button" data-act="pp-by-off" aria-label="Прибрати фільтр">' + P.ic('close', 'ui-icon--sm') + 'додав: ' + esc(flt.by.name) + '</button>' : '') + '</div>' +
         '<section class="card adm-flat"><p class="hint" data-pp-n></p><div class="adm-people" data-pp-list></div>' +
         '<p class="hint">Вимкнений доступ: вхід закривається одразу, аудити людини лишаються в історії' + A.help('admin.people.access') + '. Керівник і адміністратор бачать усі локації.</p></section></section>';
-      drawList();
+      drawList(); del.show();
     }
     function load() {
       P.authSlack.peopleAll().then(function (r) {   // v1.5: справжній режим — люди з сервера входу, тестовий — демо
         if (!ctx.alive()) return;
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
-        data = r; draw(); openRequested();
+        data = r; draw(); del.refresh(); openRequested();
       });
     }
     var wantReq = ctx.query && ctx.query.req, wantEdit = ctx.query && ctx.query.edit, wantNew = !!ctx.query && ctx.query.new === '1';
@@ -107,16 +108,11 @@
     }
     function openEdit(u, from) {
       var st = { role: u ? u.role : 'auditor', locs: u ? u.locationIds.slice() : (flt.loc ? [flt.loc] : []), active: u ? u.active : true,
+        all: u ? !!u.allLocations : true,   // all — «Усі локації» керівника (01.11; новий керівник — «Так»)
         grant: u ? !!u.canAddPeople : true, grantTouched: false,   // grant — право «Додавати людей» у формі (v1.7; v1.8: нова людина — «Так»)
         guest: !!(from && from.state === 'guest') };               // guest — показати галочку «Так, це гість Slack-простору — додати» (v1.8)
       var roles = data.roles.filter(function (r) { return r.assignable || (u && r.id === u.role); });
-      function locBlock() {
-        if (st.role === 'manager' || st.role === 'admin') return '<span class="label">Локації' + A.help('admin.people.locs') + '</span><span class="select adm-locked">Усі локації' + P.ic('lock', 'icon icon--sm') + '</span>';
-        return '<span class="label">Локації' + A.help('admin.people.locs') + '</span><div class="adm-chips">' + data.locations.map(function (l) {
-          var on = st.locs.indexOf(l.id) >= 0;
-          return '<button class="chip-pick' + (on ? ' chip-pick--on' : '') + '" type="button" data-act="pp-pick"' + da('id', l.id) + ' aria-pressed="' + on + '">' + (on ? P.ic('check', 'ui-icon--sm') : '') + esc(l.name) + '</button>';
-        }).join('') + '</div>';
-      }
+      function locBlock() { return T.locBlock(st, data.locations); }   // v1.11: адмін — замок, керівник — «Усі локації: Так / Ні», решта — плашки
       function slot(attr, html) { return '<div ' + attr + (html ? '' : ' hidden') + '>' + html + '</div>'; }
       function fill(el, attr, html) { var b = q(el, '[' + attr + ']'); b.innerHTML = html; b.hidden = !html; }
       function grantBlock() {
@@ -143,7 +139,7 @@
         onMount: function (el) {
           A.enterSubmits(el);
           q(el, '[name="role"]').addEventListener('change', function (e) {
-            st.role = e.target.value; q(el, '[data-pp-locs]').innerHTML = locBlock();
+            st.role = e.target.value; st.all = u && st.role === u.role ? !!u.allLocations : true; q(el, '[data-pp-locs]').innerHTML = locBlock();
             st.grant = u && st.role === u.role ? !!u.canAddPeople : DELEG.indexOf(st.role) >= 0; st.grantTouched = false;
             fill(el, 'data-pp-grant', grantBlock());
           });
@@ -156,7 +152,10 @@
           },
           'adm-seg': function (t, e, layer) {
             var on = A.segPick(layer, t) === 'true';
-            if (t.getAttribute('data-k') === 'canAddPeople') { st.grant = on; st.grantTouched = true; } else { st.active = on; st.touched = true; }
+            var k = t.getAttribute('data-k');
+            if (k === 'canAddPeople') { st.grant = on; st.grantTouched = true; }
+            else if (k === 'allLocations') { st.all = on; q(layer.el, '[data-pp-locs]').innerHTML = locBlock(); }
+            else { st.active = on; st.touched = true; }
           },
           'pp-lookup': function (t, e, layer) {
             var out = q(layer.el, '[data-lookup-out]'), id = A.val(layer.el, 'slackId').trim();
@@ -175,7 +174,8 @@
               if (!(q(layer.el, '[name="allowGuest"]') || {}).checked) { A.showErrors(layer.el, T.needGuestTick()); return; }
               p.allowGuest = true;
             }
-            if (st.role !== 'manager' && st.role !== 'admin') p.locationIds = st.locs.slice();
+            if (st.role === 'manager') { p.allLocations = st.all; if (!st.all) p.locationIds = st.locs.slice(); }   // v1.11: «Ні» — список (сервер вимагає ≥ 1)
+            else if (st.role !== 'admin') p.locationIds = st.locs.slice();
             if (st.grantTouched && DELEG.indexOf(st.role) >= 0) p.canAddPeople = st.grant;   // v1.7: право шлемо, лише коли поле міняли
             if (u) { p.id = u.id; if (st.touched || st.active !== u.active) p.active = st.active; }
             t.disabled = true;
@@ -209,6 +209,7 @@
       P.confirm({ title: 'Вимкнути доступ · ' + u.name + '?', text: 'Вхід у додаток закриється одразу. Записані аудити лишаються в історії; увімкнути можна будь-коли.', okLabel: 'Вимкнути доступ', danger: true })
         .then(function (ok) { if (ok) go(); });
     }
+    var del = D.bind(ctx, { find: find, locName: locName, reload: load });   // v1.11: видалення, запити, «Сповіщення»
     ctx.on('pp-new', function () { openEdit(null); });
     ctx.on('pp-edit', function (t) { openEdit(find(t.getAttribute('data-id'))); });
     ctx.on('pp-access', access);

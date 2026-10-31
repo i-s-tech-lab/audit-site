@@ -74,7 +74,7 @@
       if (st.locs.length) p.locationIds = st.locs;
       P.srv('mgrAuditors', p).then(function (r) {
         if (!ctx.alive() || my !== req) return;
-        if (!r.ok && (r.code === 'not_found' || r.code === 'validation') && (st.locs.length || st.type)) { st.locs = []; st.type = ''; load(); return; }   // вибір на те, чого вже немає
+        if (!r.ok && (r.code === 'not_found' || r.code === 'forbidden' || r.code === 'validation') && (st.locs.length || st.type)) { st.locs = []; st.type = ''; load(); return; }   // вибір на те, чого вже немає
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
         if (!st.locs.length) { st.locs = r.locations.length ? [r.locations[0].id] : []; if (st.locs.length) { load(); return; } }   // перший захід — перша локація
         data = r; frame(); list();

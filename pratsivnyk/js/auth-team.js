@@ -19,7 +19,8 @@
       active: on, disabledBy: on ? null : (u.disabledBy || 'admin'), locationIds: arr(u.locationIds).slice(), createdAt: u.createdAt || null,
       lastSeenAt: u.lastSeenAt || null, canAddPeople: u.canAddPeople === true,
       addedBy: u.addedBy && u.addedBy.id ? { id: u.addedBy.id, name: u.addedBy.name || '', role: u.addedBy.role || '' } : null,
-      canEdit: u.canEdit === true, canEnable: u.canEnable === true };
+      canEdit: u.canEdit === true, canEnable: u.canEnable === true, allLocations: u.allLocations === true, canClose: u.canClose === true,
+      canDelete: u.canDelete === true, canAskDelete: u.canAskDelete === true, deletePending: u.deletePending === true, otherLocations: u.otherLocations === true };
   }
   function access(a) {
     a = a || {};
@@ -60,6 +61,10 @@
         return out;
       });
     },
+    remove: function (id) { return real() ? P.authSlack.admin('users.delete', { id: id }) : P.srv('personDelete', { id: id }); },
+    ask: function (id, reason) { return real() ? P.authSlack.admin('deletes.ask', { id: id, reason: reason }) : P.srv('deleteAsk', { id: id, reason: reason }); },
+    deleteList: function () { return real() ? P.authSlack.admin('deletes.list') : P.srv('deleteRequests', {}); },
+    resolve: function (id, decision) { return real() ? P.authSlack.admin('deletes.resolve', { id: id, decision: decision }) : P.srv('deleteResolve', { id: id, decision: decision }); },
     lookup: function (slackId) {
       if (!real()) return P.srv('slackLookup', { slackId: slackId });
       return P.authSlack.admin('lookup', { slackId: slackId }).then(function (r) {

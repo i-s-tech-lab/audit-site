@@ -20,20 +20,38 @@
   }
   function uniq(list) { return list.filter(function (v, i) { return list.indexOf(v) === i; }); }
   function bad(code, error, field) { return { ok: false, code: code, field: field || '', error: error }; }
+  function allOf(x) { return !!x && (x.allLocations === true || x.all_locations === true); }
 
 
   function rankOf(role) { return has(ROLE_RANK, role) ? ROLE_RANK[role] : 0; }
 
-  function addableRoles(actorRole) {
+  function isAllLoc(u) {
+    var x = u || {};
+    return x.role === 'admin' || (x.role === 'manager' && allOf(x));
+  }
+
+  function effRank(u) {
+    var x = u || {};
+    return rankOf(x.role) + (x.role === 'manager' && allOf(x) ? 0.5 : 0);
+  }
+
+  function targetRank(u) {
+    var x = u || {};
+    var listOnly = !allOf(x) && (x.allLocations === false || x.all_locations === false);
+    return rankOf(x.role) + (x.role === 'manager' && !listOnly ? 0.5 : 0);
+  }
+
+  function addableRoles(actorRole, actorAll) {
     if (actorRole === 'admin') return ASSIGNABLE_ROLES.slice();
-    if (actorRole === 'manager') return ['auditor', 'senior_auditor'];
+    if (actorRole === 'manager') return actorAll === true ? ['auditor', 'senior_auditor', 'manager'] : ['auditor', 'senior_auditor'];
     if (actorRole === 'senior_auditor') return ['auditor'];
     return [];
   }
 
   function actorScope(actor) {
     var a = actor || {};
-    if (a.role === 'admin' || a.role === 'manager') return null;
+    if (a.role === 'admin') return null;
+    if (a.role === 'manager') return allOf(a) ? null : (isArr(a.locationIds) ? a.locationIds.slice() : []);
     if (a.role === 'senior_auditor') return isArr(a.locationIds) ? a.locationIds.slice() : [];
     return [];
   }
@@ -42,7 +60,7 @@
     var u = user || {};
     if (u.role === 'admin') return { addPeople: true, addRoles: ASSIGNABLE_ROLES.slice(), addLimitPerDay: ADDS_PER_DAY };
     if (DELEGATE_ROLES.indexOf(u.role) >= 0 && isOn(u) && hasGrant(u)) {
-      return { addPeople: true, addRoles: addableRoles(u.role), addLimitPerDay: ADDS_PER_DAY };
+      return { addPeople: true, addRoles: addableRoles(u.role, allOf(u)), addLimitPerDay: ADDS_PER_DAY };
     }
     return { addPeople: false, addRoles: [], addLimitPerDay: ADDS_PER_DAY };
   }
@@ -64,20 +82,26 @@
     var a = o.actor || {}, cur = o.cur, n = o.next || {}, hadIds = isArr(o.had) ? o.had : [];
     if (DELEGATE_ROLES.indexOf(a.role) < 0 || !isOn(a)) return bad('forbidden', 'Немає прав на цю дію.');
     if (cur && cur.id === a.id) return bad('forbidden', 'Свій доступ, роль і локації змінює адміністратор.');
-    if (cur) {
-      var r = rankOf(cur.role);
-      if (!(r > 0 && r < rankOf(a.role))) return bad('forbidden', 'Змінювати можна лише людей з роллю, нижчою за вашу.');
-    }
+    if (cur && !(rankOf(cur.role) > 0 && targetRank(cur) < effRank(a))) return bad('forbidden', 'Змінювати можна лише людей з роллю, нижчою за вашу.');
     var scope = actorScope(a);
     if (scope !== null && cur && (!hadIds.length || !hadIds.every(function (x) { return scope.indexOf(x) >= 0; }))) {
       return bad('forbidden', 'Ця людина має й інші локації — змінити її може адміністратор.');
+    }
+    if (cur && cur.role === 'manager' && n.active !== undefined && n.active !== null && !!n.active !== isOn(cur)) {
+      return bad('forbidden', 'Вимкнути чи ввімкнути доступ керівнику може адміністратор. Видалити керівника — через запит адміністратору.', 'active');
+    }
+    if (cur && cur.role === 'manager' && n.role !== 'manager') {
+      return bad('forbidden', 'Змінити роль керівника може адміністратор.', 'role');
+    }
+    if (n.allLocations !== undefined && n.allLocations !== null && n.allLocations !== false) {
+      return bad('forbidden', 'Усі локації дає лише адміністратор.', 'allLocations');
     }
     if (isCloseOnly({ cur: cur, had: hadIds, next: n })) return { ok: true, closeOnly: true };
     if (!hasGrant(a)) return bad('forbidden', 'Додавати й змінювати людей можна з правом «Додавати людей» — його вимкнув адміністратор; увімкнути його може лише адміністратор.');
     if (n.canAddPeople !== undefined && n.canAddPeople !== null) {   // v1.2: будь-яке явне значення (і «так», і «ні»)
       return bad('forbidden', 'Право «Додавати людей» дає лише адміністратор.', 'canAddPeople');
     }
-    if (addableRoles(a.role).indexOf(n.role) < 0) return bad('forbidden', 'Можна дати лише роль, нижчу за вашу.', 'role');
+    if (addableRoles(a.role, allOf(a)).indexOf(n.role) < 0) return bad('forbidden', 'Можна дати лише роль, нижчу за вашу.', 'role');
     var ids = isArr(n.locationIds) ? n.locationIds : [];
     if (!ids.length) return bad('validation', 'Оберіть хоча б одну локацію.', 'locationIds');
     if (scope !== null && !ids.every(function (x) { return scope.indexOf(x) >= 0; })) return bad('forbidden', 'Можна призначати лише свої локації.', 'locationIds');
@@ -96,20 +120,44 @@
 
   function rowPermissions(o) {
     var a = o.actor || {}, r = o.row || {};
-    var none = { canEdit: false, canEnable: false, canClose: false };
-    if (a.role === 'admin') return { canEdit: true, canEnable: !isOn(r), canClose: isOn(r) && r.id !== a.id };
+    var none = { canEdit: false, canEnable: false, canClose: false, canDelete: false, canAskDelete: false };
+    if (a.role === 'admin') {
+      return { canEdit: true, canEnable: !isOn(r), canClose: isOn(r) && r.id !== a.id, canDelete: r.id !== a.id, canAskDelete: false };
+    }
     if (DELEGATE_ROLES.indexOf(a.role) < 0 || !isOn(a)) return none;
     if (r.id === a.id) return none;
-    var rr = rankOf(r.role);
-    if (!(rr > 0 && rr < rankOf(a.role))) return none;
+    if (!(rankOf(r.role) > 0 && targetRank(r) < effRank(a))) return none;
     var scope = actorScope(a), hadIds = isArr(o.had) ? o.had : [];
     if (scope !== null && (!hadIds.length || !hadIds.every(function (x) { return scope.indexOf(x) >= 0; }))) return none;
-    var grant = hasGrant(a);
+    var grant = hasGrant(a), mgrRow = r.role === 'manager';
     return {
-      canEdit: grant && addableRoles(a.role).indexOf(r.role) >= 0,
-      canEnable: grant && !isOn(r) && !disabledAbove(r, a.role),
-      canClose: isOn(r)
+      canEdit: grant && addableRoles(a.role, allOf(a)).indexOf(r.role) >= 0,
+      canEnable: !mgrRow && grant && !isOn(r) && !disabledAbove(r, a.role),
+      canClose: !mgrRow && isOn(r),
+      canDelete: a.role === 'manager' && !mgrRow && grant && (isOn(r) || !disabledAbove(r, a.role)),   // видалення не скасовує вимкнення вищим за ранг
+      canAskDelete: a.role === 'manager' && mgrRow && grant
     };
+  }
+
+  function deleteDecision(o) {
+    var a = o.actor || {}, cur = o.cur;
+    if (!cur) return bad('forbidden', 'Такої людини немає — оновіть сторінку.');
+    if (a.role === 'admin') return cur.id === a.id ? bad('forbidden', 'Себе видаляє інший адміністратор.') : { ok: true };
+    if (a.role === 'manager' && rowPermissions({ actor: a, row: cur, had: o.had }).canDelete) return { ok: true };
+    return bad('forbidden', 'Видаляти цю людину можна лише з правом «Додавати людей», у межах своїх локацій; керівника видаляє адміністратор.');
+  }
+
+  function deleteAskDecision(o) {
+    if (!o.cur || !rowPermissions({ actor: o.actor, row: o.cur, had: o.had }).canAskDelete) return bad('forbidden', 'Запит на видалення можна надіслати лише щодо керівника, з правом «Додавати людей».');
+    var t = typeof o.reason === 'string' ? o.reason.trim() : '';
+    if (t.length < 3 || t.length > 500) return bad('validation', 'Напишіть причину — від 3 до 500 знаків.', 'reason');
+    return { ok: true };
+  }
+
+  function restoreDecision(o) {
+    var a = o.actor || {};
+    if (a.role === 'admin' || !disabledAbove(o.row, a.role)) return { ok: true };
+    return bad('forbidden', 'Цю людину прибрав зі списку той, хто має вищу роль, — повернути її може адміністратор.');
   }
 
 
@@ -177,8 +225,8 @@
   P.demoAccess = {
     ROLE_RANK: ROLE_RANK, ASSIGNABLE_ROLES: ASSIGNABLE_ROLES, DELEGATE_ROLES: DELEGATE_ROLES, ADDS_PER_DAY: ADDS_PER_DAY,
     DEMO_SLACK: DEMO_SLACK, ADD_CHECK_TEXT: ADD_CHECK_TEXT,
-    rankOf: rankOf, addableRoles: addableRoles, actorScope: actorScope, accessOf: accessOf, isCloseOnly: isCloseOnly,
-    delegateSaveDecision: delegateSaveDecision, rowPermissions: rowPermissions, grantDecision: grantDecision,
+    rankOf: rankOf, isAllLoc: isAllLoc, effRank: effRank, addableRoles: addableRoles, actorScope: actorScope, accessOf: accessOf, isCloseOnly: isCloseOnly,
+    delegateSaveDecision: delegateSaveDecision, rowPermissions: rowPermissions, deleteDecision: deleteDecision, deleteAskDecision: deleteAskDecision, restoreDecision: restoreDecision, grantDecision: grantDecision,
     defaultCanAddPeople: defaultCanAddPeople, nextCanAddPeople: nextCanAddPeople, addLimitDecision: addLimitDecision, disabledByFor: disabledByFor, addCheckDecision: addCheckDecision,
     slackStateOf: slackStateOf, slackNameOf: slackNameOf
   };

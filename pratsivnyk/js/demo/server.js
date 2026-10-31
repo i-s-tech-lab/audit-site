@@ -79,7 +79,7 @@
       db.audits = db.audits.filter(function (a) { return !freshIds[a.id]; }).concat(fresh);
       var done = storage.get('demo:wishes:done', {});
       db.wishes.forEach(function (w) { if (done[w.id]) { w.status = 'done'; w.doneAuditId = done[w.id]; } });
-      P.demoLoadHooks.forEach(function (h) { h(db, { storage: storage, today: today, now: now }); });
+      P.demoLoadHooks.forEach(function (h) { h(db, { storage: storage, today: today, now: now, real: REAL }); });   // v1.14: real — хуки знають, що це справжній сервер
       if (!REAL) migrateOldPeople(db.users);
       env.db = db; env.ix = C.index(db);
       meId = storage.get(KEY_ME, null);

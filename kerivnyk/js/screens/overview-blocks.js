@@ -148,7 +148,7 @@
     function drawPer100() {
       var el = sec('per100');
       if (!el) return;
-      var my = ++req.per100, top = head('Брак на 100 перевірених', 'mgr.ov.per100', 'Відділи всіх локацій · ' + esc(span), bx('per100'));
+      var my = ++req.per100, top = head('Брак на 100 перевірених', 'mgr.ov.per100', 'Відділи ваших локацій · ' + esc(span), bx('per100'));
       el.innerHTML = top + H().loading();
       P.srv('mgrDepts', { from: o.period.from, to: o.period.to }).then(function (r) {
         if (!ctx.alive() || my !== req.per100) return;
@@ -160,7 +160,7 @@
     function paintPer100() {
       var el = sec('per100');
       if (!el || !per.data) return;
-      var rows = per100Rows(per.data), top = head('Брак на 100 перевірених', 'mgr.ov.per100', 'Відділи всіх локацій · ' + esc(span), bx('per100'));
+      var rows = per100Rows(per.data), top = head('Брак на 100 перевірених', 'mgr.ov.per100', 'Відділи ваших локацій · ' + esc(span), bx('per100'));
       if (!rows.length) { el.innerHTML = top + H().empty('Відділів немає', 'За період немає відділів із числами.'); return; }
       el.innerHTML = top + per100Table(perAll ? rows : rows.slice(0, SHORT)) + (rows.length > SHORT ?
         '<button class="btn btn--secondary btn--sm ov-more" type="button" data-act="ov-per-all" aria-expanded="' + perAll + '">' + (perAll ? 'Згорнути список' : 'Усі ' + H().num(rows.length)) + '</button>' : '');

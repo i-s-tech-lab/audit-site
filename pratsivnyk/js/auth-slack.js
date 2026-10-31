@@ -221,7 +221,8 @@
           return { id: u.id, name: u.name || '', slackId: A.maskId(u.slackId), slackFull: String(u.slackId || ''), role: u.role,
             roleLabel: u.roleLabel || ROLE_LABELS[u.role] || u.role, locationIds: u.locationIds || [],
             canAddPeople: !!u.canAddPeople, addedBy: u.addedBy || null, canEdit: u.canEdit !== false, canEnable: u.canEnable !== false,
-            allLocations: u.role === 'manager' || u.role === 'admin', active: on, seniorOff: false, disabledBy: u.disabledBy || null,
+            canClose: u.canClose !== false, canDelete: u.canDelete === true, canAskDelete: u.canAskDelete === true, deletePending: u.deletePending === true,
+            allLocations: u.allLocations === true || u.role === 'admin', active: on, seniorOff: false, disabledBy: u.disabledBy || null,
             lastAuditAt: null, addedAt: u.createdAt || null, isMe: !!me.id && u.id === me.id, email: u.email || '' };   // v1.11: пошту сервер віддає лише адміну
         });
         var roles = ROLE_ORDER.filter(function (k) { return ASSIGNABLE.indexOf(k) >= 0 || users.some(function (u) { return u.role === k; }); })
@@ -236,6 +237,11 @@
         return r && r.ok ? { ok: true, id: r.id, name: p.name || p0.knownName || '', active: p.active === undefined ? null : p.active !== false, created: !p.id, dm: r.dm || 'skipped', dmError: r.dmError } : r;
       });
     };
+
+    A.deletePerson = function (id) { return A.real() ? A.admin('users.delete', { id: id }) : P.srv('personDelete', { id: id }); };
+    A.deleteAsk = function (id, reason) { return A.real() ? A.admin('deletes.ask', { id: id, reason: reason }) : P.srv('deleteAsk', { id: id, reason: reason }); };
+    A.deleteList = function () { return A.real() ? A.admin('deletes.list') : P.srv('deleteRequests', {}); };
+    A.deleteResolve = function (id, decision) { return A.real() ? A.admin('deletes.resolve', { id: id, decision: decision }) : P.srv('deleteResolve', { id: id, decision: decision }); };
 
     A.install = function (backend) {
       if (!A.real() || !backend || typeof backend.call !== 'function' || backend.slackWrapped) return backend;

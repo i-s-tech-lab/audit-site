@@ -21,7 +21,7 @@
 
   function drawIn(me) {
     var s = A.session() || {}, locs = (me.locations || []).map(function (l) { return l.name || l.id; });
-    var all = me.role === 'manager' || me.role === 'admin';
+    var all = me.role === 'admin' || (me.role === 'manager' && !!(me.can && me.can.viewAllLocations));
     box.innerHTML = status('ok', 'success', 'Ви увійшли як ' + (me.name || 'людина без імені'), 'Вхід через Slack працює: посилання спрацювало, сервер вас знає.') +
       '<dl class="vh__kv"><dt>Роль</dt><dd>' + esc(me.roleLabel || me.role || '—') + '</dd>' +
         '<dt>Локації</dt><dd>' + esc(locs.length ? locs.join(', ') : all ? 'усі локації' : 'ще не призначено') + '</dd>' +

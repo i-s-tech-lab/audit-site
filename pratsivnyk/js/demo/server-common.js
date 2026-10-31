@@ -14,7 +14,7 @@
     maskSlackId: function (id) { id = String(id == null ? '' : id); return id.length > 4 ? id.charAt(0) + '…' + id.slice(-3) : id; },
 
     accessFor: function (u) {
-      return P.demoAccess ? P.demoAccess.accessOf({ role: u.role, active: u.active !== false, canAddPeople: u.canAddPeople === true })
+      return P.demoAccess ? P.demoAccess.accessOf({ role: u.role, active: u.active !== false, canAddPeople: u.canAddPeople === true, allLocations: u.allLocations === true })
         : { addPeople: false, addRoles: [], addLimitPerDay: null };
     },
 
@@ -45,16 +45,18 @@
       return ix;
     },
 
-    canOf: function (role) {
+    canOf: function (role, allLocations) {
       var can = {
         recordAudit: role === 'auditor' || role === 'senior_auditor' || role === 'admin',
         editCatalogs: role === 'senior_auditor' || role === 'admin',
         editOthersAudits: role === 'senior_auditor' || role === 'admin',
-        viewAllLocations: role === 'manager' || role === 'admin',
+        viewAllLocations: role === 'admin',
         manageWhitelist: role === 'senior_auditor' || role === 'admin'
       };
       var o = C.roleOverrides && Object.prototype.hasOwnProperty.call(C.roleOverrides, role) ? C.roleOverrides[role] : null;
       if (o) Object.keys(can).forEach(function (k) { if (typeof o[k] === 'boolean') can[k] = o[k]; });
+      if (role === 'manager') can.viewAllLocations = allLocations === true;
+      if (role === 'admin') can.viewAllLocations = true;
       return can;
     },
 
@@ -64,7 +66,7 @@
         id: u.id, name: u.name, role: role, roleLabel: P.demoDict.roleLabels[role], slackId: u.slackId || null,
         locations: u.locationIds.map(function (id) { return { id: id, name: ix.loc[id].name }; }),
         defaultLocationId: u.locationIds[0],
-        can: C.canOf(role),
+        can: C.canOf(role, u.allLocations === true),
         rules: { editWindowMin: C.LIMITS.editWindowMin, sessionDays: C.SESSION_DAYS },
         access: C.accessFor(u)
       };
@@ -82,7 +84,7 @@
       if (!loc || !Object.prototype.hasOwnProperty.call(ix.loc, loc)) return me;
       me.ownRole = u.role; me.ownRoleLabel = P.demoDict.roleLabels[u.role];
       me.allLocations = me.locations; me.viewLocationId = loc;
-      me.role = role; me.roleLabel = P.demoDict.roleLabels[role]; me.can = C.canOf(role);
+      me.role = role; me.roleLabel = P.demoDict.roleLabels[role]; me.can = C.canOf(role, u.allLocations === true);
       me.access = C.accessFor({ role: role, active: u.active, canAddPeople: u.canAddPeople });
       if (one) me.locations = [{ id: loc, name: ix.loc[loc].name }];
       me.defaultLocationId = one ? loc : me.locations[0].id;
@@ -93,7 +95,7 @@
       var me = C.buildMe(u, ix), one = role === 'auditor' || role === 'senior_auditor';
       var loc = Object.prototype.hasOwnProperty.call(ix.loc, locId) ? locId : u.locationIds[0];   // лише справжня локація (не службове імʼя обʼєкта)
       me.admin = true; me.viewLocationId = loc; me.allLocations = me.locations;
-      me.role = role; me.roleLabel = P.demoDict.roleLabels[role]; me.can = C.canOf(role);
+      me.role = role; me.roleLabel = P.demoDict.roleLabels[role]; me.can = C.canOf(role, u.allLocations === true);
       me.access = C.accessFor({ role: role, canAddPeople: true });   // v1.7: у перегляді «як роль» — права цієї ролі додавати людей
       if (one) me.locations = [{ id: loc, name: ix.loc[loc].name }];
       me.defaultLocationId = one ? loc : me.locations[0].id;
@@ -104,6 +106,8 @@
       return me.locations.some(function (l) { return l.id === locationId; });
     },
     canRecordAt: function (me, locationId, ix) {
+      var real = ix && ix.user && Object.prototype.hasOwnProperty.call(ix.user, me.id) ? ix.user[me.id] : null;
+      if (real && real.role === 'manager' && real.allLocations !== true && (real.locationIds || []).indexOf(locationId) < 0) return false;
       return !!(me.can && me.can.recordAudit) && !!ix && Object.prototype.hasOwnProperty.call(ix.loc, locationId) &&
         (ix.loc[locationId].active !== false || C.hasLoc(me, locationId));
     },

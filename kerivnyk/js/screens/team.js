@@ -2,7 +2,9 @@
   'use strict';
   var P = root.P, esc = P.esc, H = P.sr.h, K = P.mgr, T = P.authTeam;
   var ROLES = [['', 'Усі'], ['auditor', 'Аудитори'], ['senior_auditor', 'Старші аудитори'], ['manager', 'Керівники'], ['admin', 'Адміністратор']];
-  var SHOWN = { auditor: 1, senior_auditor: 1 };   // кого показуємо в цій вкладці з доступом (керівники й адмін — лише контакти, peopleContacts)
+  var SHOWN = { auditor: 1, senior_auditor: 1, manager: 1 };   // кого показуємо з доступом: керівників сервер віддає лише тим, хто їх може додавати; адмін — лише контакти (peopleContacts)
+  var ROLE_LABEL = { auditor: 'Аудитор', senior_auditor: 'Старший аудитор', manager: 'Керівник' };
+  var D = P.teamDel;   // видалення людини, запит на видалення керівника (team-delete.js)
   var OFF_BY = { admin: 'адміністратор', manager: 'керівник', senior_auditor: 'старший' };   // хто вимкнув доступ (disabledBy)
   var NO_RIGHT = 'Право «Додавати людей» для вас вимкнено — увімкнути його може адміністратор. Вимкнути доступ можна й без нього.';
   var CANT_ENABLE = 'Увімкнути доступ може керівник із правом «Додавати людей» або адміністратор';
@@ -44,7 +46,7 @@
     function find(id) { return data.users.filter(function (x) { return x.id === id; })[0]; }
     function locName(id) { var l = locs.filter(function (x) { return x.id === id; })[0]; return l ? l.name : id; }
     function canAdd() { return data.access.addPeople; }
-    function allLocs(c) { return !c.locationIds.length || locs.every(function (l) { return c.locationIds.indexOf(l.id) >= 0; }); }
+    function allLocs(c) { return typeof c.allLocations === 'boolean' ? c.allLocations : !c.locationIds.length || locs.every(function (l) { return c.locationIds.indexOf(l.id) >= 0; }); }
     function shown() {
       var s = flt.q.trim().toLowerCase();
       var users = data.users.filter(function (u) {
@@ -63,19 +65,19 @@
       return canAdd() ? 'Доступ вимкнув адміністратор — увімкнути може лише адміністратор' : CANT_ENABLE;
     }
     function subline(u) {
-      return 'Slack ' + P.authSlack.maskId(u.slackId) + (u.active ? '' : ' · ' + (OFF_BY[u.disabledBy] ? 'доступ вимкнув ' + OFF_BY[u.disabledBy] : 'доступ вимкнено'));
+      return 'Slack ' + P.authSlack.maskId(u.slackId) + (u.active ? '' : ' · ' + (OFF_BY[u.disabledBy] ? 'доступ вимкнув ' + OFF_BY[u.disabledBy] : 'доступ вимкнено')) + (u.role === 'manager' ? ' · ' + D.MGR_HINT : '');
     }
-    function acts(u) {
-      return sw(u.active, da('id', u.id), swLabel(u), !u.active && !u.canEnable) + (u.canEdit ? pen(da('id', u.id), 'Редагувати · ' + u.name) : '');
-    }
-    function locsOf(u) { return u.contact && allLocs(u) ? 'Усі локації' : u.locationIds.map(locName).join(', '); }
+    function swOf(u) { return u.role === 'manager' ? '' : sw(u.active, da('id', u.id), swLabel(u), u.active ? !u.canClose : !u.canEnable); }   // активний — за canClose, вимкнений — за canEnable
+    function acts(u) { return swOf(u) + (u.canEdit ? pen(da('id', u.id), 'Редагувати · ' + u.name) : '') + D.btns(u); }
+    function more(u) { return u.otherLocations ? ' <span class="mgr-dim">+ інші локації</span>' : ''; }
+    function locsOf(u) { return (u.contact ? allLocs(u) : u.allLocations === true) ? 'Усі локації' : u.locationIds.map(locName).join(', '); }
     function mail(c) { return c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '<span class="mgr-dim">пошти немає</span>'; }
     function table(list) {
       return '<div class="tbl-box mgr-desk"><table class="tbl"><thead><tr><th>Людина</th><th>Роль</th><th>Локації</th><th>Доступ</th><th><span class="tm-vh">Дії</span></th></tr></thead><tbody>' +
         list.map(function (u) {
           if (u.contact) return '<tr><td><b>' + esc(u.name) + '</b><span class="sub">' + mail(u) + '</span></td><td>' + esc(u.roleLabel) + '</td><td>' + esc(locsOf(u)) + '</td><td><span class="mgr-dim">—</span></td><td></td></tr>';
-          return '<tr' + (u.active ? '' : ' class="tm-off"') + '><td><b>' + esc(u.name) + '</b><span class="sub">' + esc(subline(u)) + '</span></td><td>' + esc(u.roleLabel) + '</td><td>' + esc(locsOf(u)) + '</td>' +
-            '<td>' + sw(u.active, da('id', u.id), swLabel(u), !u.active && !u.canEnable) + '</td><td>' + (u.canEdit ? pen(da('id', u.id), 'Редагувати · ' + u.name) : '') + '</td></tr>';
+          return '<tr' + (u.active ? '' : ' class="tm-off"') + '><td><b>' + esc(u.name) + '</b><span class="sub">' + esc(subline(u)) + '</span></td><td>' + esc(u.roleLabel) + '</td><td>' + esc(locsOf(u)) + more(u) + '</td>' +
+            '<td>' + (swOf(u) || '<span class="mgr-dim">—</span>') + '</td><td>' + (u.canEdit ? pen(da('id', u.id), 'Редагувати · ' + u.name) : '') + D.btns(u) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }
     function cards(list) {
@@ -83,7 +85,7 @@
         if (u.contact) return '<article class="mgr-card"><div class="tm-card"><div class="tm-card__who"><b>' + esc(u.name) + '</b><span class="mgr-dim mgr-block">' + esc(u.roleLabel + ' · ' + locsOf(u)) +
           '</span><span class="mgr-block">' + mail(u) + '</span></div></div></article>';
         return '<article class="mgr-card' + (u.active ? '' : ' tm-off') + '"><div class="tm-card"><div class="tm-card__who"><b>' + esc(u.name) + '</b>' +
-          '<span class="mgr-dim mgr-block">' + esc(u.roleLabel + ' · ' + locsOf(u)) + '</span><span class="mgr-dim mgr-block">' + esc(subline(u)) + '</span></div>' +
+          '<span class="mgr-dim mgr-block">' + esc(u.roleLabel + ' · ' + locsOf(u)) + more(u) + '</span><span class="mgr-dim mgr-block">' + esc(subline(u)) + '</span></div>' +
           '<div class="tm-acts">' + acts(u) + '</div></div></article>';
       }).join('') + '</div>';
     }
@@ -109,8 +111,9 @@
         var r = both[0];
         if (!ctx.alive()) return;
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
-        contacts = both[1] && both[1].ok ? both[1].people.map(function (c) { return Object.assign({ contact: true }, c, c.role === 'admin' ? { roleLabel: 'Адміністратор' } : {}); }) : [];
         data = r; data.users = r.users.filter(function (u) { return SHOWN[u.role]; });
+        var shownIds = {}; data.users.forEach(function (u) { shownIds[u.id] = 1; });   // керівник, який уже є рядком з доступом, у контактах не повторюється
+        contacts = both[1] && both[1].ok ? both[1].people.filter(function (c) { return !shownIds[c.id]; }).map(function (c) { return Object.assign({ contact: true }, c, c.role === 'admin' ? { roleLabel: 'Адміністратор' } : {}); }) : [];
         locs = T.locations(ctx.me, data.users);
         if (flt.loc && !locs.some(function (l) { return l.id === flt.loc; })) flt.loc = '';
         frame(); list();
@@ -124,13 +127,13 @@
     }
 
     function openEdit(u, rq) {
-      var roles = data.access.addRoles.filter(function (r) { return SHOWN[r]; });
+      var roles = data.access.addRoles.filter(function (r) { return SHOWN[r]; }), lockRole = !!u && u.role === 'manager';   // роль наявного керівника не змінюється
       var st = { role: u ? u.role : roles[0], locs: u ? u.locationIds.slice() : (flt.loc ? [flt.loc] : []), active: u ? u.active : true, touched: false };
       function locBlock() {
         return '<span class="label">Локації</span><div class="tm-chips">' + locs.map(function (l) {
           var on = st.locs.indexOf(l.id) >= 0;
           return '<button class="chip-pick' + (on ? ' chip-pick--on' : '') + '" type="button" data-act="tm-pick"' + da('id', l.id) + ' aria-pressed="' + on + '">' + (on ? P.ic('check', 'ui-icon--sm') : '') + esc(l.name) + '</button>';
-        }).join('') + '</div>';
+        }).join('') + '</div>' + (st.role === 'manager' ? '<span class="hint">Усі локації дає лише адміністратор.</span>' : '');
       }
       P.sr.modal({ size: 'sm', title: u ? 'Редагувати людину' : 'Додати людину', sub: u ? esc(u.name) : '',
         body: '<div class="tm-form">' +
@@ -140,16 +143,17 @@
             : field('slackId', 'Slack ID', '<input class="input" name="slackId" value="" autocomplete="off" maxlength="40" placeholder="Slack ID людини">', 'Знайти: профіль у Slack → «⋯» → «Скопіювати ID учасника».') +
               '<div class="field"><button class="btn btn--secondary btn--sm" type="button" data-act="tm-lookup" style="align-self:flex-start">' + P.ic('slack', 'ui-icon--sm') + 'Показати імʼя зі Slack</button>' +
               '<span class="hint" data-lookup-out aria-live="polite"></span></div>') +
-          field('role', 'Роль', '<select class="input" name="role">' + roles.map(function (r) {
-            return '<option value="' + esc(r) + '"' + (r === st.role ? ' selected' : '') + '>' + esc(r === 'auditor' ? 'Аудитор' : 'Старший аудитор') + '</option>'; }).join('') + '</select>') +
+          (lockRole ? '<div class="field"><span class="label">Роль</span><span class="select tm-locked">Керівник' + P.ic('lock', 'icon icon--sm') + '</span></div>'
+            : field('role', 'Роль', '<select class="input" name="role">' + roles.map(function (r) {
+              return '<option value="' + esc(r) + '"' + (r === st.role ? ' selected' : '') + '>' + esc(ROLE_LABEL[r] || r) + '</option>'; }).join('') + '</select>')) +
           '<div class="field" data-f="locationIds" data-tm-locs>' + locBlock() + '</div>' +
-          (u ? '<div class="field" data-f="active"><span class="label">Доступ</span><div class="seg" role="radiogroup">' + [['true', 'Увімкнено'], ['false', 'Вимкнено']].map(function (o) {
+          (u && !lockRole ? '<div class="field" data-f="active"><span class="label">Доступ</span><div class="seg" role="radiogroup">' + [['true', 'Увімкнено'], ['false', 'Вимкнено']].map(function (o) {
             return '<button class="seg__btn' + (String(st.active) === o[0] ? ' seg__btn--on' : '') + '" type="button" aria-pressed="' + (String(st.active) === o[0]) + '" data-act="tm-seg"' + da('v', o[0]) + '>' + o[1] + '</button>'; }).join('') + '</div></div>' : '') +
           '</div>',
         foot: '<button class="btn btn--quiet" type="button" data-ov-close>Скасувати</button><button class="btn btn--primary" type="button" data-act="tm-save">' + P.ic(u ? 'save' : 'add') + (u ? 'Зберегти' : 'Додати людину') + '</button>',
         onMount: function (el) {
           q(el, '.modal').className += ' tm-modal';
-          q(el, '[name="role"]').addEventListener('change', function (e) { st.role = e.target.value; });
+          if (!lockRole) q(el, '[name="role"]').addEventListener('change', function (e) { st.role = e.target.value; q(el, '[data-tm-locs]').innerHTML = locBlock(); });
           el.addEventListener('keydown', function (e) {   // Enter у полі = «Зберегти»
             if (e.key !== 'Enter' || !e.target.matches('input.input')) return;
             e.preventDefault(); var b = q(el, '[data-act="tm-save"]'); if (b && !b.disabled) b.click();
@@ -201,6 +205,7 @@
       P.confirm({ title: 'Вимкнути доступ · ' + u.name + '?', text: 'Вхід у додаток закриється одразу. Записані аудити лишаються в історії.', okLabel: 'Вимкнути доступ', danger: true })
         .then(function (ok) { if (ok) go(); });
     }
+    D.bind(ctx, { find: find, reload: load, showErrors: showErrors });   // v1.4: «Видалити» і запит адміну
     ctx.on('tm-new', function () { openEdit(null); });
     ctx.on('tm-edit', function (t) { openEdit(find(t.getAttribute('data-id'))); });
     ctx.on('tr-add', function (t) { var rq = reqs.find(t.getAttribute('data-id')); if (rq && canAdd()) openEdit(null, rq); });   // v1.1: «Додати» в картці запитів

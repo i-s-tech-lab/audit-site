@@ -12,7 +12,10 @@
   var DAYS_MAX = { kdStale: 60, deptNoAudits: 30, normMiss: 30 };
 
   function has(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }
-  function can(me) { return (me.role === 'manager' || me.role === 'admin') && !!(me.can && me.can.viewAllLocations); }
+  function can(me) { return me.role === 'manager' || me.role === 'admin'; }
+  function mine(me, env) { return env.db.locations.filter(function (l) { return C.hasLoc(me, l.id); }); }
+  function inScope(scope, id) { return !scope || (Array.isArray(scope) ? scope.indexOf(id) >= 0 : scope === id); }
+  function idsOf(list) { return list.map(function (l) { return l.id; }); }
   function lv0() { return { fix: 0, repair: 0, scrap: 0 }; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function daysOf(from, to) { var out = []; for (var d = from; d <= to; d = S.addDays(d, 1)) out.push(d); return out; }
@@ -22,21 +25,23 @@
     if (from < S.addDays(to, -365)) from = S.addDays(to, -365);
     return { from: from, to: to };
   }
-  function locOf(p, env) {
+  function locOf(p, env, me) {
     var id = p.locationId;
     if (id == null || id === '') return { loc: null };
     if (!has(env.ix.loc, id)) return { err: C.fail('not_found', 'Такої локації немає.') };
+    if (!C.hasLoc(me, id)) return { err: C.fail('forbidden', 'Цієї локації у вас немає.') };
     return { loc: env.ix.loc[id] };
   }
-  function locsOf(p, env) {
+  function locsOf(p, env, me) {
     if (p.locationIds == null) return { ids: null };
     if (!Array.isArray(p.locationIds) || !p.locationIds.length) return { err: C.fail('validation', 'Оберіть хоча б одну локацію.', [{ field: 'locationIds', message: 'Оберіть хоча б одну локацію.' }]) };
     if (p.locationIds.some(function (id) { return !has(env.ix.loc, id); })) return { err: C.fail('not_found', 'Такої локації немає.') };
+    if (p.locationIds.some(function (id) { return !C.hasLoc(me, id); })) return { err: C.fail('forbidden', 'Цієї локації у вас немає.') };
     return { ids: p.locationIds.filter(function (id, i) { return p.locationIds.indexOf(id) === i; }) };
   }
-  function depsIn(env, locId) { return env.db.departments.filter(function (d) { return !locId || d.locationId === locId; }); }
+  function depsIn(env, locId) { return env.db.departments.filter(function (d) { return inScope(locId, d.locationId); }); }
   function auditsIn(env, locId, from, to) {
-    return env.audits().filter(function (a) { return (!locId || a.locationId === locId) && a.day >= from && a.day <= to; });
+    return env.audits().filter(function (a) { return inScope(locId, a.locationId) && a.day >= from && a.day <= to; });
   }
   function short(l) { return { id: l.id, name: l.name }; }
   function normOf(env, depId) { var n = env.db.norms.filter(function (x) { return x.departmentId === depId; })[0]; return n ? n.sampleTarget : null; }
@@ -106,7 +111,7 @@
   function dayCount(list) { var m = {}; list.forEach(function (a) { m[a.day] = 1; }); return Object.keys(m).length; }
 
   function checkedByDay(list) { var m = {}; list.forEach(function (a) { var k = a.day + '|' + a.departmentId; m[k] = (m[k] || 0) + C.checkedOf(a); }); return m; }
-  function people(env, list, locId) {
+  function people(env, list, locId, scope) {
     var by = {}, total = 0, perDay = checkedByDay(list);
     list.forEach(function (a) {
       var q = a.defects.reduce(function (s, d) { return s + S.pieces(d); }, 0);
@@ -127,11 +132,11 @@
       return o;
     }
     var list2 = env.db.users.filter(function (u) {
-      return has(by, u.id) || ((u.role === 'auditor' || u.role === 'senior_auditor') && u.active !== false && (!locId || u.locationIds.indexOf(locId) >= 0));
+      return has(by, u.id) || ((u.role === 'auditor' || u.role === 'senior_auditor') && u.active !== false && (!locId || u.locationIds.some(function (id) { return inScope(locId, id); })));
     }).map(function (u) {
       var x = has(by, u.id) ? by[u.id] : { audits: 0, checked: 0, pieces: 0, days: {}, lastAt: null };
       return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], active: u.active !== false, legacy: u.legacy === true, senior: u.role === 'senior_auditor',
-        locations: u.locationIds.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : ''; }).filter(Boolean),
+        locations: u.locationIds.filter(function (id) { return inScope(scope, id); }).map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : ''; }).filter(Boolean),   // v1.12: лише мої
         audits: x.audits, checked: x.checked, pieces: x.pieces, pct: C.pct(x.pieces, x.checked), share: C.pct(x.pieces, total),
         days: Object.keys(x.days).length, norm: norm(x.days), lastAt: x.lastAt };
     }).sort(function (a, b) { return b.audits - a.audits || (a.name < b.name ? -1 : 1); });
@@ -171,19 +176,18 @@
       belowAfter1: done.filter(function (a) { return !(a.after > k.threshold); }).length, notBelowAfter1: done.filter(function (a) { return a.after > k.threshold; }).length };
   }
 
-  function reportsOf(env, userId) {
-    var all = env.storage.get(KEY, {}) || {}, mine = has(all, userId) ? all[userId] : {}, o = clone(DEFAULTS);
-    var every = env.db.locations.map(function (l) { return l.id; });
+  function reportsOf(env, me) {
+    var all = env.storage.get(KEY, {}) || {}, own = has(all, me.id) ? all[me.id] : {}, o = clone(DEFAULTS), ids = idsOf(mine(me, env));
     KINDS.forEach(function (k) {
-      if (mine[k] && typeof mine[k] === 'object') Object.assign(o[k], mine[k]);
-      var locs = (o[k].locations || []).filter(function (id) { return has(env.ix.loc, id); });
-      o[k].locations = locs.length ? locs : every.slice();
+      if (own[k] && typeof own[k] === 'object') Object.assign(o[k], own[k]);
+      var locs = Array.isArray(o[k].locations) ? o[k].locations.filter(function (id) { return ids.indexOf(id) >= 0; }) : [];
+      o[k].locations = locs.length ? locs : 'all';
     });
-    o.updatedAt = mine.updatedAt || null;
+    o.updatedAt = own.updatedAt || null;
     return o;
   }
-  function checkReports(p, env) {
-    var errors = [], o = {};
+  function checkReports(p, env, me) {
+    var errors = [], o = {}, ids = idsOf(mine(me, env));
     function err(field, message) { errors.push({ field: field, message: message }); }
     KINDS.forEach(function (k) {
       var x = p[k], def = DEFAULTS[k];
@@ -204,8 +208,10 @@
         else o[k].day = x.day;
       }
       var locs = Array.isArray(x.locations) ? x.locations : null;
-      if (!locs || !locs.length) err(k + '.locations', 'Оберіть хоча б одну локацію.');
+      if (x.locations === 'all') o[k].locations = 'all';
+      else if (!locs || !locs.length) err(k + '.locations', 'Оберіть хоча б одну локацію.');
       else if (locs.some(function (id) { return !has(env.ix.loc, id); })) err(k + '.locations', 'Такої локації немає — оновіть сторінку.');
+      else if (locs.some(function (id) { return ids.indexOf(id) < 0; })) err(k + '.locations', 'Такої локації у вас немає — оновіть сторінку.');
       else o[k].locations = locs.filter(function (id, i) { return locs.indexOf(id) === i; });
     });
     return errors.length ? { errors: errors } : { clean: o };
@@ -214,19 +220,20 @@
   var api = {
     mgrOverview: function (p, me, env) {
       if (!can(me)) return C.forbidden();
-      var sel = locOf(p, env); if (sel.err) return sel.err;
+      var sel = locOf(p, env, me); if (sel.err) return sel.err;
+      var my = mine(me, env), myIds = idsOf(my);
       var rg = range(p, env), span = daysOf(rg.from, rg.to), pFrom = S.addDays(rg.from, -span.length), pTo = S.addDays(rg.from, -1);
-      var both = auditsIn(env, null, pFrom, rg.to);
+      var both = auditsIn(env, myIds, pFrom, rg.to);
       var cur = both.filter(function (a) { return a.day >= rg.from; }), prev = both.filter(function (a) { return a.day < rg.from; });
-      function at(list, locId) { return list.filter(function (a) { return !locId || a.locationId === locId; }); }
+      function at(list, locId) { return list.filter(function (a) { return inScope(locId, a.locationId); }); }
       var kdSel = sel.loc && p.withKd === true ? kdSum(env, sel.loc.id, rg.from, rg.to, true) : null;
-      var locations = env.db.locations.map(function (l) {
+      var locations = my.map(function (l) {
         var deps = depsIn(env, l.id), s = stats(env, at(cur, l.id), deps), ps = stats(env, at(prev, l.id), deps);
         return Object.assign(short(l), pub(env, s, 3), { departments: deps.filter(function (d) { return d.active !== false; }).length,
           prev: { audits: ps.audits, checked: ps.checked, rejected: ps.rejected, pct: ps.pct },
           kd: kdTile(kdSel && sel.loc.id === l.id ? kdSel : kdSum(env, l.id, rg.from, rg.to)) });
       });
-      var locId = sel.loc ? sel.loc.id : null, deps = depsIn(env, locId), scope = at(cur, locId), pscope = at(prev, locId), byDay = {};
+      var locId = sel.loc ? sel.loc.id : myIds, deps = depsIn(env, locId), scope = at(cur, locId), pscope = at(prev, locId), byDay = {};
       scope.forEach(function (a) { (byDay[a.day] = byDay[a.day] || []).push(a); });
       var days = span.map(function (d) {
         var s = stats(env, byDay[d] || [], deps);
@@ -241,35 +248,36 @@
 
     mgrDepts: function (p, me, env) {
       if (!can(me)) return C.forbidden();
-      var sel = locOf(p, env); if (sel.err) return sel.err;
-      var many = locsOf(p, env); if (many.err) return many.err;
+      var sel = locOf(p, env, me); if (sel.err) return sel.err;
+      var many = locsOf(p, env, me); if (many.err) return many.err;
       var tid = p.deptTypeId == null || p.deptTypeId === '' ? null : p.deptTypeId;
       if (tid !== null && !has(env.ix.dt, tid)) return C.fail('not_found', 'Такого типу відділу немає.');
-      var ids = many.ids || (sel.loc ? [sel.loc.id] : null);
-      function mine(locId) { return !ids || ids.indexOf(locId) >= 0; }
-      var rg = range(p, env), list = auditsIn(env, null, rg.from, rg.to).filter(function (a) { return mine(a.locationId); });
-      var depts = env.db.departments.filter(function (d) { return mine(d.locationId) && (!tid || d.deptTypeId === tid); }).map(function (d) {
+      var my = mine(me, env), ids = many.ids || (sel.loc ? [sel.loc.id] : null);
+      function inMine(locId) { return inScope(ids || idsOf(my), locId); }
+      var rg = range(p, env), list = auditsIn(env, null, rg.from, rg.to).filter(function (a) { return inMine(a.locationId); });
+      var depts = env.db.departments.filter(function (d) { return inMine(d.locationId) && (!tid || d.deptTypeId === tid); }).map(function (d) {
         var s = stats(env, list, [d]), loc = env.ix.loc[d.locationId], dt = env.ix.dt[d.deptTypeId];
         return Object.assign({ id: d.id, name: d.name, locationId: d.locationId, locationName: loc ? loc.name : '', deptTypeId: d.deptTypeId,
           deptTypeName: dt ? dt.name : '', active: d.active !== false }, pub(env, s, 3));
       }).filter(function (d) { return d.active; });   // v1.10: вимкнені відділи в таблицях не показуємо — як у старшого
       return { ok: true, from: rg.from, to: rg.to, asOf: env.now().toISOString(), criticalPct: env.db.settings.criticalPct,
-        location: sel.loc ? short(sel.loc) : null, locationIds: ids, deptTypeId: tid, locations: env.db.locations.map(short),
+        location: sel.loc ? short(sel.loc) : null, locationIds: ids, deptTypeId: tid, locations: my.map(short),
         deptTypes: env.db.deptTypes.map(short), depts: depts };
     },
 
     mgrAuditors: function (p, me, env) {
       if (!can(me)) return C.forbidden();
-      var sel = locOf(p, env); if (sel.err) return sel.err;
-      var many = locsOf(p, env); if (many.err) return many.err;
+      var sel = locOf(p, env, me); if (sel.err) return sel.err;
+      var many = locsOf(p, env, me); if (many.err) return many.err;
+      var my = mine(me, env), myIds = idsOf(my);
       var tid = p.deptTypeId == null || p.deptTypeId === '' ? null : p.deptTypeId;
       if (tid !== null && !has(env.ix.dt, tid)) return C.fail('validation', 'Такого відділу немає — оновіть сторінку.', [{ field: 'deptTypeId', message: 'Такого відділу немає — оновіть сторінку.' }]);
       function ofType(list) { return !tid ? list : list.filter(function (a) { var d = env.ix.dep[a.departmentId]; return !!d && d.deptTypeId === tid; }); }
-      var locId = sel.loc ? sel.loc.id : null, rg = range(p, env), span = daysOf(rg.from, rg.to);
-      var list = ofType(auditsIn(env, locId, rg.from, rg.to)), flat = people(env, list, locId);
-      var ids = many.ids || (locId ? [locId] : env.db.locations.map(function (l) { return l.id; }));
+      var locId = sel.loc ? sel.loc.id : myIds, rg = range(p, env), span = daysOf(rg.from, rg.to);
+      var list = ofType(auditsIn(env, locId, rg.from, rg.to)), flat = people(env, list, locId, myIds);
+      var ids = many.ids || (sel.loc ? [sel.loc.id] : myIds);
       var groups = ids.map(function (id) {
-        var la = ofType(auditsIn(env, id, rg.from, rg.to)), pp = people(env, la, id), k = kdSum(env, id, rg.from, rg.to);
+        var la = ofType(auditsIn(env, id, rg.from, rg.to)), pp = people(env, la, id, myIds), k = kdSum(env, id, rg.from, rg.to);
         var kd = k && tid ? kdOfType(env, k, tid, rg.from, rg.to) : k && k.period ? { opened: k.period.opened, implemented: k.period.implemented, daysAvg: k.period.implementedDaysAvg,
           belowAfter1: k.period.results ? k.period.results.belowAfter1 : 0, notBelowAfter1: k.period.results ? k.period.results.notBelowAfter1 : 0 } : null;
         pp.list.forEach(function (a) { if (a.senior) a.kd = kd; });
@@ -277,44 +285,44 @@
           daysWithAudits: dayCount(la), days: span.length, norm: locNorm(env, la, id, span, tid), kd: kd, auditors: pp.list };
       });
       return { ok: true, from: rg.from, to: rg.to, asOf: env.now().toISOString(), location: sel.loc ? short(sel.loc) : null, deptTypeId: tid,
-        locations: env.db.locations.map(short), deptTypes: env.db.deptTypes.map(short), totalAudits: list.length, totalPieces: flat.total, auditors: flat.list, groups: groups };
+        locations: my.map(short), deptTypes: env.db.deptTypes.map(short), totalAudits: list.length, totalPieces: flat.total, auditors: flat.list, groups: groups };
     },
 
     mgrMonth: function (p, me, env) {
       if (!can(me)) return C.forbidden();
-      var sel = locOf(p, env); if (sel.err) return sel.err;
-      var loc = sel.loc || env.db.locations[0];
+      var sel = locOf(p, env, me); if (sel.err) return sel.err;
+      var my = mine(me, env), loc = sel.loc || my[0];
       if (!loc) return { ok: true, month: null, months: [], locations: [], location: null, kd: null, hasKd: false, asOf: env.now().toISOString() };   // локацій ще немає
       var today = env.day(), months = monthsOf(today), m = p.month == null || p.month === '' ? months[1] : p.month;
       function bad(msg) { return C.fail('validation', msg, [{ field: 'month', message: msg }]); }
       if (typeof m !== 'string' || !MONTH_RE.test(m)) return bad('Оберіть місяць зі списку.');
       if (m > months[0]) return bad('Цей місяць ще не настав.');
       if (months.indexOf(m) < 0) return bad('Звіт можна взяти за останні ' + MONTHS_BACK + ' місяців.');
-      var from = m + '-01', end = monthEnd(m), to = end < today ? end : today, mine = auditsIn(env, loc.id, from, to), count = {};
+      var from = m + '-01', end = monthEnd(m), to = end < today ? end : today, inMonth = auditsIn(env, loc.id, from, to), count = {};
       env.audits().forEach(function (a) { if (a.locationId === loc.id) { var k = a.day.slice(0, 7); count[k] = (count[k] || 0) + 1; } });
       var deps = depsIn(env, loc.id), kd = kdSum(env, loc.id, from, to);
       var depts = deps.map(function (d) {
-        return Object.assign({ id: d.id, name: d.name, active: d.active !== false }, pub(env, stats(env, mine, [d]), MONTH_TOP), { kd: kdDept(kd, d.id, from, to) });
+        return Object.assign({ id: d.id, name: d.name, active: d.active !== false }, pub(env, stats(env, inMonth, [d]), MONTH_TOP), { kd: kdDept(kd, d.id, from, to) });
       }).filter(function (d) { return d.active; });   // v1.10: вимкнені відділи в таблицях не показуємо — як у старшого
       return { ok: true, month: m, from: from, to: to, partial: end > today, asOf: env.now().toISOString(), hasKd: !!kd, criticalPct: env.db.settings.criticalPct,
-        months: months.map(function (k) { return { month: k, audits: count[k] || 0 }; }), locations: env.db.locations.map(short),
-        location: Object.assign(short(loc), pub(env, stats(env, mine, deps), MONTH_TOP), { depts: depts }), kd: kd };
+        months: months.map(function (k) { return { month: k, audits: count[k] || 0 }; }), locations: my.map(short),
+        location: Object.assign(short(loc), pub(env, stats(env, inMonth, deps), MONTH_TOP), { depts: depts }), kd: kd };
     },
 
     mgrReports: function (p, me, env) {
       if (!can(me)) return C.forbidden();
-      return { ok: true, settings: reportsOf(env, me.id), locations: env.db.locations.map(short), sending: false };
+      return { ok: true, settings: reportsOf(env, me), locations: mine(me, env).map(short), sending: false };
     },
 
     mgrReportsSave: function (p, me, env) {
       if (!can(me)) return C.forbidden();
-      var r = checkReports(p, env);
+      var r = checkReports(p, env, me);
       if (r.errors) return C.fail('validation', 'Перевірте налаштування.', r.errors);
       var all = env.storage.get(KEY, {}) || {};
       r.clean.updatedAt = env.now().toISOString();
       all[me.id] = r.clean;
       env.storage.set(KEY, all);
-      return { ok: true, settings: reportsOf(env, me.id) };
+      return { ok: true, settings: reportsOf(env, me) };
     },
 
     peopleContacts: function (p, me, env) {
@@ -327,16 +335,18 @@
         return typeof e === 'string' && e.trim() ? e.trim() : null;
       }
       var rank = { manager: 0, admin: 1 };
+      var whole = me.role === 'admin' || !!(me.can && me.can.viewAllLocations) || !Array.isArray(me.locations);
+      function inMine(id) { return whole || C.hasLoc(me, id); }
       var people = env.db.users.filter(function (u) {
-        return has(rank, u.role) && u.active !== false && !(P.demoAccessOff && P.demoAccessOff(env.storage, u.id));
+        return has(rank, u.role) && u.active !== false && u.deleted !== true && !(P.demoAccessOff && P.demoAccessOff(env.storage, u.id));
       }).map(function (u) {
-        return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], locationIds: (u.locationIds || []).slice(), email: emailOf(u), active: true };
+        return { id: u.id, name: u.name, role: u.role, roleLabel: P.demoDict.roleLabels[u.role], allLocations: u.role === 'admin' || u.allLocations === true, locationIds: (u.locationIds || []).filter(inMine), email: emailOf(u), active: true };
       }).sort(function (a, b) { return rank[a.role] - rank[b.role] || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
       return { ok: true, people: people };
     }
   };
 
-  P.demoMgr = { has: has, can: can, range: range, locOf: locOf, locsOf: locsOf, depsIn: depsIn, daysOf: daysOf, auditsIn: auditsIn, stats: stats, top: top,
+  P.demoMgr = { has: has, can: can, mine: mine, inScope: inScope, range: range, locOf: locOf, locsOf: locsOf, depsIn: depsIn, daysOf: daysOf, auditsIn: auditsIn, stats: stats, top: top,
     dayCount: dayCount, normOf: normOf, kdSum: kdSum, short: short };
 
   P.demoApis.push(api);

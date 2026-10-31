@@ -45,12 +45,18 @@
   }
   function plusItems() { return P.cabPlus ? P.cabPlus.visible(CFG.plus, REAL, P.authSlack.realOk) : []; }
   function navGroups() { return P.cabNav.group(shown(), CFG.groups); }
+  function scopeText() {
+    var locs = me && me.locations ? me.locations : [];
+    if (!me || (me.can && me.can.viewAllLocations) || !locs.length) return 'Усі локації';
+    var n = locs.length, d = n % 10, few = d >= 2 && d <= 4 && !(n % 100 >= 12 && n % 100 <= 14);
+    return n > 3 ? n + (few ? ' локації' : ' локацій') : locs.map(function (l) { return l.name; }).join(', ');
+  }
   function frame(tab, showPeriod) {
     var now = new Date(), hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
     var pad = 'padding-top:' + (showPeriod ? 0 : 20) + 'px';
     var head = strip() +
       '<header class="wrap hdr"><div class="hdr__titles"><h1 class="hdr__title">' + esc(TITLE) + '</h1>' +
-      '<p class="hdr__sub">Усі локації · ' + esc(S.h.dayLong(today())) + '</p></div>' +
+      '<p class="hdr__sub">' + esc(scopeText()) + ' · ' + esc(S.h.dayLong(today())) + '</p></div>' +
       '<div class="hdr__tools">' + (P.hdrTools ? P.hdrTools.html({ search: true, link: ROLE === 'manager', news: ROLE === 'manager', chat: ROLE === 'admin' }) : '') + (P.cabPlus ? P.cabPlus.button(plusItems()) : '') + (ROLE === 'admin' && P.cabBackup ? P.cabBackup.html() : '') +
       '<button class="tool" type="button" data-act="cab-refresh" title="Оновити дані" aria-label="Оновлено о ' + hhmm + ' — оновити дані"><span class="sr-hide-phone">Оновлено о ' + hhmm + '</span>' + P.ic('refresh', 'ui-icon--sm') + '</button>' +
       '<button class="who" type="button" data-act="cab-profile" aria-label="Мій профіль"><span class="avatar">' + esc(P.initials(me.name)) + '</span><span class="sr-hide-phone">' + esc(me.name) + '</span></button></div></header>';

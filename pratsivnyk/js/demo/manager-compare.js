@@ -35,7 +35,7 @@
       var X = M();
       if (!X || !X.can(me)) return C.forbidden();
       p = p || {};
-      var sel = X.locOf(p, env);
+      var sel = X.locOf(p, env, me);
       if (sel.err) return sel.err;
       if (!sel.loc) return bad('locationId', 'Оберіть локацію.').err;
       var today = env.day(), a = period(p.a, 'a', today), b = period(p.b, 'b', today);

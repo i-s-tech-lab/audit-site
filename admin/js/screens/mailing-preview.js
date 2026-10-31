@@ -12,10 +12,11 @@
   }
   function locsOf(data, l) { return data.locations.filter(function (x) { return l === 'all' || !l || !l.length || l.indexOf(x.id) >= 0; }); }
   function textFor(d, locId) { return P.mlApi.call('mlRulePreview', { locationId: locId, template: d.template, departments: d.departments }); }
+  function realMode() { return !!(P.authSlack && P.authSlack.real && P.authSlack.real()); }
   function sendHint() {
     var ch = P.mlKit.chan();
     return P.mailProbe && P.mailProbe.has()
-      ? 'Піде лише в тестовий канал' + (ch ? ' #' + ch : '') + ', з позначкою «цифри вигадані». Отримувачі з кроку 4 нічого не отримають. Не частіше разу на хвилину.'
+      ? 'Піде лише в тестовий канал' + (ch ? ' #' + ch : '') + ', ' + (realMode() ? 'цифри — з бази на зараз' : 'з позначкою «цифри вигадані»') + '. Отримувачі з кроку 4 нічого не отримають. Не частіше разу на хвилину.'
       : 'Щоб надіслати в Slack, спершу введіть код розсилки на сторінці «Розсилки».';
   }
 
@@ -61,8 +62,10 @@
         box.innerHTML = '<div class="rz-slack"><span class="rz-slack__ava" aria-hidden="true">А</span><div class="rz-slack__msg">' +
           '<p class="rz-slack__who"><b>Аудит</b> <span class="hint">бот · ' + esc(P.fmt.time(r.at)) + '</span></p>' +
           (String(r.text).trim() ? '<div class="rz-slack__text">' + slackHtml(r.text, data.options.links) + '</div>' : '<p class="hint">Тут зʼявиться текст повідомлення з кроку 6.</p>') + '</div></div>';
-        note.innerHTML = 'Цифри тут — <b>вигадані</b>, для прикладу: дані «' + esc(r.location.name) + '»' + (r.onlyDepartments ? ' лише по вибраних відділах' : '') +
-          ' за сьогодні, станом на ' + esc(P.fmt.time(r.at)) + '. Справжні зʼявляться, коли буде база аудитів.';
+        note.innerHTML = realMode()
+          ? '<b>Цифри — з бази на зараз:</b> дані «' + esc(r.location.name) + '»' + (r.onlyDepartments ? ' лише по вибраних відділах' : '') + ' за сьогодні, станом на ' + esc(P.fmt.time(r.at)) + '.'
+          : 'Цифри тут — <b>вигадані</b>, для прикладу: дані «' + esc(r.location.name) + '»' + (r.onlyDepartments ? ' лише по вибраних відділах' : '') +
+            ' за сьогодні, станом на ' + esc(P.fmt.time(r.at)) + '. Справжні зʼявляться, коли буде база аудитів.';
       });
     }
     function update(d) { draft = d; clearTimeout(timer); timer = setTimeout(run, last ? 250 : 0); }

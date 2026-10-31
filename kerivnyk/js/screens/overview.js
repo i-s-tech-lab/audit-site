@@ -12,7 +12,7 @@
       { id: 'kd', name: 'Коригуючі дії', cls: '' },
       { id: 'compare', name: 'Порівняння двох періодів', cls: 'card mgr-gap' },
       { id: 'nocheck', name: 'Дні без перевірок', cls: 'card mgr-gap', buffer: true, desc: 'Скільки днів кожен відділ обраної локації був без жодної перевірки' },
-      { id: 'per100', name: 'Брак на 100 перевірених', cls: 'card mgr-gap', buffer: true, desc: 'Відділи всіх локацій: скільки браку на кожні 100 перевірених штук' }
+      { id: 'per100', name: 'Брак на 100 перевірених', cls: 'card mgr-gap', buffer: true, desc: 'Відділи ваших локацій: скільки браку на кожні 100 перевірених штук' }
     ],
     onShow: function (id) { if (nb) nb.show(id); } });
 
@@ -121,9 +121,9 @@
     function show(r) {
       if (!ctx.alive()) return;
       if (r.ok && !r.location && r.locations.length) { sel = r.locations[0].id; load(); return; }   // без вибору — перша локація
-      if (!r.ok && r.code === 'not_found' && sel === last && last) { last = sel = ''; load(); return; }   // запамʼятована локація зникла
+      if (!r.ok && (r.code === 'not_found' || r.code === 'forbidden') && sel === last && last) { last = sel = ''; load(); return; }   // запамʼятована локація зникла
       if (!r.ok) {
-        ctx.el.innerHTML = r.code === 'not_found' ? H.empty('Такої локації немає', 'Адреса веде на локацію, якої немає в списку.') +
+        ctx.el.innerHTML = r.code === 'not_found' || r.code === 'forbidden' ? H.empty('Такої локації у вас немає', 'Адреса веде на локацію, якої немає серед ваших.') +
           '<p style="text-align:center"><a class="btn btn--secondary btn--sm" href="#/overview">Показати першу локацію</a></p>' : H.error(r);
         return;
       }

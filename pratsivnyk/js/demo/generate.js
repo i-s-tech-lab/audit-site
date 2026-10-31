@@ -108,8 +108,10 @@
       skipUser();   // тут був u_lead_*: роль прибрано, а решта людей і даних лишилась без змін (v1.7)
     });
     var all = db.locations.map(function (l) { return l.id; });
-    addUser('u_manager', 'manager', all);
-    addUser('u_admin', 'admin', all);
+    addUser('u_manager', 'manager', all, { allLocations: true });
+    addUser('u_admin', 'admin', all, { allLocations: true });
+    db.users.push({ id: 'u_manager_b', name: 'Леся Ж.', role: 'manager', slackId: 'U-DEMO-' + pad(seq + 1, 3),
+      locationIds: ['LOC_A', 'LOC_B'], allLocations: false, canAddPeople: true });
   }
 
   function buildOrders(db, D, rnd, today) {

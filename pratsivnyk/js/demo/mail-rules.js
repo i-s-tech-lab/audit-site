@@ -73,7 +73,7 @@
   }
   function load(env) {
     var st = env.storage.get(KEY, null);
-    if (st && Array.isArray(st.items)) { if (upgrade(st, env)) env.storage.set(KEY, st); return st; }
+    if (st && Array.isArray(st.items)) { if (upgrade(st, env) && !env.real) env.storage.set(KEY, st); return st; }   // v3.3: на справжньому сервері читання нічого не пише
     if (env.real) return { items: [], seq: 0 };
     var at = env.now().toISOString(), seq = 0;
     st = { items: presets(env).map(function (x) { var r = clone(x); delete r.key; r.id = 'ml_' + pad(++seq); r.createdAt = at; r.updatedAt = at; return r; }) };
@@ -264,14 +264,18 @@
   function render(tpl, v) { return String(tpl || '').replace(PH, function (all, n) { return has(v, n) ? v[n] : all; }); }
 
   function idOf(p) { return typeof p.id === 'string' ? p.id : ''; }
-  P.mailRules = { scheduleLabel: scheduleLabel, condLabel: condLabel };
+  function readRules(env) {
+    if (env.real) return [];
+    return load(env).items.map(function (r) { return view(env, r); });
+  }
+  P.mailRules = { scheduleLabel: scheduleLabel, condLabel: condLabel, readRules: readRules };
   P.demoApis.push({
     mlRules: function (p, me, env) {
       if (!admin(me)) return C.forbidden();
       var st = load(env);
       return { ok: true, now: env.now().toISOString(), items: st.items.map(function (r) { return view(env, r); }),
         locations: env.db.locations.map(function (l) { return { id: l.id, name: l.name, departments: depsOf(env, l.id) }; }),
-        users: env.db.users.filter(function (u) { return u.slackId; }).map(function (u) { return { id: u.slackId, name: u.name, roleLabel: P.demoDict.roleLabels[u.role] || u.role,
+        users: env.db.users.filter(function (u) { return u.slackId && u.deleted !== true && u.active !== false; }).map(function (u) { return { id: u.slackId, name: u.name, roleLabel: P.demoDict.roleLabels[u.role] || u.role,
           locations: u.locationIds.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : id; }) }; }),
         addressees: addrLoad(env).items.map(function (a) { return { id: a.slackId, name: a.name, jobTitle: a.jobTitle || '', locationId: a.locationId, departmentId: a.departmentId || null, active: a.active !== false }; }),
         presets: presets(env).map(function (x) { return { key: x.key, title: x.title, whenLabel: scheduleLabel(x), rule: x }; }),

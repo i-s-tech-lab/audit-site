@@ -144,7 +144,7 @@
         options: { products: names(env.db.products), defects: names(env.db.defectTypes),
           workers: env.db.workers.filter(function (w) { return w.locationId === loc.id; }).map(function (w) { return { code: w.code, name: w.name }; })
             .sort(function (a, b) { return a.code < b.code ? -1 : 1; }),
-          auditors: env.db.users.filter(function (u) { return auditorIds[u.id] || ((u.role === 'auditor' || u.role === 'senior_auditor') && u.locationIds.indexOf(loc.id) >= 0); })
+          auditors: env.db.users.filter(function (u) { return auditorIds[u.id] || (u.deleted !== true && (u.role === 'auditor' || u.role === 'senior_auditor') && u.locationIds.indexOf(loc.id) >= 0); })
             .map(function (u) { return { id: u.id, name: u.name, legacy: u.legacy === true }; }) },
         trash: trashLive(env).filter(function (t) { return t.locationId === loc.id; }).sort(function (a, b) { return a.deletedAt < b.deletedAt ? 1 : -1; })
           .map(function (t) { return { id: t.id, deletedAt: t.deletedAt, reason: t.reason, byName: nm(ix.user, t.by, t.by), audit: t.audit }; }) };

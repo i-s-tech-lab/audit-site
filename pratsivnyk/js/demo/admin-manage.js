@@ -6,7 +6,6 @@
   var K = { locs: 'demo:adm:locs', people: 'demo:adm:people', rights: 'demo:adm:rights', rules: 'demo:adm:rules', log: 'demo:adm:log',
     requests: 'demo:adm:requests' };
   var ROLES = ['auditor', 'senior_auditor', 'manager', 'admin'];   // ролі, які адміністратор може дати людині
-  var ALL_LOC = { manager: 1, admin: 1 };                           // ці ролі завжди мають усі локації
   var LOC_MAX = 30, LOG_DAYS = 183, LOG_MAX = 3000;   // v1.10: журнал — 6 місяців (рішення власника 26.10)
 
   var RIGHTS = [
@@ -52,8 +51,8 @@
   function numText(v) { return String(v).replace('.', ','); }
   function withUnit(v, u, names) { return names ? (names[v - 1] || String(v)) : numText(v) + (u === '%' ? '%' : ' ' + u); }
   function locStore(st) { var s = obj(st.get(K.locs, null)); return { add: arr(s.add), edit: obj(s.edit) }; }
-  function peopleStore(st) { var s = obj(st.get(K.people, null)); return { add: arr(s.add), edit: obj(s.edit), off: obj(s.off) }; }
-  P.demoAccessOff = function (st, id) { return has(peopleStore(st).off, id); };
+  function peopleStore(st) { var s = obj(st.get(K.people, null)); return { add: arr(s.add), edit: obj(s.edit), off: obj(s.off), del: obj(s.del) }; }   // v1.13: del — видалені люди
+  P.demoAccessOff = function (st, id) { var s = peopleStore(st); return has(s.off, id) || has(s.del, id); };   // v1.13: видалений теж не входить
   P.demoAccessOffBy = function (st, id) { var o = peopleStore(st).off; return has(o, id) ? (obj(o[id]).byRole || 'admin') : null; };
   function allUsers(env) { return env.db.users; }
 
@@ -72,6 +71,7 @@
   function earlyHook(db, ctx) {
     var L = locStore(ctx.storage), U = peopleStore(ctx.storage);
     L.add.forEach(function (l) { if (l && typeof l.id === 'string' && !db.locations.some(function (x) { return x.id === l.id; })) db.locations.push({ id: l.id, name: l.name }); });
+    if (ctx.real === true) return;
     U.add.forEach(function (u) { if (u && typeof u.id === 'string' && !db.users.some(function (x) { return x.id === u.id; })) db.users.push(clone(u)); });
   }
   function okVal(r, v) {
@@ -89,17 +89,22 @@
       if (e.active === false) l.active = false;
     });
     var all = db.locations.map(function (l) { return l.id; });
+    var real = !!ctx && ctx.real === true;   // справжній сервер: роль і локації людей — лише з бази, правок зі сховища не застосовуємо (ніколи не розширює керівника зі списком)
     db.users.forEach(function (u) {
-      var e = has(U.edit, u.id) ? obj(U.edit[u.id]) : {};
+      var e = has(U.edit, u.id) && !real ? obj(U.edit[u.id]) : {};
       if (typeof e.role === 'string') u.role = e.role;
       var ids = arr(e.locationIds).filter(function (id) { return has(isLoc, id); });
       if (ids.length) u.locationIds = ids;
-      if (has(ALL_LOC, u.role)) u.locationIds = all.slice();
+      u.allLocations = u.role === 'admin' || (u.role === 'manager' && (typeof e.allLocations === 'boolean' ? e.allLocations : u.allLocations === true));
+      if (u.allLocations) u.locationIds = all.slice();
       u.canAddPeople = typeof e.canAddPeople === 'boolean' ? e.canAddPeople : typeof u.canAddPeople === 'boolean' ? u.canAddPeople : P.demoAccess.defaultCanAddPeople(u.role);
+      if (typeof e.addedAt === 'string') u.addedAt = e.addedAt;   // v1.13: відновлена людина — «додана» заново (хто й коли)
+      if (typeof e.addedBy === 'string') u.addedBy = e.addedBy;
       u.disabledBy = has(U.off, u.id) ? obj(U.off[u.id]).byRole || 'admin' : u.active === false ? 'senior_auditor' : null;
     });
     db.usersOff = db.users.filter(function (u) { return has(U.off, u.id); });
     db.usersOff.forEach(function (u) { u.seniorOff = u.active === false; u.accessOff = true; u.active = false; });
+    db.users.forEach(function (u) { if (has(U.del, u.id) || u.deleted === true) { u.deleted = true; u.accessOff = true; u.active = false; if (has(U.del, u.id) && obj(U.del[u.id]).disabledBy) u.disabledBy = obj(U.del[u.id]).disabledBy; } });
     var m = obj(obj(ctx.storage.get(K.rights, null)).matrix), ov = null;
     RIGHT_ROLES.forEach(function (role) {
       var x = obj(m[role]);

@@ -76,7 +76,7 @@
         dest = 'у канал ' + C.maskSlackId(ch);
       } else if (p.kind === 'person') {
         var u = typeof p.userId === 'string' ? A.allUsers(env).filter(function (x) { return x.id === p.userId; })[0] : null;
-        if (!u || Object.prototype.hasOwnProperty.call(A.peopleStore(env.storage).off, u.id) || !u.slackId) return verr([{ field: 'userId', message: 'Оберіть людину зі списку.' }]);
+        if (!u || u.deleted === true || Object.prototype.hasOwnProperty.call(A.peopleStore(env.storage).off, u.id) || !u.slackId) return verr([{ field: 'userId', message: 'Оберіть людину зі списку.' }]);
         dest = 'особисто · ' + u.name;
       } else return verr([{ field: 'kind', message: 'Оберіть: у канал чи людині.' }]);
       A.log(env, me, 'Вхід через Slack', 'Кнопка входу', [['Кнопку входу надіслано', null, dest]]);

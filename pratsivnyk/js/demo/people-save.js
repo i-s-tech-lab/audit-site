@@ -4,12 +4,12 @@
   P.demoApis = P.demoApis || []; P.demoGenHooks = P.demoGenHooks || [];
 
   var K_SR_USERS = 'demo:sr:mg:users';    // правки людей старшого (senior-manage.js): { add: [...], edit: { id: {name, slackId, active} } }
-  var ALL_LOC = { manager: 1, admin: 1 };  // ці ролі завжди мають усі локації
   var SLACK_ID_MSG = 'Slack ID — літера U або W і ще 8–10 великих літер чи цифр.';
   var DM_FAIL_ID = 'U-DEMO-945';           // у цієї вигаданої людини «Slack не приймає повідомлення» — показ збою кнопки входу
   var DM_FAIL_MSG = 'Slack відповів помилкою: cannot_dm_user';
   var DM_FAIL_PUBLIC = 'Повідомлення в Slack не вдалося надіслати.';   // не-адміну технічну причину не показуємо (як на сервері)
   var REQ_GONE = 'Цей запит уже оброблено — оновіть сторінку.';
+  var ALL_MSG = 'Оберіть: усі локації чи список.';
   var EMAIL_MSG = 'Перевірте пошту: чи немає пробілів і чи є @ та крапка після неї.';   // той самий текст, що на сервері входу
 
   function has(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
@@ -25,6 +25,8 @@
   }
   function verr(errs) { return C.fail('validation', errs[0].message, errs); }
   function locNames(env, ids) { return ids.map(function (id) { return env.ix.loc[id] ? env.ix.loc[id].name : id; }).join(', '); }
+  function locText(env, ids, all) { return all ? 'усі локації' : locNames(env, ids); }
+  function isDel(u) { return !!u && u.deleted === true; }
   function srStore(env) { var s = obj(env.storage.get(K_SR_USERS, null)); s.add = arr(s.add); s.edit = obj(s.edit); return s; }
   function failOf(d) {
     return d.code === 'validation' ? C.fail('validation', d.error, [{ field: d.field, message: d.error }]) : C.fail(d.code, d.error);
@@ -32,11 +34,11 @@
 
   function actorOf(me) {
     return { id: me.id, role: me.role, active: true, canAddPeople: !!(me.access && me.access.addPeople),
-      locationIds: arr(me.locations).map(function (l) { return l.id; }) };
+      locationIds: arr(me.locations).map(function (l) { return l.id; }), allLocations: !!(me.can && me.can.viewAllLocations) };
   }
   function curOf(u) {
     return { id: u.id, role: u.role, active: u.active !== false, disabledBy: u.disabledBy || null, name: u.name, slackId: u.slackId,
-      canAddPeople: u.canAddPeople === true };
+      canAddPeople: u.canAddPeople === true, allLocations: u.allLocations === true };
   }
   function addedToday(env, meId) {
     var cut = new Date(env.now().getTime() - 86400000).toISOString(), n = 0;
@@ -56,12 +58,25 @@
     return rq && (!delegate || X.slackStateOf(rq.slackId) === 'active') ? { rq: rq } : { err: C.fail('not_found', REQ_GONE) };
   }
 
+  function restoreOf(every, slackId) {
+    var id = String(slackId || '').toUpperCase();
+    return every.filter(function (x) { return isDel(x) && String(x.slackId || '').toUpperCase() === id; })[0] || null;
+  }
+  function restore(st, sr, back, rec) {
+    var id = back.id;
+    delete st.del[id]; delete st.off[id];
+    sr.edit[id] = { name: rec.name, slackId: rec.slackId, active: true };
+    st.edit[id] = { role: rec.role, locationIds: rec.locationIds.slice(), canAddPeople: rec.canAddPeople, addedAt: rec.addedAt, addedBy: rec.addedBy };   // «додав» і час — відновлювач, зараз
+    if (rec.role === 'manager') st.edit[id].allLocations = rec.allLocations;
+    st.add = st.add.map(function (x) { return x && x.id === id ? rec : x; });
+  }
+
   function save(env, me, p, mode) {
     var delegate = mode === 'delegate';
     if (!delegate && !A.isAdmin(me)) return C.forbidden();
     env.reload();
-    var st = A.peopleStore(env.storage), all = A.allUsers(env), u = null, errs = [], v = {};
-    if (p.id !== undefined) {
+    var st = A.peopleStore(env.storage), every = A.allUsers(env), all = every.filter(function (x) { return !isDel(x); }), u = null, errs = [], v = {};
+    if (p.id !== undefined) {   // v1.5: видаленої людини «немає» — її відновлює додавання з тим самим Slack ID
       u = typeof p.id === 'string' ? all.filter(function (x) { return x.id === p.id; })[0] : null;
       if (!u) return C.fail('not_found', 'Цієї людини немає в списку — оновіть сторінку.');
     }
@@ -92,9 +107,13 @@
       if (A.ROLES.indexOf(p.role) >= 0 || (u && p.role === u.role)) role = p.role;
       else errs.push({ field: 'role', message: 'Оберіть роль зі списку.' });
     }
+    if (p.allLocations !== undefined && p.allLocations !== null && typeof p.allLocations !== 'boolean') errs.push({ field: 'allLocations', message: ALL_MSG });
+    var wasAll = !!u && u.allLocations === true;
+    var allNext = role === 'admin' ? true : role !== 'manager' ? false
+      : typeof p.allLocations === 'boolean' ? p.allLocations : (u && u.role === 'manager') ? wasAll : !delegate;
     var locIds = u ? u.locationIds.slice() : [];
-    if (role && has(ALL_LOC, role)) locIds = env.db.locations.map(function (l) { return l.id; });
-    else if (!u || p.locationIds !== undefined || (u && has(ALL_LOC, u.role))) {
+    if (allNext && !(delegate && role === 'manager')) locIds = env.db.locations.map(function (l) { return l.id; });
+    else if (!u || p.locationIds !== undefined || wasAll) {
       var seen = {};
       locIds = arr(p.locationIds).filter(function (id) { if (typeof id !== 'string' || !has(env.ix.loc, id) || seen[id]) return false; seen[id] = 1; return true; });
       if (!locIds.length) errs.push({ field: 'locationIds', message: 'Оберіть хоча б одну локацію.' });
@@ -120,9 +139,15 @@
     if (!delegate && !u) { var lim = X.addLimitDecision(addedToday(env, me.id)); if (!lim.ok) return failOf(lim); }
     if (delegate) {
       var dec = X.delegateSaveDecision({ actor: actorOf(me), cur: u ? curOf(u) : null, had: u ? u.locationIds : [],
-        next: { role: role, slackId: v.slackId !== undefined ? v.slackId : (u ? u.slackId : ''), locationIds: locIds, active: on, name: v.name, canAddPeople: given },
+        next: { role: role, slackId: v.slackId !== undefined ? v.slackId : (u ? u.slackId : ''), locationIds: locIds, active: on, name: v.name, canAddPeople: given,
+          allLocations: role === 'manager' ? allNext : undefined },
         addedToday: addedToday(env, me.id) });
       if (!dec.ok) return failOf(dec);
+    }
+    var back = !u ? restoreOf(every, v.slackId) : null;
+    if (back && delegate && typeof X.restoreDecision === 'function') {
+      var rd = X.restoreDecision({ actor: actorOf(me), row: curOf(back) });
+      if (!rd.ok) return failOf(rd);
     }
     var rows = [], L = P.demoDict.roleLabels, id = u ? u.id : null, sr = srStore(env), srDirty = false, at = env.now().toISOString();
     var grant = X.nextCanAddPeople({ cur: u ? { role: u.role, canAddPeople: u.canAddPeople } : null, nextRole: role, given: delegate ? undefined : given, byAdmin: !delegate });
@@ -130,11 +155,11 @@
       var n = 0;
       all.concat(st.add).forEach(function (x) { var m = /^u_new(\d+)$/.exec(x.id); if (m) n = Math.max(n, +m[1]); });
       id = 'u_new' + (n + 1);
-      var rec = { id: id, name: v.name, role: role, slackId: v.slackId, locationIds: locIds, addedAt: at, addedBy: me.id };
+      var rec = { id: id, name: v.name, role: role, slackId: v.slackId, locationIds: locIds, allLocations: allNext, addedAt: at, addedBy: me.id };
       rec.canAddPeople = grant;   // v1.2: записуємо завжди — явне «Ні» адміна для старшого / керівника не губиться
-      st.add.push(rec);
-      rows.push(['Нова людина', null, L[role] + ' · ' + locNames(env, locIds)]);
-      if (emailNext) { st.edit[id] = { email: emailNext }; rows.push(['Пошта', null, 'змінена']); }   // v1.4: без значення в журналі
+      if (back) { id = back.id; rec.id = id; restore(st, sr, back, rec); srDirty = true; } else st.add.push(rec);
+      rows.push(['Нова людина', null, L[role] + ' · ' + locText(env, locIds, allNext)]);
+      if (emailNext) { st.edit[id] = Object.assign(obj(st.edit[id]), { email: emailNext }); rows.push(['Пошта', null, 'змінена']); }   // v1.4: без значення в журналі
       if (grant) rows.push(['Право «Додавати людей»', 'немає', 'є']);
     } else {
       var prof = {};
@@ -145,7 +170,11 @@
       var emailWas = has(e, 'email') ? e.email : '';   // v1.4: пошта лежить лише в правках людини
       if (emailNext !== undefined && emailNext !== emailWas) { e.email = emailNext; rows.push(['Пошта', null, emailNext ? 'змінена' : 'прибрана']); }
       if (role !== u.role) { e.role = role; rows.push(['Роль', L[u.role], L[role]]); }
-      if (locIds.join() !== u.locationIds.join()) { e.locationIds = locIds; rows.push(['Локації', locNames(env, u.locationIds), locNames(env, locIds)]); }
+      if (locIds.join() !== u.locationIds.join() || allNext !== wasAll) {
+        if (!allNext) e.locationIds = locIds;
+        rows.push(['Локації', locText(env, u.locationIds, wasAll), locText(env, locIds, allNext)]);
+      }
+      if (role === 'manager' && (allNext !== wasAll || role !== u.role)) e.allLocations = allNext; else if (role !== 'manager') delete e.allLocations;   // v1.5
       if (grant !== (u.canAddPeople === true) || role !== u.role) e.canAddPeople = grant;   // v1.2: зміна ролі фіксує право (явне «Ні» теж)
       if (grant !== (u.canAddPeople === true)) rows.push(['Право «Додавати людей»', u.canAddPeople === true ? 'є' : 'немає', grant ? 'є' : 'немає']);
       st.edit[id] = e;
@@ -199,7 +228,7 @@
     return x.active !== false ? welcome(env, me, x.name, x.slackId) : { dm: 'skipped' };
   }
   function srRow(me, u) {
-    var row = { id: u.id, role: u.role, active: u.active !== false, disabledBy: u.disabledBy || null };
+    var row = { id: u.id, role: u.role, active: u.active !== false, disabledBy: u.disabledBy || null, allLocations: u.allLocations === true };
     return { disabledBy: row.disabledBy, canEnable: X.rowPermissions({ actor: actorOf(me), row: row, had: u.locationIds }).canEnable };
   }
   function srAccess(env, me) {
@@ -222,20 +251,23 @@
     peopleTeam: function (p, me, env) {
       var admin = A.isAdmin(me);
       if (!admin && X.DELEGATE_ROLES.indexOf(me.role) < 0) return C.forbidden();
-      var actor = actorOf(me), scope = X.actorScope(actor), all = A.allUsers(env), byId = {}, last = {};
+      var actor = actorOf(me), scope = X.actorScope(actor), all = A.allUsers(env).filter(function (u) { return !isDel(u); }), byId = {}, last = {};
+      var pend = P.demoPeopleDelete ? P.demoPeopleDelete.pendingIds(env) : {};
+      function mine(ids) { return scope === null ? arr(ids).slice() : arr(ids).filter(function (l) { return scope.indexOf(l) >= 0; }); }   // v1.5: кому керівник уже надіслав запит на видалення
       all.forEach(function (u) { byId[u.id] = u; });
       env.audits().forEach(function (a) { if (!last[a.auditorId] || a.createdAt > last[a.auditorId]) last[a.auditorId] = a.createdAt; });
       var users = all.filter(function (u) {
         if (admin) return true;
-        if (!(X.rankOf(u.role) > 0 && X.rankOf(u.role) < X.rankOf(me.role))) return false;   // лише нижчі за мене (себе й вищих — ні)
+        if (!(X.rankOf(u.role) > 0 && X.effRank(u) < X.effRank(Object.assign({}, me, { allLocations: actor.allLocations })))) return false;   // лише нижчі за мене (себе й вищих — ні)
         return scope === null || arr(u.locationIds).some(function (l) { return scope.indexOf(l) >= 0; });
       }).map(function (u) {
         var by = u.addedBy && has(byId, u.addedBy) ? byId[u.addedBy] : null, c = curOf(u);
         var perm = X.rowPermissions({ actor: actor, row: c, had: u.locationIds });
         return { id: u.id, slackId: admin || u.role === 'auditor' ? String(u.slackId || '') : C.maskSlackId(u.slackId), name: u.name, role: u.role,
           roleLabel: P.demoDict.roleLabels[u.role] || u.role, active: c.active, disabledBy: c.active ? null : c.disabledBy || 'admin',
-          locationIds: arr(u.locationIds).slice(), createdAt: u.addedAt || null, lastSeenAt: last[u.id] || null, canAddPeople: c.canAddPeople,
-          addedBy: by ? { id: by.id, name: by.name, role: by.role } : null, canEdit: perm.canEdit, canEnable: perm.canEnable };
+          locationIds: mine(u.locationIds), otherLocations: mine(u.locationIds).length !== arr(u.locationIds).length, allLocations: c.allLocations, createdAt: u.addedAt || null, lastSeenAt: last[u.id] || null, canAddPeople: c.canAddPeople,
+          addedBy: by ? { id: by.id, name: by.name, role: by.role } : null, canEdit: perm.canEdit, canEnable: perm.canEnable, canClose: perm.canClose,
+          canDelete: perm.canDelete, canAskDelete: perm.canAskDelete, deletePending: has(pend, u.id) };
       }).sort(function (a, b) { return a.name.localeCompare(b.name, 'uk'); });
       return { ok: true, users: users, access: Object.assign({}, me.access || X.accessOf({}), { addedToday: addedToday(env, me.id) }) };
     },
@@ -243,6 +275,6 @@
     peopleTeamSave: function (p, me, env) { return save(env, me, p, A.isAdmin(me) ? 'admin' : 'delegate'); }
   });
 
-  P.demoPeople = { save: save, addedToday: addedToday, actorOf: actorOf, curOf: curOf, failOf: failOf, SLACK_ID_MSG: SLACK_ID_MSG,
+  P.demoPeople = { isDel: isDel, save: save, addedToday: addedToday, actorOf: actorOf, curOf: curOf, failOf: failOf, SLACK_ID_MSG: SLACK_ID_MSG,
     srGate: srGate, srReq: srReq, srDone: srDone, srRow: srRow, srAccess: srAccess, srLog: srLog };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -23,15 +23,15 @@
   function locName(env, id) { return has(env.ix.loc, id) ? env.ix.loc[id].name : id; }
   function byName(a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; }
 
-  function locNames(env, u) { return u.locationIds.filter(function (id) { return has(env.ix.loc, id); }).map(function (id) { return env.ix.loc[id].name; }).join(', '); }
+  function locNames(env, u, set) { return u.locationIds.filter(function (id) { return has(env.ix.loc, id) && (!set || set[id]); }).map(function (id) { return env.ix.loc[id].name; }).join(', '); }
 
   function people(env, locIds, role, k, tag) {
     var set = {}; locIds.forEach(function (id) { set[id] = 1; });
     return env.db.users.filter(function (u) {
-      return u.role === role && !u.legacy && u.locationIds.some(function (id) { return set[id]; });
+      return u.role === role && !u.legacy && u.deleted !== true && u.locationIds.some(function (id) { return set[id]; });
     }).map(function (u) {
       var own = u.locationIds.filter(function (id) { return set[id]; });
-      return row(k, u.id, u.name, locNames(env, u) + off(u), [tag], own[0]);
+      return row(k, u.id, u.name, locNames(env, u, set) + off(u), [tag], own[0]);
     });
   }
   function depts(env, locIds) {
@@ -97,7 +97,7 @@
   function adminIndex(env) {
     var out = [], locIds = env.db.locations.map(function (l) { return l.id; });
     env.db.locations.forEach(function (l) { out.push(row('loc', l.id, l.name, l.active === false ? 'вимкнена' : '', ['локація'], l.id)); });
-    env.db.users.filter(function (u) { return !u.legacy && has(ROLE_TAGS, u.role); }).forEach(function (u) {
+    env.db.users.filter(function (u) { return !u.legacy && u.deleted !== true && has(ROLE_TAGS, u.role); }).forEach(function (u) {
       out.push(row('person', u.id, u.name, [P.demoDict && P.demoDict.roleLabels ? P.demoDict.roleLabels[u.role] : u.role, locNames(env, u)].filter(Boolean).join(' · ') + off(u),
         [ROLE_TAGS[u.role]], u.locationIds[0]));
     });
@@ -130,7 +130,7 @@
       var items = me.role === 'senior_auditor' ? seniorIndex(me, env) : me.role === 'manager' ? managerIndex(me, env) : me.role === 'admin' ? adminIndex(env) : null;
       if (!items) return C.forbidden();
       items.sort(byName);
-      var locs = me.role === 'senior_auditor' ? me.locations : env.db.locations;
+      var locs = me.role === 'senior_auditor' || me.role === 'manager' ? me.locations : env.db.locations;
       return { ok: true, items: items, locations: locs.map(function (l) { return { id: l.id, name: l.name }; }) };
     }
   });

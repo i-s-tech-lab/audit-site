@@ -37,7 +37,7 @@
     if (id === 'products') return db.products.filter(function (x) { return t[x.deptTypeId]; });
     if (id === 'defects') return db.defectTypes.filter(function (x) { return t[x.deptTypeId]; });
     if (id === 'workers') return db.workers.filter(function (w) { return w.locationId === locId; });
-    return db.users.filter(function (u) { return (u.role === 'auditor' || u.role === 'senior_auditor') && !u.legacy && u.locationIds.indexOf(locId) >= 0; });
+    return db.users.filter(function (u) { return (u.role === 'auditor' || u.role === 'senior_auditor') && !u.legacy && u.deleted !== true && u.locationIds.indexOf(locId) >= 0; });
   }
   function teamOn(u) { return on(u) && !u.accessOff; }
 
@@ -72,8 +72,8 @@
     },
     people: function (env) {
       return { columns: ['Імʼя', 'Роль', 'Локації', 'Доступ', 'Slack ID (скорочено)'],
-        rows: env.db.users.map(function (u) {
-          return [u.name, P.demoDict.roleLabels[u.role] || u.role, u.role === 'manager' || u.role === 'admin' ? 'усі локації' : locNames(env, u.locationIds), yes(!u.accessOff), C.maskSlackId(u.slackId)];
+        rows: env.db.users.filter(function (u) { return u.deleted !== true; }).map(function (u) {
+          return [u.name, P.demoDict.roleLabels[u.role] || u.role, P.demoAccess.isAllLoc(u) ? 'усі локації' : locNames(env, u.locationIds), yes(!u.accessOff), C.maskSlackId(u.slackId)];
         }) };
     },
     rights: function (env) {
@@ -146,7 +146,7 @@
       locations: db.locations.map(function (l) { return { id: l.id, name: l.name, active: on(l) }; }),
       departments: db.departments.filter(function (d) { return !locId || d.locationId === locId; })
         .map(function (d) { return { id: d.id, name: d.name, locationId: d.locationId, locationName: nm(env.ix.loc, d.locationId, '') }; }),
-      auditors: db.users.filter(function (u) { return who[u.id] || ((u.role === 'auditor' || u.role === 'senior_auditor') && (!locId || u.locationIds.indexOf(locId) >= 0)); })
+      auditors: db.users.filter(function (u) { return who[u.id] || (u.deleted !== true && (u.role === 'auditor' || u.role === 'senior_auditor') && (!locId || u.locationIds.indexOf(locId) >= 0)); })
         .map(function (u) { return { id: u.id, name: u.name }; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'uk'); }),
       defectTypes: db.defectTypes.filter(function (x) { return !t || t[x.deptTypeId]; })
         .map(function (x) { return { id: x.id, name: x.name, deptTypeName: nm(env.ix.dt, x.deptTypeId, '') }; })

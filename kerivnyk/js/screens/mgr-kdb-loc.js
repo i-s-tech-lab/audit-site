@@ -11,7 +11,7 @@
   }
 
   function locBar(r, v) {
-    return '<div class="mkd-lbar"><a class="mkd-back" href="#/kd' + (r.weeks !== 8 ? '?w=' + r.weeks : '') + '">← Усі локації</a><nav class="mkd-seg" aria-label="Локація">' +
+    return '<div class="mkd-lbar"><a class="mkd-back" href="#/kd' + (r.weeks !== 8 ? '?w=' + r.weeks : '') + '">← Мої локації</a><nav class="mkd-seg" aria-label="Локація">' +
       (r.locations || []).map(function (l) {
         var on = l.id === r.location.id;
         return '<a class="mkd-seg__a' + (on ? ' mkd-seg__a--on' : '') + '" href="' + href(l.id, r.weeks, v) + '"' + (on ? ' aria-current="true"' : '') + '>' + esc(l.name) + '</a>';
@@ -144,8 +144,8 @@
     P.srv('mgrKdLoc', { locationId: id, weeks: w }).then(function (r) {
       if (!ctx.alive()) return;
       if (!r.ok) {
-        ctx.el.innerHTML = r.code === 'not_found' ? '<section class="card">' + P.sr.h.empty('Такої локації немає', 'Адреса веде на локацію, якої немає в списку.') +
-          '<p class="mkd-center"><a class="btn btn--secondary btn--sm" href="#/kd">Усі локації</a></p></section>' : P.sr.h.error(r);
+        ctx.el.innerHTML = r.code === 'not_found' || r.code === 'forbidden' ? '<section class="card">' + P.sr.h.empty('Такої локації у вас немає', 'Адреса веде на локацію, якої немає серед ваших.') +
+          '<p class="mkd-center"><a class="btn btn--secondary btn--sm" href="#/kd">Мої локації</a></p></section>' : P.sr.h.error(r);
         return;
       }
       var X2 = X.plates;

@@ -27,7 +27,8 @@
       '" title="' + esc(label) + '" data-act="mgr-r-on" data-id="' + id + '"></button>';
   }
   function pen(id, label) { return '<button class="icon-btn" type="button" data-act="mgr-r-edit" data-id="' + id + '" aria-label="' + esc(label) + '" title="Редагувати">' + P.ic('edit') + '</button>'; }
-  function locNames(data, ids) { return data.locations.filter(function (l) { return ids.indexOf(l.id) >= 0; }).map(function (l) { return l.name; }); }
+  function locNames(data, ids) { return data.locations.filter(function (l) { return ids === 'all' || ids.indexOf(l.id) >= 0; }).map(function (l) { return l.name; }); }
+  function locText(data, ids) { return ids === 'all' ? 'усі мої (і нові теж)' : locNames(data, ids).join(', ') || '—'; }
   function copy(o) { return JSON.parse(JSON.stringify(o)); }
   function field(f, label, inner, key) { return '<div class="field" data-f="' + f + '"><span class="label">' + esc(label) + (key ? K.help(key) : '') + '</span>' + inner + '</div>'; }
   function showErrors(el, r) {
@@ -40,10 +41,11 @@
     if (!shown) P.toast('danger', 'Не збережено', (r.errors && r.errors[0] ? r.errors[0].message : r.error) || '');
   }
 
-  P.cab.tab({ id: 'reports', label: 'Мої звіти', ic: 'notification', path: '/reports', order: 50, real: 'mgrReports' });
-  P.cab.screen('/reports', { tab: 'reports', title: 'Мої звіти', render: function (ctx) {
-    var data = null;
+  P.cab.tab({ id: 'reports', label: 'Мої сповіщення', ic: 'notification', path: '/reports', order: 50, real: ['mgrReports', 'mgrNotify'] });   // real — обидві функції є на двигуні сервера
+  P.cab.screen('/reports', { tab: 'reports', title: 'Мої сповіщення', render: function (ctx) {
+    var data = null, ntf = P.mgrNotifyUi.create(ctx);
     function load() {
+      ntf.load();
       P.srv('mgrReports', {}).then(function (r) {
         if (!ctx.alive()) return;
         if (!r.ok) { ctx.el.innerHTML = P.sr.h.error(r); return; }
@@ -53,14 +55,15 @@
     function draw() {
       var s = data.settings;
       ctx.el.innerHTML = '<section class="mgr-page mgr-narrow"><div><h2 class="h2">Мої сповіщення в Slack</h2><p class="h2-sub">Про роботу людей і коригуючі дії — що надсилати вам особисто' +
-        (s.updatedAt ? ' · збережено ' + esc(P.fmt.dateTime(s.updatedAt)) : '') + '</p></div>' +
+        (s.updatedAt ? ' · збережено ' + esc(P.fmt.dateTime(s.updatedAt)) : '') + '</p></div>' + ntf.html() +
+        '<h3 class="mgr-ntf-h">Ще не надсилаються' + K.help('mgr.ntf.later') + '</h3>' +
         '<div class="banner">' + P.ic('info', 'icon') + '<div class="banner__body"><p class="banner__text"><b>' + (P.authSlack && P.authSlack.real() ? 'Сповіщення ще не надсилаються' : 'У тестовій версії сповіщення ще не надсилаються') + '</b> — налаштування зберігаються й почнуть діяти, коли розсилки запрацюють.</p></div></div>' +
         '<section class="card">' + KINDS.map(function (k) {
-          var x = s[k.id], on = x.on, names = locNames(data, x.locations);
+          var x = s[k.id], on = x.on;
           return '<div class="entry mgr-entry"><div class="entry__head"><h3 class="entry__title' + (on ? '' : ' mgr-off') + '">' + esc(k.title) + K.help('mgr.rep.' + k.id) + '</h3>' +
             sw(on, k.id, k.title) + pen(k.id, 'Редагувати: ' + k.title) + '</div>' +
             '<dl class="kv"><dt>Коли</dt><dd>' + esc(when(k.id, x)) + (on ? '' : ' · вимкнено') + '</dd><dt>Що</dt><dd>' + esc(k.what) + '</dd>' +
-            '<dt>Локації' + K.help('mgr.rep.locs') + '</dt><dd>' + esc(names.length === data.locations.length ? 'усі (' + names.join(', ') + ')' : names.join(', ')) + '</dd></dl></div>';
+            '<dt>Локації' + K.help('mgr.rep.locs') + '</dt><dd>' + esc(locText(data, x.locations)) + '</dd></dl></div>';
         }).join('') + '</section></section>';
     }
     function save(next, fact, layer, btn) {
@@ -94,11 +97,13 @@
           h += field(id + '.days', 'Скільки днів (N)', '<input class="input" data-r-days inputmode="numeric" value="' + esc(String(x.days)) + '" style="max-width:120px" aria-label="Скільки днів">', 'mgr.rep.days') +
             '<p class="hint">Ціле число від 1 до ' + k.max + '.</p>';
         }
-        h += field(id + '.locations', 'Для яких локацій', '<div class="chips">' + data.locations.map(function (l) {
-          var on = x.locations.indexOf(l.id) >= 0;
+        var all = x.locations === 'all';
+        h += field(id + '.locations', 'Для яких локацій', '<div class="chips"><button class="chip-pick' + (all ? ' chip-pick--on' : '') + '" type="button" aria-pressed="' + all + '" data-act="mgr-r-locall">' +
+          (all ? P.ic('check', 'ui-icon--sm') : '') + 'Усі мої (і нові теж)</button>' + data.locations.map(function (l) {
+          var on = !all && x.locations.indexOf(l.id) >= 0;
           return '<button class="chip-pick' + (on ? ' chip-pick--on' : '') + '" type="button" aria-pressed="' + on + '" data-act="mgr-r-loc" data-id="' + esc(l.id) + '">' +
             (on ? P.ic('check', 'ui-icon--sm') : '') + esc(l.name) + '</button>'; }).join('') + '</div>', 'mgr.rep.locs') +
-          '<p class="hint">Обрано ' + x.locations.length + ' з ' + data.locations.length + '.</p>';
+          '<p class="hint">' + (all ? 'Усі ваші локації, і нові теж.' : 'Обрано ' + x.locations.length + ' з ' + data.locations.length + '.') + '</p>';
         return '<div class="mgr-form">' + h + '</div>';
       }
       function grab(ly) {
@@ -111,13 +116,15 @@
           '<button class="btn btn--primary" type="button" data-act="mgr-r-save">' + P.ic('save', 'ui-icon--sm') + 'Зберегти</button>',
         on: {
           'mgr-r-day': function (t, e, ly) { grab(ly); x.day = +t.getAttribute('data-d'); ly.body(body()); },
+          'mgr-r-locall': function (t, e, ly) { grab(ly); x.locations = 'all'; ly.body(body()); },
           'mgr-r-loc': function (t, e, ly) {
             grab(ly);
+            if (x.locations === 'all') x.locations = [];
             var lid = t.getAttribute('data-id'), i = x.locations.indexOf(lid);
             if (i >= 0) x.locations.splice(i, 1); else x.locations.push(lid);
             ly.body(body());
           },
-          'mgr-r-save': function (t, e, ly) { grab(ly); save(next, k.title + ': ' + when(id, x) + ' · ' + (locNames(data, x.locations).join(', ') || '—'), ly, t); }
+          'mgr-r-save': function (t, e, ly) { grab(ly); save(next, k.title + ': ' + when(id, x) + ' · ' + locText(data, x.locations), ly, t); }
         } });
     }
     ctx.on('mgr-r-on', function (t) {

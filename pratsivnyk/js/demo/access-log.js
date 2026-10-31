@@ -15,7 +15,7 @@
       'oidc_denied', 'oidc_bad_state', 'oidc_token_failed', 'oidc_userinfo_failed'],
     people: ['user_add', 'user_save', 'user_close', 'grant_on', 'grant_off', 'sessions_closed', 'slack_gone', 'slack_check',
       'admin_user_add', 'admin_user_save', 'admin_request_added', 'admin_request_rejected', 'admin_postButton', 'admin_sendButton',
-      'welcome_sent', 'welcome_failed'],
+      'welcome_sent', 'welcome_failed', 'user_delete', 'delete_ask', 'delete_done', 'delete_rejected'],
     system: ['reply_failed', 'home_failed', 'bad_signature', 'oidc_start']
   };
   var KIND_OF = {};
@@ -136,6 +136,8 @@
         if (x.what === 'Нова людина') { event = 'user_add'; detail = x.to; }
         else if (/^Право «Додавати людей»/.test(x.what)) event = /^(ні|не |вимк|немає|забрано)/i.test(String(x.to)) ? 'grant_off' : 'grant_on';
         else if (x.what === 'Доступ' && x.to === 'вимкнено') event = 'user_close';
+        else if (x.what === 'Видалено') { event = 'user_delete'; detail = x.to; }
+        else if (x.what === 'Запит на видалення') { event = x.to === 'виконано' ? 'delete_done' : x.to === 'відхилено' ? 'delete_rejected' : 'delete_ask'; detail = x.to; }
         else event = 'user_save';
       } else if (x.area === 'Вхід через Slack') {
         if (x.what === 'Кнопку входу надіслано') { event = /^у канал/.test(x.to) ? 'admin_postButton' : 'admin_sendButton'; detail = x.to; }
@@ -165,7 +167,7 @@
       var notes = arr(env.storage.get(K.logins, [])), closed = obj(env.storage.get(K.closed, null)), slack = obj(env.storage.get(K.slack, null));
       var checkAt = env.storage.get(K.checkAt, null);
       return { ok: true, now: env.now().toISOString(),
-        items: env.db.users.map(function (u) { return itemOf(env, u, me, notes, closed, slack, checkAt); }),
+        items: env.db.users.filter(function (u) { return u.deleted !== true; }).map(function (u) { return itemOf(env, u, me, notes, closed, slack, checkAt); }),
         locations: env.db.locations.map(function (l) { return { id: l.id, name: l.name }; }) };
     },
 

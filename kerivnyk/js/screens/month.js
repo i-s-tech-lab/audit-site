@@ -50,7 +50,7 @@
       P.srv('mgrMonth', { month: st.month, locationId: st.loc }).then(function (r) {
         if (!ctx.alive() || my !== req) return;
         if (!r.ok && r.code === 'validation' && st.month) { st.month = ''; load(); return; }   // місяць випав зі списку — беремо стандартний
-        if (!r.ok && r.code === 'not_found' && st.loc) { st.loc = ''; load(); return; }        // локації вже немає — перша
+        if (!r.ok && (r.code === 'not_found' || r.code === 'forbidden') && st.loc) { st.loc = ''; load(); return; }        // локації вже немає — перша
         if (!r.ok) { ctx.el.innerHTML = H.error(r); return; }
         if (!r.location) { ctx.el.innerHTML = '<section class="card">' + H.empty('Локацій ще немає', 'Коли адміністратор додасть локацію, тут зʼявляться її числа.') + '</section>'; return; }   // жодної локації
         data = r; st.month = r.month; st.loc = r.location.id; draw();

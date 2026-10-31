@@ -41,7 +41,7 @@
   function save(env, key, val) { env.storage.set(key, val); env.reload(); }
   function locDeps(env, locId) { return env.db.departments.filter(function (d) { return d.locationId === locId; }); }
   function locTypes(env, locId) { var t = {}; locDeps(env, locId).forEach(function (d) { t[d.deptTypeId] = true; }); return t; }
-  function auditors(env, locId) { return env.db.users.filter(function (u) { return u.role === 'auditor' && !u.legacy && u.locationIds.indexOf(locId) >= 0; }); }
+  function auditors(env, locId) { return env.db.users.filter(function (u) { return u.role === 'auditor' && !u.legacy && !u.deleted && u.locationIds.indexOf(locId) >= 0; }); }   // 01.11: видалені (u.deleted) у команді не показуються
   function locAudits(env, locId) { return env.audits().filter(function (a) { return a.locationId === locId; }); }
   function locWorkers(env, locId) { return env.db.workers.filter(function (w) { return w.locationId === locId; }); }
   function depName(env, id) { var d = pick(env.ix.dep, id); return d ? d.name : '—'; }
@@ -533,7 +533,7 @@
       var st = env.storage.get(K.users, null) || { add: [], edit: {} }, u = null, errs = [], patch = {};
       if (p.id) {
         u = pick(env.ix.user, p.id);
-        if (!u || u.role !== 'auditor' || u.locationIds.indexOf(r.loc.id) < 0) return C.fail('not_found', 'Цього працівника немає в списку цеху — оновіть сторінку.');
+        if (!u || u.deleted || u.role !== 'auditor' || u.locationIds.indexOf(r.loc.id) < 0) return C.fail('not_found', 'Цього працівника немає в списку цеху — оновіть сторінку.');
       }
       if (!p.id || p.name !== undefined) {
         var name = clean(p.name, 60);

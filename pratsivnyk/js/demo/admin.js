@@ -32,13 +32,15 @@
       if (!A.isAdmin(me)) return C.forbidden();
       var store = A.peopleStore(env.storage), off = store.off, last = lastByAuditor(env), byRole = {}, byId = {};
       A.allUsers(env).forEach(function (x) { byId[x.id] = x; });
-      var items = A.allUsers(env).map(function (u) {
-        var on = !has(off, u.id);
+      var pend = P.demoPeopleDelete ? P.demoPeopleDelete.pendingIds(env) : {}, X = P.demoAccess, actor = { id: me.id, role: 'admin', active: true };
+      var items = A.allUsers(env).filter(function (u) { return u.deleted !== true; }).map(function (u) {
+        var on = !has(off, u.id), perm = X.rowPermissions({ actor: actor, row: { id: u.id, role: u.role, active: on, allLocations: u.allLocations === true }, had: u.locationIds });
         if (on) byRole[u.role] = (byRole[u.role] || 0) + 1;
         return { id: u.id, name: u.name, slackId: C.maskSlackId(u.slackId), role: u.role, roleLabel: roleLabel(u.role),
-          locationIds: u.locationIds.slice(), allLocations: u.role === 'manager' || u.role === 'admin', active: on,
+          locationIds: u.locationIds.slice(), allLocations: X.isAllLoc(u), active: on,
           seniorOff: u.accessOff ? !!u.seniorOff : u.active === false, lastAuditAt: last[u.id] || null, addedAt: u.addedAt || null, isMe: u.id === me.id,
           canAddPeople: u.canAddPeople === true, disabledBy: u.active === false ? u.disabledBy || null : null,
+          canEdit: perm.canEdit, canEnable: perm.canEnable, canClose: perm.canClose, canDelete: perm.canDelete, canAskDelete: perm.canAskDelete, deletePending: has(pend, u.id),
           email: has(store.edit, u.id) && typeof store.edit[u.id].email === 'string' ? store.edit[u.id].email : '',   // v1.4: пошта — лише тут, лише адміну
           addedBy: u.addedBy && has(byId, u.addedBy) ? { id: u.addedBy, name: byId[u.addedBy].name, role: byId[u.addedBy].role } : null };
       }).sort(function (a, b) {

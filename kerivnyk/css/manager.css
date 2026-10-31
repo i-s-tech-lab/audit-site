@@ -338,3 +338,11 @@
   .mgr-card__kv dd { text-align: left; overflow-wrap: anywhere; }
   .mgr-card__kv .mgr-kdnums { justify-content: flex-start; }
 }
+
+.mgr-ntf { display: flex; flex-direction: column; gap: 12px; }
+.mgr-ntf-head { display: flex; flex-direction: column; gap: 4px; }
+.mgr-ntf-h { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.25; }
+.mgr-ntf-sub { margin: 4px 0 0; font-size: 15px; font-weight: 700; color: var(--text-2, inherit); }
+.mgr-ntf-note { margin: 4px 0 8px; color: var(--text-3); }
+.mgr-ntf-empty { margin: 0; padding: 4px 0; }
+.mgr-ntf .badge { margin-left: 6px; vertical-align: middle; white-space: normal; }

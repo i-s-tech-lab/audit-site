@@ -129,7 +129,7 @@
       var ctxWorkers = db.workers.filter(function (w) { return w.locationId === r.loc.id && on(w); })
         .map(function (w) { return { code: w.code, name: w.name, departmentId: w.departmentId }; });
       return { ok: true, location: { id: r.loc.id, name: r.loc.name }, limits: Object.assign({}, C.LIMITS), canAddWorker: canAdd,
-        locations: db.locations.filter(function (l) { return l.active !== false || l.id === r.loc.id; }).map(function (l) { return { id: l.id, name: l.name }; }),
+        locations: db.locations.filter(function (l) { return (l.active !== false || l.id === r.loc.id) && (l.id === r.loc.id || C.canRecordAt(me, l.id, env.ix)); }).map(function (l) { return { id: l.id, name: l.name }; }),
         departments: deps.map(function (d) { return { id: d.id, name: d.name, deptTypeId: d.deptTypeId }; }),
         products: ctxProducts,
         defectTypes: db.defectTypes.filter(function (x) { return types[x.deptTypeId] && on(x); })

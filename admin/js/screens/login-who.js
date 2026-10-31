@@ -50,7 +50,7 @@
       });
     }
     function row(u) {
-      var all = u.role === 'manager' || u.role === 'admin', locs = all ? 'усі локації' : (u.locationIds || []).map(locName).join(', ') || '—';
+      var all = u.role === 'admin' || (u.role === 'manager' && u.allLocations === true), locs = all ? 'усі локації' : (u.locationIds || []).map(locName).join(', ') || '—';
       var by = u.addedBy && u.addedBy.name ? 'Додав: ' + u.addedBy.name + (u.addedBy.role ? ' (' + API.roleText(u.addedBy.role).toLowerCase() + ')' : '') + (u.createdAt ? ' · ' + P.fmt.date(u.createdAt) : '') : '';
       var sl = API.slackText(u.slackState, u.slackCheckedAt), via = API.viaText(u.lastLoginVia);
       return '<div class="adm-person acc-row' + (u.active ? '' : ' adm-person--off') + '"><span class="avatar" aria-hidden="true">' + esc(P.initials(u.name)) + '</span>' +

@@ -111,11 +111,12 @@
     mgrDeptTiles: function (p, me, env) {
       var X = M();
       if (!X || !X.can(me)) return C.forbidden();
-      var many = X.locsOf(p, env); if (many.err) return many.err;
+      var many = X.locsOf(p, env, me); if (many.err) return many.err;
+      var my = X.mine(me, env);
       var tid = p.deptTypeId == null || p.deptTypeId === '' ? null : p.deptTypeId;
       if (tid !== null && !X.has(env.ix.dt, tid)) return C.fail('not_found', 'Такого типу відділу немає.');
       var rg = X.range(p, env);
-      var locations = env.db.locations.filter(function (l) { return !many.ids || many.ids.indexOf(l.id) >= 0; }).map(function (l) {
+      var locations = my.filter(function (l) { return !many.ids || many.ids.indexOf(l.id) >= 0; }).map(function (l) {
         var list = X.auditsIn(env, l.id, rg.from, rg.to), workDays = X.dayCount(list), made = producedBy(env, l.id, rg.from, rg.to), k = X.kdSum(env, l.id, rg.from, rg.to);
         var depts = X.depsIn(env, l.id).filter(function (d) { return !tid || d.deptTypeId === tid; }).map(function (d) { return tileOf(env, d, list, workDays, made, k, rg); })
           .filter(function (t) { return t.active; });   // v1.6: вимкнені відділи не показуємо — як у старшого
@@ -123,7 +124,7 @@
         return { id: l.id, name: l.name, workDays: workDays, depts: depts };
       });
       return { ok: true, from: rg.from, to: rg.to, asOf: env.now().toISOString(), locations: locations,
-        allLocations: env.db.locations.map(X.short), deptTypes: env.db.deptTypes.map(X.short) };
+        allLocations: my.map(X.short), deptTypes: env.db.deptTypes.map(X.short) };
     },
 
     mgrDeptDetail: function (p, me, env) {
@@ -132,8 +133,9 @@
       var id = p.departmentId;
       if (id == null || id === '' || typeof id !== 'string') return C.fail('validation', 'Оберіть відділ.', [{ field: 'departmentId', message: 'Оберіть відділ.' }]);
       if (!X.has(env.ix.dep, id)) return C.fail('not_found', 'Такого відділу немає — оновіть сторінку.');
-      var dep = env.ix.dep[id], sel = X.locOf(p, env);
+      var dep = env.ix.dep[id], sel = X.locOf(p, env, me);
       if (sel.err) return sel.err;
+      if (!C.hasLoc(me, dep.locationId)) return C.fail('forbidden', 'Цієї локації у вас немає.');
       if (sel.loc && sel.loc.id !== dep.locationId) return C.fail('not_found', 'Такого відділу в цій локації немає — оновіть сторінку.');
       var rg = X.range(p, env), span = X.daysOf(rg.from, rg.to), loc = env.ix.loc[dep.locationId], dt = env.ix.dt[dep.deptTypeId];
       var list = X.auditsIn(env, dep.locationId, rg.from, rg.to), s = X.stats(env, list, [dep]), active = dep.active !== false;

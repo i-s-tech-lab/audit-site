@@ -44,8 +44,8 @@
       var locId = typeof p.locationId === 'string' ? p.locationId : null;
 
       if (p.scope === 'manager') {
-        if (!((me.role === 'manager' || me.role === 'admin') && me.can && me.can.viewAllLocations)) return C.forbidden();
-        return { ok: true, since: sinceIso, locations: env.db.locations.filter(function (l) { return l.active !== false; }).map(function (l) {
+        if (me.role !== 'manager' && me.role !== 'admin') return C.forbidden();
+        return { ok: true, since: sinceIso, locations: env.db.locations.filter(function (l) { return l.active !== false && C.hasLoc(me, l.id); }).map(function (l) {
           return { id: l.id, name: l.name, counts: locCounts(env, l.id, sinceIso, fromDay) };
         }) };
       }

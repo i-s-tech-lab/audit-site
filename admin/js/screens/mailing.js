@@ -23,7 +23,7 @@
 
   function intro(dataReady) {
     var steps = [['Ви налаштовуєте правило:', ' для яких локацій і відділів, коли надсилати, кому і який текст.'],
-      ['Будильник Supabase щохвилини перевіряє,', ' чи настав час котрогось правила, і ставить повідомлення в чергу.'],
+      ['Будильник сервера щохвилини перевіряє,', ' чи настав час котрогось правила, і ставить повідомлення в чергу.'],
       ['Повідомлення йде в канал Slack', ' (бачать усі учасники каналу) <b>або людині особисто</b> — від бота «Аудит».']];
     return '<section class="card rz-intro" aria-label="Як працює розсилка"><ol class="rz-steps">' + steps.map(function (s, i) {
       return '<li><span class="rz-num" aria-hidden="true">' + (i + 1) + '</span><p><b>' + s[0] + '</b>' + s[1] + '</p></li>'; }).join('') + '</ol>' +
@@ -43,7 +43,7 @@
     return '<div class="rz-stat">' + out.join('') + '<a class="rz-stat__a" href="#/mailing/state">Стан і журнал →</a></div>';
   }
 
-  P.cab.tab({ id: 'mailing', label: 'Розсилки', ic: 'notification', path: '/mailing', order: 40 });
+  P.cab.tab({ id: 'mailing', label: 'Розсилки', ic: 'notification', path: '/mailing', order: 40, real: ['mlRules', 'mlAddrList', 'mlRulePreview'] });   // real — довідники й перегляд з двигуна сервера (лише читання); правила й адресати пишуться через mail-api (ml-backend.js)
   P.cab.screen('/mailing', { tab: 'mailing', title: 'Розсилки', render: function (ctx) {
     var data = null, st = null, ix = {}, lastSent = {};
     if (ctx.query && ctx.query.q) flt.q = String(ctx.query.q);   // посилання «1 розсилка» з адресатів шукає за імʼям
@@ -80,7 +80,7 @@
       var locOpts = [['all', 'Усі локації · ' + n + ' ' + K.plural(n, ['розсилка', 'розсилки', 'розсилок'])]].concat(data.locations.map(function (l) {
         return [l.id, l.name + ' · ' + data.items.filter(function (r) { return forLoc(r, l.id); }).length]; }));
       list.innerHTML = '<div class="rz-head"><div><h2 class="h2">Розсилки · ' + n + P.help.btn('admin.ml.what') + '</h2>' +
-        '<p class="h2-sub">Повідомлення в Slack: за розкладом або одразу після події. Правила зберігаються в Supabase — їх виконує будильник, навіть коли сайт закритий.</p></div>' +
+        '<p class="h2-sub">Повідомлення в Slack: за розкладом або одразу після події. Правила зберігаються на сервері — їх виконує будильник, навіть коли сайт закритий.</p></div>' +
         '<button class="btn btn--primary" type="button" data-act="rz-new">' + P.ic('add') + 'Нова розсилка</button></div>' + intro(data.dataReady) + statLine(st) +
         (n ? '<div class="card rz-tools"><label class="field rz-tools__q"><span class="label">Знайти розсилку</span><input class="input" type="search" data-input="rz-q" value="' + esc(flt.q) + '" placeholder="Назва розсилки, канал або імʼя людини"></label>' +
           '<label class="field rz-tools__loc"><span class="label">Для якої локації' + P.help.btn('admin.ml.filter') + '</span><select class="input rz-sel" data-change="rz-filter">' + locOpts.map(function (o) {

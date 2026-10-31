@@ -28,3 +28,8 @@
   .tm-modal .seg { flex-wrap: wrap; }
   .tm-modal .seg__btn { flex: 1 1 auto; }
 }
+
+
+.tm-pend { font-size: var(--fs-sm); white-space: normal; }
+.tm-form textarea.input { resize: vertical; min-height: 96px; }
+.tm-ask { white-space: normal; text-align: left; gap: 6px; }   

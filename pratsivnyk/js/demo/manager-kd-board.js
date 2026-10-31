@@ -22,9 +22,11 @@
   }
   function periodOf(env, weeks) { var today = env.day(), days = 7 * weeks; return { weeks: weeks, days: days, from: S.addDays(today, -(days - 1)), to: today }; }
   function rulesOf() { return { threshold: S.KD.THRESHOLD, early: S.KD.EARLY_MIN, pareto: S.KD.PARETO, reviewWeekday: S.KD.REVIEW_DAY }; }
-  function locArg(p, env) {
+  function locArg(p, env, me) {
     var id = p.locationId;
-    return has(env.ix.loc, id) ? { loc: env.ix.loc[id] } : { err: C.fail('not_found', 'Такої локації немає — оновіть сторінку.') };
+    if (!has(env.ix.loc, id)) return { err: C.fail('not_found', 'Такої локації немає — оновіть сторінку.') };
+    if (!C.hasLoc(me, id)) return { err: C.fail('forbidden', 'Цієї локації у вас немає.') };   // v1.4: лише мої локації
+    return { loc: env.ix.loc[id] };
   }
   function phaseOf(b, a) {
     var ph = B.phaseUi(a);
@@ -197,7 +199,7 @@
     mgrKdBoard: function (p, me, env) {
       var X = M();
       if (!X || !X.can(me)) return C.forbidden();
-      var per = periodOf(env, weeksArg(p.weeks)), preps = env.db.locations.map(function (l) { return B.prep(env, l); });
+      var per = periodOf(env, weeksArg(p.weeks)), preps = X.mine(me, env).map(function (l) { return B.prep(env, l); });
       var streaks = [], returning = [];
       var locations = preps.map(function (b) {
         streaks = streaks.concat(streaksOf(b, per));
@@ -213,10 +215,10 @@
     mgrKdLoc: function (p, me, env) {
       var X = M();
       if (!X || !X.can(me)) return C.forbidden();
-      var r = locArg(p, env); if (r.err) return r.err;
+      var r = locArg(p, env, me); if (r.err) return r.err;
       var per = periodOf(env, weeksArg(p.weeks)), b = B.prep(env, r.loc), cx = b.cx, eff = B.efficiency(b, per.days), sm = summary(b, per, eff);
       return P.demoKd.withKdFrom(env, { ok: true, today: cx.today, threshold: cx.T, weeks: per.weeks, from: per.from, to: per.to, rules: rulesOf(),
-        location: short(r.loc), locations: env.db.locations.map(short),
+        location: short(r.loc), locations: X.mine(me, env).map(short),
         kpi: { now: sm.now, opened: sm.opened, openedDepts: sm.openedDepts, relapses: sm.relapses, closed: sm.closed, typesAvg: sm.typesAvg,
           daysToPlan: sm.daysToPlan, week: lastWeek(cx) },
         timeline: B.timeline(b), exec: execOf(b, per), heat: heatOf(b), efficiency: eff, notNeeded: notNeededOf(b, per), selfClosed: selfClosedOf(b, per),
@@ -226,7 +228,7 @@
     mgrKdAction: function (p, me, env) {
       var X = M();
       if (!X || !X.can(me)) return C.forbidden();
-      var r = locArg(p, env); if (r.err) return r.err;
+      var r = locArg(p, env, me); if (r.err) return r.err;
       var b = B.prep(env, r.loc), a = has(b.byKey, p.key) ? b.byKey[p.key] : null;
       if (!a) return C.fail('not_found', 'Такої коригуючої дії немає. Оновіть сторінку.');
       return { ok: true, today: b.cx.today, threshold: b.cx.T, location: short(r.loc), kd: B.pageKd(b, a, false) };

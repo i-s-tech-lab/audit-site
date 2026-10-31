@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   var P = root.P, doc = root.document, esc = P.esc;
-  var SOURCE = { test: ['Пробне з «Стану»', 'вручну'], preview: ['Пробне з вікна розсилки', 'цифри вигадані'], daily: ['Денний звіт · надіслати зараз', 'з кабінету старшого'], 'daily-test': ['Денний звіт · пробне', 'з кабінету старшого'] };
+  var SOURCE = { test: ['Пробне з «Стану»', 'вручну'], preview: ['Пробне з вікна розсилки', 'цифри з бази на момент проби'], daily: ['Денний звіт · надіслати зараз', 'з кабінету старшого'], 'daily-test': ['Денний звіт · пробне', 'з кабінету старшого'] };
   var STATUS = { pending: ['warn', 'У черзі', 'чекає надсилання'], sending: ['info', 'Надсилається', 'саме зараз'], sent: ['ok', 'Надіслано', 'дійшло в Slack'],
     failed: ['danger', 'Не надіслано', 'причина — у рядку'], expired: ['', 'Час минув', 'застаріло, поки чекало'] };
   var el = null, data = null, editChannel = false, busy = false, timer = null, gen = 0, logShow = 'all';
@@ -48,13 +48,13 @@
       pill = m <= 2 ? badge('ok', 'Працює') : badge('danger', 'Не запускався ' + m + ' хв');
       line = '<p><b>Востаннє — ' + esc(when(b.lastRunAt)) + '</b>, усього ' + esc(P.fmt.num(b.runs)) + ' ' + K().plural(b.runs, ['запуск', 'запуски', 'запусків']) + '.</p>';
     }
-    return card('Будильник Supabase', pill, '<p>Щохвилини перевіряє розсилки й надсилає чергу.</p>' + line +
-      '<p class="hint">Якщо напис «Не запускався N хв» — у Supabase зупинився будильник (pg_cron). Сайт і правила від цього не ламаються, але нічого не надсилається.</p>', 'admin.probe.beat');
+    return card('Будильник розсилок', pill, '<p>Щохвилини перевіряє розсилки й надсилає чергу.</p>' + line +
+      '<p class="hint">Якщо напис «Не запускався N хв» — на сервері зупинився будильник розсилок — напишіть адміністратору системи. Сайт і правила від цього не ламаються, але нічого не надсилається.</p>', 'admin.probe.beat');
   }
   function tokenCard() {
     return card('Ключ бота Slack', data.hasToken ? badge('ok', 'Додано') : badge('danger', 'Не додано'), data.hasToken
-      ? '<p>Секрет <b>SLACK_BOT_TOKEN</b> є в Supabase — бот «Аудит» може надсилати.</p><p class="hint">Без ключа повідомлення не йдуть: у журналі буде «Ключ бота ще не додано».</p>'
-      : '<p>Секрету <b>SLACK_BOT_TOKEN</b> у Supabase немає — бот «Аудит» не може надсилати.</p><p class="hint">Додайте його: Supabase → Edge Functions → Secrets.</p>', 'admin.probe.token');
+      ? '<p>Ключ бота Slack є в налаштуваннях сервера — бот «Аудит» може надсилати.</p><p class="hint">Без ключа повідомлення не йдуть: у журналі буде «Ключ бота ще не додано».</p>'
+      : '<p>Ключа бота Slack в налаштуваннях сервера немає — бот «Аудит» не може надсилати.</p><p class="hint">Додайте його: «Система» → «Налаштування Slack» → «Ключ бота (Bot User OAuth Token)».</p>', 'admin.probe.token');
   }
   function pauseCard() {
     var on = !data.settings.paused;
@@ -79,7 +79,7 @@
       '<p class="hint">ID каналу: у Slack натисніть назву каналу — ID внизу вкладки About. Бота спершу запросіть у канал: напишіть /invite @Аудит.</p>', 'admin.probe.channel');
   }
   function codeCard() {
-    return card('Код розсилки', badge('ok', 'Збережено в цьому браузері'), '<p>Потрібен, щоб бачити й змінювати розсилки. Це секрет <b>MAIL_ADMIN_CODE</b>, який ви задали в Supabase.</p>' +
+    return card('Код розсилки', badge('ok', 'Збережено в цьому браузері'), '<p>Потрібен, щоб бачити й змінювати розсилки. Це код, який створено на сервері (налаштування <b>MAIL_ADMIN_CODE</b>).</p>' +
       '<div class="rz-btns"><button class="btn btn--secondary btn--sm" type="button" data-mail-act="forget">' + P.ic('logout', 'ui-icon--sm') + 'Забути код у цьому браузері</button></div>' +
       '<p class="hint">На іншому компʼютері чи телефоні код треба ввести ще раз.</p>');
   }
