@@ -141,15 +141,17 @@
     });
     ctx.on('rz-new', function (t) {
       if (!data) return;
-      var items = [{ act: 'rz-tpl', key: '', ic: 'add', title: 'Порожня', sub: 'усе з нуля' }].concat(data.presets.map(function (x) {
-        return { act: 'rz-tpl', key: x.key, ic: 'notification', title: x.title, sub: x.whenLabel }; }));
-      P.sr.menu(t, { width: 340, on: { 'rz-tpl': function (b, e, layer) {
+      function item(key, ic, title, sub, blank) {
+        return '<button class="menu__item rz-mi' + (blank ? ' rz-mi--blank' : '') + '" type="button" role="menuitem" data-act="rz-tpl"' + da('key', key) + '><span class="menu__ic">' + P.ic(ic) + '</span>' +
+          '<span><span class="menu__t">' + esc(title) + '</span><span class="menu__s">' + esc(sub) + '</span></span></button>';
+      }
+      P.sr.menu(t, { width: 400, on: { 'rz-tpl': function (b, e, layer) {
         layer.close();
         var key = b.getAttribute('data-key'), p = data.presets.filter(function (x) { return x.key === key; })[0];
         edit(null, p ? p.rule : { locations: flt.loc === 'all' ? 'all' : [flt.loc], departments: 'all', when: { kind: 'daily' }, condition: { kind: 'always' } });
-      } }, body: '<p class="rz-menu__h">З чого почати нову розсилку</p>' + items.map(function (i) {
-        return '<button class="menu__item rz-mi" type="button" role="menuitem" data-act="' + i.act + '"' + da('key', i.key) + '><span class="menu__ic">' + P.ic(i.ic) + '</span>' +
-          '<span><span class="menu__t">' + esc(i.title) + '</span><span class="menu__s">' + esc(i.sub) + '</span></span></button>'; }).join('') });
+      } }, body: '<p class="rz-menu__h">З чого почати нову розсилку</p>' + item('', 'add', 'Порожня', 'усе з нуля', true) +
+        (data.presets.length ? '<p class="rz-menu__h rz-menu__h--sub">Готові шаблони</p>' : '') +
+        data.presets.map(function (x) { return item(x.key, 'notification', x.title, x.whenLabel, false); }).join('') });
     });
     ctx.on('rz-edit', function (t) { var r = find(t.getAttribute('data-id')); if (r) edit(r.id, r); });
     ctx.on('rz-test', function (t) { var r = find(t.getAttribute('data-id')); if (r) P.mlPreview.sendRule(t, r, data); });

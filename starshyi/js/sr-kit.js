@@ -123,10 +123,13 @@
   S.modal = function (o) { return makeLayer('modal', o); };
   S.drawer = function (o) { return makeLayer('drawer', o); };
   S.menu = function (anchor, o) {
-    var r = anchor.getBoundingClientRect();
-    var top = Math.round(r.bottom + 8);   // висота — до низу екрана, решта гортається (меню адміністратора довге)
-    o.style = 'position:fixed;top:' + top + 'px;right:' + Math.max(16, Math.round(root.innerWidth - r.right)) + 'px;width:' + (o.width || 360) +
-      'px;max-width:calc(100vw - 32px);max-height:' + Math.max(200, root.innerHeight - top - 12) + 'px;overflow:auto';
+    var r = anchor.getBoundingClientRect(), vw = root.innerWidth, vh = root.innerHeight;
+    var w = Math.min(o.width || 360, vw - 32);
+    var left = Math.max(16, Math.min(Math.round(r.right - w), vw - 16 - w));
+    var below = vh - r.bottom - 20, above = r.top - 20;          // місце під і над елементом: 8 px до меню + 12 px до краю екрана
+    var up = below < 260 && above > below;
+    o.style = 'position:fixed;' + (up ? 'bottom:' + Math.round(vh - r.top + 8) : 'top:' + Math.round(r.bottom + 8)) + 'px;left:' + left +
+      'px;width:' + w + 'px;min-width:0;max-width:calc(100vw - 32px);max-height:' + Math.max(160, Math.round(up ? above : below)) + 'px;overflow:auto';
     return makeLayer('menu', o);
   };
   S.closeAll = function () { while (stack.length) stack[stack.length - 1].close(); };

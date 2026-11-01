@@ -46,7 +46,7 @@
 [data-rz-drag] { cursor: grab; }
 
 
-.rz-tokmenu { display: flex; flex-direction: column; gap: 10px; padding: 12px; max-height: 70vh; overflow-y: auto; }
+.rz-tokmenu { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .rz-tokmenu__h { margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .rz-tokmenu__h span { color: var(--text-2); font-size: 13px; }
 .rz-tokmenu__t { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-2); }
