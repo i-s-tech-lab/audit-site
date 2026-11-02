@@ -122,7 +122,7 @@
       var types = {};
       deps.forEach(function (d) { types[d.deptTypeId] = true; });
       var orders = db.orders.filter(function (o) { return o.locationId === r.loc.id && o.firstDay <= day && on(o); })
-        .sort(function (a, b) { return a.lastDay < b.lastDay ? 1 : a.lastDay > b.lastDay ? -1 : a.no < b.no ? 1 : -1; }).slice(0, 50);
+        .sort(function (a, b) { return a.lastDay < b.lastDay ? 1 : a.lastDay > b.lastDay ? -1 : a.no < b.no ? 1 : -1; });
       var canAdd = !!me.can.recordAudit && (P.demoApis || []).some(function (a) { return Object.prototype.hasOwnProperty.call(a, 'workerQuickAdd'); });
       var ctxProducts = db.products.filter(function (x) { return types[x.deptTypeId] && on(x); })
         .map(function (x) { return { id: x.id, name: x.name, deptTypeId: x.deptTypeId }; });

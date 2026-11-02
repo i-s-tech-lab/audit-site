@@ -21,7 +21,7 @@
       var used = S.F.orders, opts = [];
       S.F.ctx.orderBlocks.forEach(function (b) { if (used.indexOf(b.name) < 0) opts.push({ value: b.name, title: b.name, list: b.orders, group: 'Блоки замовлень' }); });
       S.F.ctx.orders.forEach(function (o) { if (used.indexOf(o.no) < 0) opts.push({ value: o.no, title: o.no, group: 'Замовлення' }); });
-      pick({ title: 'Замовлення', cols: 2, options: withRecent(opts, recentIds(S.F.departmentId, 'orders')), placeholder: 'Номер замовлення або блоку', emptyText: 'Замовлень поки немає' }, function (v) {
+      pick({ title: 'Замовлення', cols: 2, limit: 50, options: withRecent(opts, recentIds(S.F.departmentId, 'orders')), placeholder: 'Номер замовлення або блоку', emptyText: 'Замовлень поки немає' }, function (v) {
         if (S.F.orders.length >= S.F.ctx.limits.maxOrders || S.F.orders.indexOf(v) >= 0) return;
         S.F.orders.push(v);
         if (S.F.orders.length === 1) S.F.items.forEach(function (i) { if (!i.orderNo) i.orderNo = v; });

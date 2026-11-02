@@ -4,7 +4,7 @@
   P.demoApis = P.demoApis || []; P.demoLoadHooks = P.demoLoadHooks || []; P.demoResetKeys = P.demoResetKeys || [];
 
   var K = { users: 'demo:sr:mg:users', workers: 'demo:sr:mg:workers', depts: 'demo:sr:mg:depts', products: 'demo:sr:mg:products',
-    defects: 'demo:sr:mg:defects', blocks: 'demo:sr:mg:blocks', imp: 'demo:sr:mg:import', mail: 'demo:sr:mg:mailing', journal: 'demo:sr:mg:journal' };
+    defects: 'demo:sr:mg:defects', blocks: 'demo:sr:mg:blocks', blocksGone: 'demo:sr:mg:blocksgone', imp: 'demo:sr:mg:import', mail: 'demo:sr:mg:mailing', journal: 'demo:sr:mg:journal' };
   var LEVELS = { fix: 1, repair: 1, scrap: 1 };
   var INCLUDE = ['checked', 'levels', 'norms', 'noAudits', 'worst', 'topDefects', 'kd', 'auditors', 'orders', 'compare', 'link'];
   var DAILY_LEVELS = { all: 1, defects: 1, over5: 1 };
@@ -130,6 +130,26 @@
     if (has(raw, 'edit') || has(raw, 'add') || has(raw, 'norms')) return { edit: raw.edit || {}, add: arr(raw.add), norms: raw.norms || {} };
     return { edit: raw, add: [], norms: {} };
   }
+  function mergeBlocks(base, list, gone, log) {
+    function logged(name, actions) { return log.some(function (x) { return actions.indexOf(x.action) >= 0 && same(x.what, name); }); }
+    var out = [];
+    list.forEach(function (b) {
+      var from = base.filter(function (x) { return x.id === b.id; })[0];
+      if (b.mine || logged(b.name, ['add', 'edit'])) out.push(b);
+      else if (from) out.push(from);
+      else if (/^BLK_/.test(String(b.id))) out.push(b);
+    });
+    base.forEach(function (b) {
+      if (gone.indexOf(b.id) >= 0 || logged(b.name, ['delete'])) return;
+      if (!out.some(function (x) { return x.id === b.id || same(x.name, b.name); })) out.push(b);
+    });
+    return out;
+  }
+  function blockCopy(b) {
+    var c = { id: b.id, locationId: b.locationId, name: b.name, orders: b.orders.slice() };
+    if (b.mine) c.mine = true;
+    return c;
+  }
   function applyOverlay(db, st) {
     var u = st.get(K.users, null), w = st.get(K.workers, null), d = deptStore(st);
     var pr = st.get(K.products, null), df = st.get(K.defects, null), bl = st.get(K.blocks, null);
@@ -160,7 +180,12 @@
       var fi = byId(db.defectTypes, 'id'); each(df.edit, function (id, e) { if (fi[id]) Object.assign(fi[id], e); });
       mergeDefects(db, df.merge);
     }
-    each(bl, function (locId, list) { db.orderBlocks = db.orderBlocks.filter(function (b) { return b.locationId !== locId; }).concat(list); });
+    var gone = st.get(K.blocksGone, null) || {}, log = bl ? arr(st.get(K.journal, [])).filter(function (x) { return x && x.section === 'blocks'; }) : [];
+    each(bl, function (locId, list) {
+      var base = db.orderBlocks.filter(function (b) { return b.locationId === locId; });
+      db.orderBlocks = db.orderBlocks.filter(function (b) { return b.locationId !== locId; })
+        .concat(mergeBlocks(base, arr(list), arr(gone[locId]), log.filter(function (x) { return x.locationId === locId; })));
+    });
     db.catalogMerges = { products: (pr && pr.merge) || {}, defectTypes: (df && df.merge) || {} };
   }
   P.demoLoadHooks.push(function (db, ctx) { applyOverlay(db, ctx.storage); });
@@ -862,29 +887,29 @@
 
     srMgBlockSave: function (p, me, env) {
       var r = guardW(p, me, env); if (r.err) return r.err;
-      var list = env.db.orderBlocks.filter(function (b) { return b.locationId === r.loc.id; }).map(function (b) { return { id: b.id, locationId: b.locationId, name: b.name, orders: b.orders.slice() }; });
+      var list = env.db.orderBlocks.filter(function (b) { return b.locationId === r.loc.id; }).map(blockCopy);
       var cur = p.id ? list.filter(function (b) { return b.id === p.id; })[0] : null;
       if (p.id && !cur) return C.fail('not_found', 'Такого блоку вже немає — оновіть сторінку.');
-      var errs = [], name = clean(p.name, 40), on = {};
-      env.db.orders.forEach(function (o) { if (o.locationId === r.loc.id) on[o.no] = 1; });
+      var errs = [], name = clean(p.name, 60), on = {};
+      env.db.orders.forEach(function (o) { if (o.locationId === r.loc.id) on[clean(o.no, 60)] = o.no; });
       if (!name) errs.push({ field: 'name', message: 'Впишіть назву блоку.' });
       else if (list.some(function (b) { return b.id !== p.id && same(b.name, name); })) errs.push({ field: 'name', message: 'Блок «' + name + '» уже є.' });
-      var orders = arr(p.orders).map(function (x) { return clean(x, 20); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var orders = arr(p.orders).map(function (x) { var k = clean(x, 60); return has(on, k) ? on[k] : k; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       if (!orders.length) errs.push({ field: 'orders', message: 'Додайте хоча б одне замовлення.' });
-      else if (orders.length > 20) errs.push({ field: 'orders', message: 'У блоці — до 20 замовлень.' });
+      else if (orders.length > 50) errs.push({ field: 'orders', message: 'У блоці — до 50 замовлень.' });
       orders.forEach(function (no) {
-        if (!on[no]) errs.push({ field: 'orders', message: 'Замовлення ' + no + ' немає в цьому цеху.' });
+        if (!has(on, clean(no, 60))) errs.push({ field: 'orders', message: 'Замовлення ' + no + ' немає в цьому цеху.' });
         var other = list.filter(function (b) { return b.id !== p.id && b.orders.indexOf(no) >= 0; })[0];
         if (other) errs.push({ field: 'orders', message: 'Замовлення ' + no + ' уже в «' + other.name + '».' });
       });
       if (errs.length) return verr(errs);
       var id = p.id, was = cur ? { name: cur.name, orders: cur.orders.join(', ') } : {};
-      if (cur) { cur.name = name; cur.orders = orders; }
+      if (cur) { cur.name = name; cur.orders = orders; cur.mine = true; }
       else {
         var pre = 'BLK_' + r.loc.id.slice(4), n = 0;
         list.forEach(function (b) { n = Math.max(n, numOf(b.id)); });
         id = pre + (n + 1);
-        list.push({ id: id, locationId: r.loc.id, name: name, orders: orders });
+        list.push({ id: id, locationId: r.loc.id, name: name, orders: orders, mine: true });
       }
       var all = env.storage.get(K.blocks, {}); all[r.loc.id] = list;
       save(env, K.blocks, all);
@@ -898,7 +923,10 @@
       var b = list.filter(function (x) { return x.id === p.id; })[0];
       if (!b) return C.fail('not_found', 'Такого блоку вже немає — оновіть сторінку.');
       var all = env.storage.get(K.blocks, {});
-      all[r.loc.id] = list.filter(function (x) { return x.id !== p.id; }).map(function (x) { return { id: x.id, locationId: x.locationId, name: x.name, orders: x.orders.slice() }; });
+      all[r.loc.id] = list.filter(function (x) { return x.id !== p.id; }).map(blockCopy);
+      var gone = env.storage.get(K.blocksGone, {});
+      gone[r.loc.id] = arr(gone[r.loc.id]).concat(b.id);
+      env.storage.set(K.blocksGone, gone);
       save(env, K.blocks, all);
       journal(env, me, r.loc.id, 'blocks', 'delete', b.name, diff([['Замовлення', b.orders.join(', '), null]]));
       return { ok: true, id: b.id, name: b.name };

@@ -116,10 +116,11 @@
       var picked = o.multi ? (o.values || []).slice() : null, done = false, q = '';
       function finish(v) { if (done) return; done = true; P.sheet.close(); resolve(v); }
       function list() {
-        var nq = q.trim().toLowerCase(), html = '', group = null, n = 0;
+        var nq = q.trim().toLowerCase(), html = '', group = null, n = 0, more = 0;
         o.options.forEach(function (op) {
           var hay = (op.title + ' ' + (op.meta || '') + ' ' + op.value + ' ' + (op.list || []).join(' ')).toLowerCase();
           if (nq && hay.indexOf(nq) < 0) return;
+          if (o.limit && n >= o.limit) { more++; return; }
           if (op.group && op.group !== group) { group = op.group; html += '<div class="opt-group">' + esc(group) + '</div>'; }
           var sel = o.multi ? picked.indexOf(op.value) >= 0 : op.value === o.value;
           html += '<button type="button" class="opt' + (op.tone ? ' opt--' + esc(op.tone) : '') + '" role="option" aria-selected="' + sel + '" data-val="' + esc(op.value) + '">' +
@@ -134,7 +135,8 @@
             return '<button type="button" class="opt opt--create" data-create="' + esc(c.id) + '">' + P.ic('add') +
               '<span class="opt__main"><span class="opt__title">' + esc(c.label(typed)) + '</span></span></button>'; }).join('') + '</div>';
         }
-        var tail = make + (o.hint && !make ? '<p class="opt-hint">' + esc(o.hint) + '</p>' : '');
+        var tail = make + (more ? '<p class="opt-hint">Ще ' + more + ' у списку. Наберіть частину номера чи назви, щоб знайти.</p>' : '') +
+          (o.hint && !make ? '<p class="opt-hint">' + esc(o.hint) + '</p>' : '');
         return n ? '<div role="listbox"' + (o.cols === 2 ? ' class="opt-grid"' : '') + (o.multi ? ' aria-multiselectable="true"' : '') + '>' + html + '</div>' + tail :
           (make ? '<p class="opt-hint">Такого в списку немає.</p>' + make
             : P.state.empty('search', nq ? 'Нічого не знайдено' : (o.emptyText || 'Список порожній'), '') + tail);

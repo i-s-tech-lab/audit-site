@@ -27,7 +27,7 @@
     function editor() {
       var isNew = st.edit === 'new';
       return '<section class="card mg-editing" data-mg-editor><div class="card-head"><h3 class="card-title">' + esc(isNew ? 'Новий блок' : find(st.edit).name) + '</h3>' + H.badge(isNew ? 'новий' : 'редагується', 'brand') + '</div>' +
-        '<label class="field" data-f="name"><span class="label">Назва блоку</span><input class="input" name="name" data-input="mg-bname" maxlength="40" value="' + esc(st.name) + '" placeholder="Блок ' + (data.items.length + 1) + '"></label>' +
+        '<label class="field" data-f="name"><span class="label">Назва блоку</span><input class="input" name="name" data-input="mg-bname" maxlength="60" value="' + esc(st.name) + '" placeholder="Блок ' + (data.items.length + 1) + '"></label>' +
         '<div class="field" data-f="orders"><span class="label">Замовлення · ' + st.orders.length + '</span><div class="chips">' + (st.orders.length ? st.orders.map(function (no) {
           return '<span class="chip">' + esc(no) + '<button class="chip__x" type="button" data-act="mg-bdel"' + da('no', no) + ' aria-label="Прибрати ' + esc(no) + '">' + P.ic('close', 'ui-icon--sm') + '</button></span>'; }).join('')
           : '<span class="hint">ще жодного</span>') + '</div></div>' +
